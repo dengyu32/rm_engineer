@@ -2,4 +2,5 @@
 /.colcon
 /.rerun
 /.vscode
+compile_commands.json
 TODO
