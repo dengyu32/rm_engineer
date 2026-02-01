@@ -1,0 +1,22 @@
+top_hfsm_node:
+  ros__parameters:
+    hfsm_intent_topic: /hfsm_intents
+    hfsm_update_period_ms: 20
+
+    arm_action_name: move_arm
+    arm_server_wait_ms: 100
+
+    servo_start_service: /servo_node/start_servo
+    servo_unpause_service: /servo_node/unpause_servo
+    servo_pause_service: /servo_node/pause_servo
+    servo_stop_service: /servo_node/stop_servo
+    servo_reset_status_service: /servo_node/reset_servo_status
+
+    delta_twist_topic: /servo_node/delta_twist_cmds
+    delta_joint_topic: /servo_node/delta_joint_cmds
+    joint_states_custom_topic: /joint_states_custom
+    joint_states_verbose_topic: /joint_states_verbose
+    servo_status_topic: ""
+
+    gripper_cmd_topic: /gripper_commands
+    gripper_publish_period_ms: 20

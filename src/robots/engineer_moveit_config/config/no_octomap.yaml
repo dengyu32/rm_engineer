@@ -1,0 +1,12 @@
+planning_scene_monitor_options:
+  start_state_monitor: true
+  start_scene_monitor: true
+  start_world_geometry_monitor: false
+  publish_planning_scene: true
+  publish_geometry_updates: false
+  publish_state_updates: true
+  publish_transforms_updates: true
+
+sensors: []
+
+octomap_resolution: 0.1

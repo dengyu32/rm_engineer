@@ -1,0 +1,25 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: engineer_description
+    relative_path: urdf/engineer_v3.urdf
+  srdf:
+    relative_path: config/engineer_v3.srdf
+  package_settings:
+    author_name: wrj
+    author_email: rainwaiting32@gmail.com
+    generated_timestamp: 1766072053
+  control_xacro:
+    command:
+      - position
+      - velocity
+    state:
+      - position
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+      - velocity
+    state:
+      - position

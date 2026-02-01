@@ -1,0 +1,13 @@
+arm_solve_server:
+  ros__parameters:
+    group_name: engineer_arm
+    goal_position_tolerance: 0.001
+    goal_orientation_tolerance: 0.001
+    planning_time: 2.0
+    num_planning_attempts: 5
+    log_throttle_sec: 1.0
+
+joint_controller_node:
+  ros__parameters:
+    collect_interval: 200 # ms
+    
