@@ -1,7 +1,6 @@
 // Executors
 #include "top_hfsm/executors/arm_solve_client.hpp"
 #include "top_hfsm/error_code.hpp"
-#include "param_utils/param_snapshot.hpp"
 
 // C++
 #include <chrono>
@@ -19,8 +18,6 @@ ArmSolveClient::ArmSolveClient(rclcpp::Node &node, const ArmSolveClientConfig &c
       action_name_(config.arm_action_name),
       server_wait_ms_(config.arm_server_wait_ms) {
   action_client_ = rclcpp_action::create_client<Move>(&node_, action_name_);
-  param_utils::LogSnapshot(node_.get_logger(), config_.params_snapshot,
-                           "[ARM_SOLVE_CLIENT][param] ");
   RCLCPP_INFO(logger_,
               "[ARM_SOLVE_CLIENT] started (action=%s, wait_ms=%d)",
               action_name_.c_str(), server_wait_ms_);

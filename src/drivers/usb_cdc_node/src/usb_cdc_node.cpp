@@ -2,7 +2,6 @@
 #include "usb_cdc/usb_cdc_node.hpp"
 #include "usb_cdc/error_code.hpp"
 #include "usb_cdc/packet.hpp"
-#include "param_utils/param_snapshot.hpp"
 
 // C++
 #include <cstddef>
@@ -63,7 +62,7 @@ UsbCdcNode::UsbCdcNode(const rclcpp::NodeOptions &options)
     }
   });
 
-  param_utils::LogSnapshot(this->get_logger(), config_.params_snapshot, "[USB_CDC][param] ");
+  RCLCPP_INFO(this->get_logger(), "\n%s", config_.summary().c_str());
 }
 
 void UsbCdcNode::set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus) {

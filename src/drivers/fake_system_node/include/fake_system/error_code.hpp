@@ -9,7 +9,7 @@
 namespace fake_system {
 
 enum class FakeSystemErrc {
-  JointCommandShort = 0,
+  JointCommandShort = 0,  // 
 };
 
 inline SYSTEM_ERROR2_NAMESPACE::system_code to_system_code(FakeSystemErrc code) {
@@ -29,5 +29,7 @@ inline error_code_utils::Error make_error(
   return error_code_utils::from_system_code(error_code_utils::ErrorDomain::COMM, sys,
                                             message, context);
 }
+
+// 示例： return make_error(FakeSystemErrc::JointCommandShort, "joint command length mismatch", {{"expected", "6"}, {"actual", "4"}});
 
 } // namespace fake_system

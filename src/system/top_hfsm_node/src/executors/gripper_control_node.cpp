@@ -1,6 +1,5 @@
 // Executors
 #include "top_hfsm/executors/gripper_control_node.hpp"
-#include "param_utils/param_snapshot.hpp"
 
 // ROS messages
 #include <engineer_interfaces/msg/detail/gripper_command__struct.hpp>
@@ -23,8 +22,6 @@ GripperControlNode::GripperControlNode(rclcpp::Node &node, const GripperConfig &
       std::chrono::milliseconds(config_.gripper_publish_period_ms),
       std::bind(&GripperControlNode::publish_timer_callback, this));
 
-  param_utils::LogSnapshot(node_.get_logger(), config_.params_snapshot,
-                           "[GRIPPER_CONTROL][param] ");
   RCLCPP_INFO(logger_, "[GRIPPER_CONTROL] started");
 }
 

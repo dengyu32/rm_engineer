@@ -20,7 +20,6 @@
   <depend>tf2_geometry_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>engineer_interfaces</depend>
-  <depend>param_utils</depend>
   <depend>error_code_utils</depend>
 
   <export>

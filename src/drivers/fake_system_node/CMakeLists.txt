@@ -32,8 +32,8 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(param_utils REQUIRED)
 find_package(error_code_utils REQUIRED)
+find_package(log_utils REQUIRED)
 
 # ----------------------------------------------------------------------------
 #  构建节点库
@@ -55,8 +55,8 @@ ament_target_dependencies(${PROJECT_NAME}
   rclcpp_components
   engineer_interfaces
   sensor_msgs
-  param_utils
   error_code_utils
+  log_utils
 )
 
 # 注册组件并生成可执行入口

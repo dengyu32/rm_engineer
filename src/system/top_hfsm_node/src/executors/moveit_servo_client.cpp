@@ -1,6 +1,5 @@
 // Executors
 #include "top_hfsm/executors/moveit_servo_client.hpp"
-#include "param_utils/param_snapshot.hpp"
 
 // C++
 #include <memory>
@@ -23,9 +22,6 @@ MoveItServoClient::MoveItServoClient(rclcpp::Node &node, const MoveItServoClient
   //  ROS services (output)
   // --------------------------------------------------------------------------
   initRosServices();
-
-  param_utils::LogSnapshot(node_.get_logger(), config_.params_snapshot,
-                           "[MOVEIT_SERVO_CLIENT][param] ");
   RCLCPP_INFO(logger_, "[MOVEIT_SERVO_CLIENT] started");
 }
 

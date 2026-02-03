@@ -16,7 +16,6 @@
   <depend>geometry_msgs</depend>
   <depend>pluginlib</depend>
   <depend>control_msgs</depend>
-  <depend>param_utils</depend>
   <depend>error_code_utils</depend>
 
   <test_depend>ament_lint_auto</test_depend>

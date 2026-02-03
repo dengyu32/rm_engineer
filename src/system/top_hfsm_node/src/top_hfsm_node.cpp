@@ -3,7 +3,6 @@
 #include "top_hfsm/executors/gripper_control_node.hpp"
 #include "top_hfsm/executors/moveit_servo_client.hpp"
 #include "top_hfsm/top_hfsm_impl.hpp"
-#include "param_utils/param_snapshot.hpp"
 
 // ROS2
 #include <rclcpp/node_options.hpp>
@@ -48,7 +47,7 @@ TopHFSMNode::TopHFSMNode(const rclcpp::NodeOptions &options)
 
   dispatcher_.start();
 
-  param_utils::LogSnapshot(this->get_logger(), config_.params_snapshot, "[TOP_HFSM][param] ");
+  RCLCPP_INFO(this->get_logger(), "\n%s", config_.summary().c_str());
   RCLCPP_INFO(logger_, "[TOP_HFSM] TopHFSMNode started");
 }
 

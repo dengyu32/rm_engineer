@@ -27,7 +27,6 @@ find_package(trajectory_msgs REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(param_utils REQUIRED)
 find_package(error_code_utils REQUIRED)
 
 # ----------------------------------------------------------------------------
@@ -51,7 +50,6 @@ ament_target_dependencies(${PROJECT_NAME}
   rclcpp_components
   trajectory_msgs
   engineer_interfaces
-  param_utils
   error_code_utils
 )
 

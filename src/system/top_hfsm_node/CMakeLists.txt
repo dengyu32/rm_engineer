@@ -32,7 +32,6 @@ find_package(engineer_interfaces REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(control_msgs REQUIRED)
-find_package(param_utils REQUIRED)
 find_package(error_code_utils REQUIRED)
 
 # ----------------------------------------------------------------------------
@@ -65,7 +64,6 @@ ament_target_dependencies(${PROJECT_NAME}
   tf2_geometry_msgs
   std_srvs
   control_msgs
-  param_utils
   error_code_utils
 )
 

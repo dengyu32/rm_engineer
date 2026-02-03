@@ -13,8 +13,8 @@
   <depend>rclcpp_components</depend>
   <depend>engineer_interfaces</depend>
   <depend>sensor_msgs</depend>
-  <depend>param_utils</depend>
   <depend>error_code_utils</depend>
+  <depend>log_utils</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

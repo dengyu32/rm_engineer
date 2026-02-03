@@ -3,7 +3,7 @@
 // ROS2
 #include <rclcpp/rclcpp.hpp>
 
-// Error utils
+// utils
 #include "error_code_utils/error_bus.hpp"
 
 // C++
@@ -39,6 +39,11 @@ public:
   void set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus);
 
 private:
+  // -----------------------------------------------------------------------
+  //  ROS interfaces
+  // -----------------------------------------------------------------------
+  void initRosInterfaces();
+
   // -----------------------------------------------------------------------
   //  ROS callbacks
   // -----------------------------------------------------------------------

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <unordered_map>
 
+#include "log_utils/log.hpp"
 #include "solve_core/error_code.hpp"
 
 #include <Eigen/Geometry>
@@ -116,19 +117,18 @@ std::optional<Trajectory> time_parameterize_path(
     const std::string &group_name,
     const std::vector<std::vector<double>> &q_path,
     const moveit::core::RobotState &start_state,
-    const rclcpp::Logger &logger,
     double path_tolerance = 1.0) {
   if (!robot_model) {
-    RCLCPP_ERROR(logger, "[solve_core] RobotModel is null");
+    LOGE("[solve_core] RobotModel is null");
     return std::nullopt;
   }
   const auto *jmg = robot_model->getJointModelGroup(group_name);
   if (!jmg) {
-    RCLCPP_ERROR(logger, "[solve_core] JointModelGroup not found");
+    LOGE("[solve_core] JointModelGroup not found");
     return std::nullopt;
   }
   if (q_path.empty()) {
-    RCLCPP_ERROR(logger, "[solve_core] q_path is empty");
+    LOGE("[solve_core] q_path is empty");
     return std::nullopt;
   }
 
@@ -138,7 +138,7 @@ std::optional<Trajectory> time_parameterize_path(
 
   for (std::size_t i = 0; i < q_path.size(); ++i) {
     if (q_path[i].size() != jmg->getVariableCount()) {
-      RCLCPP_ERROR(logger, "[solve_core] q_path size mismatch");
+      LOGE("[solve_core] q_path size mismatch");
       return std::nullopt;
     }
     st.setJointGroupPositions(jmg, q_path[i]);
@@ -149,7 +149,7 @@ std::optional<Trajectory> time_parameterize_path(
 
   trajectory_processing::TimeOptimalTrajectoryGeneration totg(path_tolerance);
   if (!totg.computeTimeStamps(rt)) {
-    RCLCPP_ERROR(logger, "[solve_core] Time parameterization failed");
+    LOGE("[solve_core] Time parameterization failed");
     return std::nullopt;
   }
 
@@ -159,7 +159,10 @@ std::optional<Trajectory> time_parameterize_path(
 } // namespace
 
 SolveCore::SolveCore(std::shared_ptr<MoveItAdapter> adapter)
-    : adapter_(std::move(adapter)) {}
+    : adapter_(std::move(adapter)) {
+  log_utils::init_console_logger("solve_core");
+  LOGI("[solve_core] logger init");
+}
 
 void SolveCore::set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus) {
   error_bus_ = bus;
@@ -174,7 +177,7 @@ void SolveCore::publish_error(const error_code_utils::Error &err) const {
 
 std::optional<SolveResponse> SolveCore::plan(const SolveRequest &req) {
   if (!adapter_) {
-    RCLCPP_ERROR(logger_, "[solve_core] MoveIt adapter not set");
+    LOGE("[solve_core] MoveIt adapter not set");
     publish_error(make_error(SolveErrc::AdapterMissing, "MoveIt adapter not set"));
     return std::nullopt;
   }
@@ -187,7 +190,7 @@ std::optional<SolveResponse> SolveCore::plan(const SolveRequest &req) {
   case PlanOption::JOINTS:
     return plan_joints(req);
   default:
-    RCLCPP_ERROR(logger_, "[solve_core] Unknown planning option");
+    LOGE("[solve_core] Unknown planning option");
     publish_error(make_error(SolveErrc::UnknownOption, "Unknown planning option"));
     return std::nullopt;
   }
@@ -196,7 +199,7 @@ std::optional<SolveResponse> SolveCore::plan(const SolveRequest &req) {
 std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req) {
   const auto robot_model = adapter_->robot_model();
   if (!robot_model) {
-    RCLCPP_ERROR(logger_, "[solve_core] RobotModel is null");
+    LOGE("[solve_core] RobotModel is null");
     publish_error(make_error(SolveErrc::RobotModelMissing, "RobotModel is null"));
     return std::nullopt;
   }
@@ -206,7 +209,7 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req) {
                                      : adapter_->group_name();
   const auto *jmg = adapter_->joint_model_group(group_name);
   if (!jmg) {
-    RCLCPP_ERROR(logger_, "[solve_core] JointModelGroup not found");
+    LOGE("[solve_core] JointModelGroup not found");
     publish_error(make_error(SolveErrc::JointModelGroupMissing, "JointModelGroup not found",
                              {{"group_name", group_name}}));
     return std::nullopt;
@@ -214,7 +217,7 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req) {
 
   auto solver = jmg->getSolverInstance();
   if (!solver) {
-    RCLCPP_ERROR(logger_, "[solve_core] IK solver missing");
+    LOGE("[solve_core] IK solver missing");
     publish_error(make_error(SolveErrc::IkSolverMissing, "IK solver missing",
                              {{"group_name", group_name}}));
     return std::nullopt;
@@ -227,7 +230,7 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req) {
 
   if (!start_state.satisfiesBounds(jmg)) {
     start_state.enforceBounds(jmg);
-    RCLCPP_ERROR(logger_, "[solve_core] Start state out of bounds");
+    LOGE("[solve_core] Start state out of bounds");
     publish_error(make_error(SolveErrc::StartStateInvalid, "Start state out of bounds",
                              {{"group_name", group_name}}));
     return std::nullopt;
@@ -250,7 +253,7 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req) {
     const Eigen::Isometry3d current_fk = start_state.getGlobalLinkTransform(ee_link);
     ik_ok = ik_state.setFromIK(jmg, current_fk, ee_link, 2.0);
     if (!ik_ok) {
-      RCLCPP_ERROR(logger_, "[solve_core] IK failed");
+      LOGE("[solve_core] IK failed");
       publish_error(make_error(SolveErrc::IkFailed, "IK failed",
                                {{"group_name", group_name}, {"ee_link", ee_link}}));
       return std::nullopt;
@@ -260,7 +263,7 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req) {
   std::vector<double> q_target;
   ik_state.copyJointGroupPositions(jmg, q_target);
   if (q_target.size() != jmg->getVariableCount()) {
-    RCLCPP_ERROR(logger_, "[solve_core] IK variables size mismatch");
+    LOGE("[solve_core] IK variables size mismatch");
     publish_error(make_error(SolveErrc::TargetSizeMismatch, "IK variables size mismatch",
                              {{"group_name", group_name}}));
     return std::nullopt;
@@ -269,7 +272,7 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req) {
   const auto joint_names = jmg->getVariableNames();
   auto plan_res = adapter_->plan_to_joint_target(joint_names, q_target, req.planner);
   if (!plan_res) {
-    RCLCPP_ERROR(logger_, "[solve_core] plan_to_joint_target failed");
+    LOGE("[solve_core] plan_to_joint_target failed");
     publish_error(make_error(SolveErrc::PlanFailed, "plan_to_joint_target failed",
                              {{"group_name", group_name}}));
     return std::nullopt;
@@ -283,7 +286,7 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req) {
 std::optional<SolveResponse> SolveCore::plan_cartesian(const SolveRequest &req) {
   const auto robot_model = adapter_->robot_model();
   if (!robot_model) {
-    RCLCPP_ERROR(logger_, "[solve_core] RobotModel is null");
+    LOGE("[solve_core] RobotModel is null");
     publish_error(make_error(SolveErrc::RobotModelMissing, "RobotModel is null"));
     return std::nullopt;
   }
@@ -292,7 +295,7 @@ std::optional<SolveResponse> SolveCore::plan_cartesian(const SolveRequest &req) 
                                      : adapter_->group_name();
   const auto *jmg = adapter_->joint_model_group(group_name);
   if (!jmg) {
-    RCLCPP_ERROR(logger_, "[solve_core] JointModelGroup not found");
+    LOGE("[solve_core] JointModelGroup not found");
     publish_error(make_error(SolveErrc::JointModelGroupMissing, "JointModelGroup not found",
                              {{"group_name", group_name}}));
     return std::nullopt;
@@ -301,7 +304,7 @@ std::optional<SolveResponse> SolveCore::plan_cartesian(const SolveRequest &req) 
   moveit::core::RobotState kinematic_state(robot_model);
   std::string err;
   if (!fill_joint_state_require_all(req.current_joints, jmg, kinematic_state, err)) {
-    RCLCPP_ERROR(logger_, "[solve_core] %s", err.c_str());
+    LOGE("[solve_core] {}", err);
     publish_error(make_error(SolveErrc::JointStateMissing, err,
                              {{"group_name", group_name}}));
     return std::nullopt;
@@ -315,7 +318,7 @@ std::optional<SolveResponse> SolveCore::plan_cartesian(const SolveRequest &req) 
 
   const auto *ee_link_model = robot_model->getLinkModel(ee_link);
   if (!ee_link_model) {
-    RCLCPP_ERROR(logger_, "[solve_core] End-effector link missing");
+    LOGE("[solve_core] End-effector link missing");
     publish_error(make_error(SolveErrc::InvalidRequest, "End-effector link missing",
                              {{"ee_link", ee_link}}));
     return std::nullopt;
@@ -354,7 +357,7 @@ std::optional<SolveResponse> SolveCore::plan_cartesian(const SolveRequest &req) 
 
   for (std::size_t i = 0; i < waypoints.size(); ++i) {
     if (!st.setFromIK(jmg, waypoints[i], ee_link, 0.02)) {
-      RCLCPP_ERROR(logger_, "[solve_core] IK failed on waypoint");
+      LOGE("[solve_core] IK failed on waypoint");
       publish_error(make_error(SolveErrc::IkFailed, "IK failed on waypoint",
                                {{"group_name", group_name}, {"ee_link", ee_link}}));
       return std::nullopt;
@@ -365,7 +368,7 @@ std::optional<SolveResponse> SolveCore::plan_cartesian(const SolveRequest &req) 
     q_prev = q_i;
   }
 
-  auto traj_res = time_parameterize_path(robot_model, group_name, q_path, kinematic_state, logger_);
+  auto traj_res = time_parameterize_path(robot_model, group_name, q_path, kinematic_state);
   if (!traj_res) {
     publish_error(make_error(SolveErrc::TimeParameterizationFailed,
                              "Time parameterization failed",
@@ -382,7 +385,7 @@ std::optional<SolveResponse> SolveCore::plan_cartesian(const SolveRequest &req) 
 std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req) {
   const auto robot_model = adapter_->robot_model();
   if (!robot_model) {
-    RCLCPP_ERROR(logger_, "[solve_core] RobotModel is null");
+    LOGE("[solve_core] RobotModel is null");
     publish_error(make_error(SolveErrc::RobotModelMissing, "RobotModel is null"));
     return std::nullopt;
   }
@@ -391,7 +394,7 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req) {
                                      : adapter_->group_name();
   const auto *jmg = adapter_->joint_model_group(group_name);
   if (!jmg) {
-    RCLCPP_ERROR(logger_, "[solve_core] JointModelGroup not found");
+    LOGE("[solve_core] JointModelGroup not found");
     publish_error(make_error(SolveErrc::JointModelGroupMissing, "JointModelGroup not found",
                              {{"group_name", group_name}}));
     return std::nullopt;
@@ -400,7 +403,7 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req) {
   const auto &group_joint_names = jmg->getVariableNames();
   const std::size_t dof = group_joint_names.size();
   if (req.target_joints.size() < dof) {
-    RCLCPP_ERROR(logger_, "[solve_core] Target joints size mismatch");
+    LOGE("[solve_core] Target joints size mismatch");
     publish_error(make_error(SolveErrc::TargetSizeMismatch, "Target joints size mismatch",
                              {{"group_name", group_name}}));
     return std::nullopt;
@@ -410,7 +413,7 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req) {
   start_state.setToDefaultValues();
   std::string err;
   if (!fill_joint_state_require_all(req.current_joints, jmg, start_state, err)) {
-    RCLCPP_ERROR(logger_, "[solve_core] %s", err.c_str());
+    LOGE("[solve_core] {}", err);
     publish_error(make_error(SolveErrc::JointStateMissing, err,
                              {{"group_name", group_name}}));
     return std::nullopt;
@@ -435,7 +438,7 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req) {
     const auto &jn = group_joint_names[i];
     auto it = start_joint_position.find(jn);
     if (it == start_joint_position.end()) {
-      RCLCPP_ERROR(logger_, "[solve_core] Joint lookup failed");
+      LOGE("[solve_core] Joint lookup failed");
       publish_error(make_error(SolveErrc::JointLookupFailed, "Joint lookup failed",
                                {{"group_name", group_name}}));
       return std::nullopt;
@@ -457,7 +460,7 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req) {
       const auto &jn = group_joint_names[i];
       auto it = start_joint_position.find(jn);
       if (it == start_joint_position.end()) {
-        RCLCPP_ERROR(logger_, "[solve_core] Joint lookup failed");
+        LOGE("[solve_core] Joint lookup failed");
         publish_error(make_error(SolveErrc::JointLookupFailed, "Joint lookup failed",
                                  {{"group_name", group_name}}));
         return std::nullopt;
@@ -472,7 +475,7 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req) {
     if (!adapter_->check_self_collision(rs, group_name, collision_err)) {
       if (collision_err.empty())
         collision_err = "Self collision detected";
-      RCLCPP_ERROR(logger_, "[solve_core] %s", collision_err.c_str());
+      LOGE("[solve_core] {}", collision_err);
       publish_error(make_error(SolveErrc::CollisionDetected, collision_err,
                                {{"group_name", group_name}}));
       return std::nullopt;

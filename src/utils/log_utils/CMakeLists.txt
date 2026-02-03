@@ -11,7 +11,9 @@ add_library(log_utils INTERFACE)
 
 target_include_directories(log_utils INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/log_utils>
   $<INSTALL_INTERFACE:include>
+  $<INSTALL_INTERFACE:include/log_utils>
 )
 
 target_compile_features(log_utils INTERFACE cxx_std_11)

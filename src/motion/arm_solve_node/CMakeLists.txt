@@ -37,7 +37,6 @@ find_package(moveit_core REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
-find_package(param_utils REQUIRED)
 find_package(solve_core REQUIRED)
 find_package(error_code_utils REQUIRED)
 
@@ -69,7 +68,6 @@ ament_target_dependencies(${PROJECT_NAME}
   tf2
   tf2_eigen
   tf2_geometry_msgs
-  param_utils
   solve_core
   error_code_utils
 )

@@ -31,7 +31,6 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(engineer_interfaces REQUIRED)
-find_package(param_utils REQUIRED)
 find_package(error_code_utils REQUIRED)
 
 # 通过 pkg-config 查询系统库
@@ -76,7 +75,6 @@ ament_target_dependencies(${PROJECT_NAME}
   tf2_ros
   sensor_msgs
   engineer_interfaces
-  param_utils
   error_code_utils
 )
 

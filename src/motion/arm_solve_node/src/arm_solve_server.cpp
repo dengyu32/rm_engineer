@@ -1,8 +1,6 @@
 #include "arm_solve/arm_solve_server.hpp"
 #include "arm_solve/error_code.hpp"
-#include "param_utils/param_snapshot.hpp"
 
-// C++
 #include <exception>
 #include <memory>
 #include <chrono>
@@ -205,8 +203,7 @@ ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions& options)
       std::bind(&ArmSolveServer::handle_accepted, this, std::placeholders::_1));
 
   RCLCPP_INFO(this->get_logger(), "[ARM_SOLVE_SERVER] started");
-  param_utils::LogSnapshot(this->get_logger(), config_.params_snapshot,
-                           "[ARM_SOLVE_SERVER][param] ");
+  RCLCPP_INFO(this->get_logger(), "\n%s", config_.summary().c_str());
 }
 
 void ArmSolveServer::set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus) {

@@ -7,8 +7,6 @@
 
 #include "error_code_utils/error_bus.hpp"
 
-#include <rclcpp/rclcpp.hpp>
-
 namespace moveit::core {
 class RobotModel;
 class JointModelGroup;
@@ -115,7 +113,6 @@ public:
 private:
   std::shared_ptr<MoveItAdapter> adapter_;
   std::shared_ptr<error_code_utils::ErrorBus> error_bus_;
-  rclcpp::Logger logger_{rclcpp::get_logger("solve_core")};
 
   std::optional<SolveResponse> plan_normal(const SolveRequest &req);
   std::optional<SolveResponse> plan_cartesian(const SolveRequest &req);

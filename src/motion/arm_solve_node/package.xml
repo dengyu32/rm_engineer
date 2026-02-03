@@ -20,7 +20,6 @@
   <depend>tf2</depend>
   <depend>tf2_eigen</depend>
   <depend>tf2_geometry_msgs</depend>
-  <depend>param_utils</depend>
   <depend>solve_core</depend>
   <depend>error_code_utils</depend>
 

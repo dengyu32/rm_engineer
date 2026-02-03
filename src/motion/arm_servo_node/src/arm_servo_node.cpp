@@ -1,7 +1,6 @@
 // Hpp
 #include "arm_servo/arm_servo_node.hpp"
 #include "arm_servo/error_code.hpp"
-#include "param_utils/param_snapshot.hpp"
 
 // C++
 #include <algorithm>
@@ -38,9 +37,7 @@ ArmServoNode::ArmServoNode(const rclcpp::NodeOptions &options)
   // --------------------------------------------------------------------------
   //  Log
   // --------------------------------------------------------------------------
-  RCLCPP_INFO(logger_, "[ARM_SERVO_NODE] adapter started");
-  param_utils::LogSnapshot(this->get_logger(), config_.params_snapshot,
-                           "[ARM_SERVO_NODE][param] ");
+  RCLCPP_INFO(logger_, "\n%s", config_.summary().c_str());
 }
 
 void ArmServoNode::set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus) {
