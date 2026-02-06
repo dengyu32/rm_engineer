@@ -21,6 +21,8 @@
   <depend>sensor_msgs</depend>
   <depend>engineer_interfaces</depend>
   <depend>error_code_utils</depend>
+  <depend>log_utils</depend>
+  <depend>engineer_bringup</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

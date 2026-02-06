@@ -116,7 +116,8 @@ private:
 
   bool planTrajectory(const std::shared_ptr<GoalContext> &ctx,
                       solve_core::Trajectory &out_traj,
-                      std::string &err);
+                      std::string &err,
+                      int &err_code);
 
   // -----------------------------------------------------------------------
   //  Action callbacks
@@ -140,7 +141,8 @@ private:
 
   bool publishTrajectoryPoints(const std::shared_ptr<GoalHandleMove> gh,
                                const std::shared_ptr<GoalContext> &ctx,
-                               std::string &err);
+                               std::string &err,
+                               int &err_code);
 
   // -----------------------------------------------------------------------
   //  Helper

@@ -1,6 +1,6 @@
 // Executors
 #include "top_hfsm/executors/arm_solve_client.hpp"
-#include "top_hfsm/error_code.hpp"
+#include "error_code_utils/app_error.hpp"
 
 // C++
 #include <chrono>
@@ -64,7 +64,7 @@ bool ArmSolveClient::sendGoal(const engineer_interfaces::msg::Target &target_pos
 
   if (!action_client_) {
     fail_fast("Action client not created");
-    publish_error(make_error(ArmSolveClientErrc::ActionClientMissing,
+    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::ActionClientMissing,
                              "Action client not created"));
     return false;
   }
@@ -75,7 +75,7 @@ bool ArmSolveClient::sendGoal(const engineer_interfaces::msg::Target &target_pos
     RCLCPP_ERROR(node_.get_logger(),
                  "[scope=arm_solve_client][status=failed] Action server not available");
     fail_fast("Action server not available");
-    publish_error(make_error(ArmSolveClientErrc::ActionServerUnavailable,
+    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::ActionServerUnavailable,
                              "Action server not available",
                              {{"action_name", action_name_}}));
     return false;
@@ -104,7 +104,7 @@ bool ArmSolveClient::sendGoal(const engineer_interfaces::msg::Target &target_pos
       ctx->done.store(true);
       ctx->success.store(false);
       ctx->error_msg = "Goal rejected by server";
-      publish_error(make_error(ArmSolveClientErrc::GoalRejected, "Goal rejected by server",
+      publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::GoalRejected, "Goal rejected by server",
                                {{"action_name", action_name_}}));
       return;
     }
@@ -141,7 +141,7 @@ bool ArmSolveClient::sendGoal(const engineer_interfaces::msg::Target &target_pos
       ctx->error_msg = result.result->error_msg;
     } else {
       ctx->error_msg = "Empty result";
-      publish_error(make_error(ArmSolveClientErrc::EmptyResult, "Empty result",
+      publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::EmptyResult, "Empty result",
                                {{"action_name", action_name_}}));
     }
     ctx->success.store(ok);

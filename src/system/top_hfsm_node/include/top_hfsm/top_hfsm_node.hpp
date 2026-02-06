@@ -10,7 +10,7 @@
 #include <atomic>
 
 // ROS messages
-#include <engineer_interfaces/msg/hfsm_intent.hpp>
+#include <engineer_interfaces/msg/intent.hpp>
 
 // Executors
 #include "executors/arm_solve_client.hpp"
@@ -23,21 +23,21 @@
 #include "top_hfsm/config.hpp"
 
 // TODO: 有点小问题
-// 测试 ros2 topic pub /hfsm_intents engineer_interfaces/msg/HFSMIntent
+// 测试 ros2 topic pub /intents engineer_interfaces/msg/Intent
 // "{intent_id: 2}" --once 夹爪闭合异常
 /*
-ros2 topic pub /hfsm_intents engineer_interfaces/msg/HFSMIntent "{intent_id: 2}" --once
+ros2 topic pub /intents engineer_interfaces/msg/Intent "{intent_id: 2}" --once
 */
 
 namespace top_hfsm {
 
 // ============================================================================
-//  HFSMIntentType
+//  IntentType
 // ----------------------------------------------------------------------------
 //  - 外部输入协议中的意图枚举，驱动 HFSM 状态切换
 //  - IDLE 优先级最高，可打断其他动作
 // ============================================================================
-enum class HFSMIntentType : uint8_t {
+enum class IntentType : uint8_t {
   IDLE = 0,        // 优先级最高：停止/回待机
   AUTO_INIT = 1,   // 自动初始化流程
   TEST_SOLVE = 2,  // 自动求解/抓取序列
@@ -52,7 +52,7 @@ enum class HFSMIntentType : uint8_t {
 //  TopHFSMNode
 // ----------------------------------------------------------------------------
 //  - ROS2 节点包装 HFSM2 机器，调度 ArmSolve/Gripper 执行器
-//  - 订阅 HFSMIntent，周期 tick 状态机并驱动内部事件
+//  - 订阅 Intent，周期 tick 状态机并驱动内部事件
 //  - 将意图与执行器上下文写入 EMachineContext
 // ============================================================================
 class TopHFSMNode : public rclcpp::Node {
@@ -67,7 +67,7 @@ private:
   // -----------------------------------------------------------------------
   //  ROS callbacks
   // -----------------------------------------------------------------------
-  void intentCallBack(engineer_interfaces::msg::HFSMIntent::ConstSharedPtr msg);
+  void intentCallBack(engineer_interfaces::msg::Intent::ConstSharedPtr msg);
   void machine_update_timer_callback();
 
   // -----------------------------------------------------------------------
@@ -100,13 +100,13 @@ private:
   //  applied_intent_:
   //    - timer 内部使用：只在 intent 变化时触发一次 changeTo
   // -----------------------------------------------------------------------
-  std::atomic<HFSMIntentType> latest_intent_{HFSMIntentType::IDLE};
-  HFSMIntentType applied_intent_{HFSMIntentType::IDLE};
+  std::atomic<IntentType> latest_intent_{IntentType::IDLE};
+  IntentType applied_intent_{IntentType::IDLE};
 
   // -----------------------------------------------------------------------
   //  ROS handles
   // -----------------------------------------------------------------------
-  rclcpp::Subscription<engineer_interfaces::msg::HFSMIntent>::SharedPtr hfsm_intent_sub_;
+  rclcpp::Subscription<engineer_interfaces::msg::Intent>::SharedPtr intent_sub_;
   rclcpp::TimerBase::SharedPtr machine_update_timer_;
 
   std::shared_ptr<error_code_utils::ErrorBus> error_bus_;

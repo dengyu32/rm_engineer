@@ -1,6 +1,6 @@
 // Hpp
 #include "arm_servo/arm_servo_node.hpp"
-#include "arm_servo/error_code.hpp"
+#include "error_code_utils/app_error.hpp"
 
 // C++
 #include <algorithm>
@@ -123,7 +123,7 @@ bool ArmServoNode::setTargetFromTrajectory(
     const auto min_period = rclcpp::Duration(std::chrono::milliseconds(config_.publish_period_ms));
     if ((now_time - last_publish_time_) < min_period) {
       RCLCPP_WARN(logger_, "[arm_servo][drop][reason=throttle]");
-      publish_error(make_error(ArmServoErrc::ThrottleDrop, "trajectory throttled"));
+      publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SERVO, error_code_utils::app::ServoCode::ThrottleDrop, "trajectory throttled"));
       return false;
     }
   }
@@ -133,7 +133,7 @@ bool ArmServoNode::setTargetFromTrajectory(
   // --------------------------------------------------------------------------
   if (traj.joint_names.empty() || traj.points.empty()) {
     RCLCPP_ERROR(logger_, "[arm_servo][drop][reason=trajectory_empty]");
-    publish_error(make_error(ArmServoErrc::TrajectoryEmpty, "trajectory empty"));
+    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SERVO, error_code_utils::app::ServoCode::TrajectoryEmpty, "trajectory empty"));
     return false;
   }
 
@@ -141,7 +141,7 @@ bool ArmServoNode::setTargetFromTrajectory(
       config_.use_last_point_only ? traj.points.back() : traj.points.front();
   if (point.positions.empty()) {
     RCLCPP_ERROR(logger_, "[arm_servo][drop][reason=trajectory_point_empty]");
-    publish_error(make_error(ArmServoErrc::TrajectoryPointEmpty, "trajectory point empty"));
+    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SERVO, error_code_utils::app::ServoCode::TrajectoryPointEmpty, "trajectory point empty"));
     return false;
   }
 
@@ -196,7 +196,7 @@ bool ArmServoNode::setTargetFromTrajectory(
     if (incomplete) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
         "[arm_servo][drop][reason=incomplete_before_seed]");
-      publish_error(make_error(ArmServoErrc::IncompleteBeforeSeed, "incomplete trajectory before seed"));
+      publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SERVO, error_code_utils::app::ServoCode::IncompleteBeforeSeed, "incomplete trajectory before seed"));
       return false;
     }
     has_valid_ = true;

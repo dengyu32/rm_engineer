@@ -1,14 +1,6 @@
 fake_system:
   ros__parameters:
     publish_period_ms: 20
-    hfsm_intent_topic: /hfsm_intents
-    joint_states_topic: /joint_states
-    joint_states_verbose_topic: /joint_states_verbose
-    joint_states_custom_topic: /joint_states_custom
-    joint_cmd_topic: /joint_commands
-    gripper_cmd_topic: /gripper_commands
-    joint_count: 6
-    joint_names: [joint1, joint2, joint3, joint4, joint5, joint6]
     initial_joint_positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     initial_gripper_position: 0.0
     publish_intent: false

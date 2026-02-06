@@ -1,8 +1,4 @@
 arm_servo_node:
   ros__parameters:
-    servo_out_topic: /moveit_servo/joint_trajectory
-    output_topic: /joint_commands
     use_last_point_only: true
     publish_period_ms: 10
-    joint_count: 6
-    joint_names: [joint1, joint2, joint3, joint4, joint5, joint6]

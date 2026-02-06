@@ -32,7 +32,7 @@ find_package(std_msgs REQUIRED)
 
 # 声明消息与动作接口，统一生成代码
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/HFSMIntent.msg"
+  "msg/Intent.msg"
   "msg/Joint.msg"
   "msg/Joints.msg"
   "msg/ModeCommand.msg"

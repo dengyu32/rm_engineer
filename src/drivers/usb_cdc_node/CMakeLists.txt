@@ -25,6 +25,8 @@ endif()
 # 引入节点运行所需的 ROS 组件与消息包
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
+find_package(log_utils REQUIRED)
+find_package(engineer_bringup REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -32,6 +34,7 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(error_code_utils REQUIRED)
+find_package(log_utils REQUIRED)
 
 # 通过 pkg-config 查询系统库
 find_package(PkgConfig REQUIRED)
@@ -53,7 +56,9 @@ add_library(${PROJECT_NAME} SHARED
 target_include_directories(${PROJECT_NAME} PUBLIC
   ${LIBUSB_INCLUDE_DIRS}  # libusb 头文件
   $<BUILD_INTERFACE:${MY_ROBOT_INTERFACE}>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>          # for CRCpp/CRC.h
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  # 本项目 include
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CRCpp>    # CRC++ headers
 )
 
 # 注入 libusb 库目录
@@ -66,10 +71,15 @@ target_link_libraries(${PROJECT_NAME}
   ${LIBUSB_LIBRARIES}
 )
 
+# Enable CRC++ esoteric definitions (needed for CRC_16_MODBUS)
+target_compile_definitions(${PROJECT_NAME} PRIVATE CRCPP_INCLUDE_ESOTERIC_CRC_DEFINITIONS)
+
 # 绑定 ROS 运行时依赖
 ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   rclcpp_components
+  log_utils
+  engineer_bringup
   std_msgs
   std_srvs
   tf2_ros
@@ -100,6 +110,10 @@ install(DIRECTORY  launch/
     DESTINATION share/${PROJECT_NAME}/
 )
 
+# 分发配置文件
+install(DIRECTORY  config/
+    DESTINATION share/${PROJECT_NAME}/
+)
 
 # 生成包元数据
 ament_package()

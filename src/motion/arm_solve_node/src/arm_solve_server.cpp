@@ -1,5 +1,5 @@
 #include "arm_solve/arm_solve_server.hpp"
-#include "arm_solve/error_code.hpp"
+#include "error_code_utils/app_error.hpp"
 
 #include <exception>
 #include <memory>
@@ -146,10 +146,10 @@ namespace arm_solve {
 using namespace std::chrono_literals;
 
 namespace {
-std::shared_ptr<Move::Result> make_move_result(bool success, const std::string &msg) {
+std::shared_ptr<Move::Result> make_move_result(bool success, int error_code, const std::string &msg) {
   auto result = std::make_shared<Move::Result>();
   result->success = success;
-  result->error_code = 0;
+  result->error_code = error_code;
   result->error_msg = msg;
   return result;
 }
@@ -157,11 +157,12 @@ std::shared_ptr<Move::Result> make_move_result(bool success, const std::string &
 void finish_move_goal(const std::shared_ptr<GoalHandleMove> &gh,
                       bool success,
                       bool canceled,
-                      const std::string &msg) {
+                      const std::string &msg,
+                      int error_code) {
   if (!gh) {
     return;
   }
-  auto result = make_move_result(success, msg);
+  auto result = make_move_result(success, error_code, msg);
   if (success) {
     gh->succeed(result);
     return;
@@ -270,12 +271,14 @@ bool ArmSolveServer::isMoveGroupReady() const {
 
 bool ArmSolveServer::planTrajectory(const std::shared_ptr<GoalContext>& ctx,
                                     solve_core::Trajectory &out_traj,
-                                    std::string &err) {
+                                    std::string &err,
+                                    int &err_code) {
 
   if (!solve_core_) {
     err = "SolveCore not ready";
+    err_code = static_cast<int>(error_code_utils::app::SolveCode::SolveCoreNotReady);
     RCLCPP_ERROR(get_logger(), "[scope=arm_solve_server][status=error] %s", err.c_str());
-    publish_error(make_error(ArmSolveErrc::SolveCoreNotReady, err));
+    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::SolveCoreNotReady, err));
     return false;
   }
 
@@ -287,15 +290,17 @@ bool ArmSolveServer::planTrajectory(const std::shared_ptr<GoalContext>& ctx,
                 (now_ts - last_plan_time_).nanoseconds() / 1e6,
                 config_.plan_min_interval_ms);
     err = "Planning throttled";
-    publish_error(make_error(ArmSolveErrc::PlanningThrottled, err));
+    err_code = static_cast<int>(error_code_utils::app::SolveCode::PlanningThrottled);
+    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::PlanningThrottled, err));
     return false;
   }
   last_plan_time_ = now_ts;
 
   if (isCanceled(active_goal_handle_.lock(), ctx)) {
     err = "Goal canceled before planning";
+    err_code = static_cast<int>(error_code_utils::app::SolveCode::GoalCanceled);
     RCLCPP_WARN(get_logger(), "[scope=arm_solve_server][status=cancel] %s", err.c_str());
-    publish_error(make_error(ArmSolveErrc::GoalCanceled, err));
+    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::GoalCanceled, err));
     return false;
   }
 
@@ -333,12 +338,14 @@ bool ArmSolveServer::planTrajectory(const std::shared_ptr<GoalContext>& ctx,
   auto res = solve_core_->plan(req);
   if (!res) {
     err = "Planning failed";
+    err_code = static_cast<int>(error_code_utils::app::SolveCode::PlanningFailed);
     RCLCPP_ERROR(get_logger(), "[scope=arm_solve_server][status=error] %s", err.c_str());
-    publish_error(make_error(ArmSolveErrc::PlanningFailed, err));
+    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::PlanningFailed, err));
     return false;
   }
 
   out_traj = std::move(res->trajectory);
+  err_code = 0;
   return true;
 }
 
@@ -353,7 +360,7 @@ rclcpp_action::GoalResponse ArmSolveServer::handle_goal(const rclcpp_action::Goa
 
   if (!isMoveGroupReady()) {
     RCLCPP_WARN(get_logger(), "[scope=arm_solve_server][status=not_ready] MoveGroup not ready");
-    publish_error(make_error(ArmSolveErrc::MoveGroupNotReady, "MoveGroup not ready"));
+    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::MoveGroupNotReady, "MoveGroup not ready"));
     return rclcpp_action::GoalResponse::REJECT;
   }
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
@@ -414,36 +421,39 @@ void ArmSolveServer::handle_accepted(const std::shared_ptr<GoalHandleMove> gh) {
 void ArmSolveServer::execute(const std::shared_ptr<GoalHandleMove> gh, const std::shared_ptr<GoalContext>& ctx) {
   try {
     std::string err;
+    int err_code = 0;
     if (isCanceled(gh, ctx)) {
       err = "Goal canceled before execution";
+      err_code = static_cast<int>(error_code_utils::app::SolveCode::GoalCanceled);
       RCLCPP_WARN(this->get_logger(), "[scope=arm_solve_server][status=cancel] %s", err.c_str());
-      publish_error(make_error(ArmSolveErrc::GoalCanceled, err));
-      finish_move_goal(gh, false, true, err);
+      publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::GoalCanceled, err));
+      finish_move_goal(gh, false, true, err, err_code);
       return;
     }
 
     solve_core::Trajectory traj_msg;
 
-    if (!planTrajectory(ctx, traj_msg, err)) {
+    if (!planTrajectory(ctx, traj_msg, err, err_code)) {
       const bool canceled = isCanceled(gh, ctx);
-      finish_move_goal(gh, false, canceled, err);
+      finish_move_goal(gh, false, canceled, err, err_code);
       return;
     }
 
     if (isCanceled(gh, ctx)) {
       err = "Goal canceled";
+      err_code = static_cast<int>(error_code_utils::app::SolveCode::GoalCanceled);
       RCLCPP_WARN(this->get_logger(), "[scope=arm_solve_server][status=cancel] %s", err.c_str());
-      publish_error(make_error(ArmSolveErrc::GoalCanceled, err));
-      finish_move_goal(gh, false, true, err);
+      publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::GoalCanceled, err));
+      finish_move_goal(gh, false, true, err, err_code);
       return;
     }
 
     ctx->traj = std::move(traj_msg);
-    if (!publishTrajectoryPoints(gh, ctx, err)) {
+    if (!publishTrajectoryPoints(gh, ctx, err, err_code)) {
       const bool canceled = isCanceled(gh, ctx);
-      finish_move_goal(gh, false, canceled, err);
+      finish_move_goal(gh, false, canceled, err, err_code);
     } else {
-      finish_move_goal(gh, true, false, "");
+      finish_move_goal(gh, true, false, "", 0);
     }
 
     std::scoped_lock<std::mutex> lock(active_mtx_);
@@ -455,25 +465,29 @@ void ArmSolveServer::execute(const std::shared_ptr<GoalHandleMove> gh, const std
     }
   } catch (const std::exception& e) {
     RCLCPP_ERROR(this->get_logger(), "[scope=arm_solve_server][status=exception] %s", e.what());
-    publish_error(make_error(ArmSolveErrc::ExceptionThrown, e.what()));
-    finish_move_goal(gh, false, false, e.what());
+    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::ExceptionThrown, e.what()));
+    finish_move_goal(gh, false, false, e.what(),
+                     static_cast<int>(error_code_utils::app::SolveCode::ExceptionThrown));
   } catch (...) {
     RCLCPP_ERROR(this->get_logger(), "[scope=arm_solve_server][status=exception] Unknown exception");
-    publish_error(make_error(ArmSolveErrc::ExceptionThrown, "Unknown exception"));
-    finish_move_goal(gh, false, false, "Unknown exception");
+    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::ExceptionThrown, "Unknown exception"));
+    finish_move_goal(gh, false, false, "Unknown exception",
+                     static_cast<int>(error_code_utils::app::SolveCode::ExceptionThrown));
   }
 }
 
 bool ArmSolveServer::publishTrajectoryPoints(const std::shared_ptr<GoalHandleMove> gh,
                                              const std::shared_ptr<GoalContext>& ctx,
-                                             std::string &err) {
+                                             std::string &err,
+                                             int &err_code) {
 
   const auto& traj = ctx->traj;
 
   if (traj.joint_names.empty() || traj.points.empty()) {
     err = "Trajectory is empty";
+    err_code = static_cast<int>(error_code_utils::app::SolveCode::TrajectoryEmpty);
     RCLCPP_ERROR(get_logger(), "[scope=arm_solve_server][status=error] %s", err.c_str());
-    publish_error(make_error(ArmSolveErrc::TrajectoryEmpty, err));
+    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::TrajectoryEmpty, err));
     return false;
   }
 
@@ -481,6 +495,7 @@ bool ArmSolveServer::publishTrajectoryPoints(const std::shared_ptr<GoalHandleMov
   for (size_t i = 0; i < traj.points.size(); ++i) {
     if (isCanceled(gh, ctx)) {
       err = "Goal canceled during execution";
+      err_code = static_cast<int>(error_code_utils::app::SolveCode::GoalCanceled);
       RCLCPP_WARN(get_logger(), "[scope=arm_solve_server][status=cancel] %s", err.c_str());
       return false;
     }
@@ -492,7 +507,8 @@ bool ArmSolveServer::publishTrajectoryPoints(const std::shared_ptr<GoalHandleMov
                    traj.points[i].positions.size(),
                    traj.joint_names.size());
       err = "Trajectory point positions size mismatch";
-      publish_error(make_error(ArmSolveErrc::TrajectoryPointMismatch, err));
+      err_code = static_cast<int>(error_code_utils::app::SolveCode::TrajectoryPointMismatch);
+      publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::TrajectoryPointMismatch, err));
       return false;
     }
 
@@ -524,6 +540,7 @@ bool ArmSolveServer::publishTrajectoryPoints(const std::shared_ptr<GoalHandleMov
     }
   }
 
+  err_code = 0;
   return true;
 }
 

@@ -44,7 +44,7 @@ struct GripperConfig {
 };
 
 struct TopHFSMConfig {
-  std::string hfsm_intent_topic{"/hfsm_intents"};
+  std::string intent_out_topic{"/intents_from_hfsm"};
   int hfsm_update_period_ms{20};
   ArmSolveClientConfig arm_solve_client;
   MoveItServoClientConfig moveit_servo_client;
@@ -182,7 +182,7 @@ inline TopHFSMConfig TopHFSMConfig::Load(rclcpp::Node &node) {
     node.get_parameter(name, value);
   };
 
-  declare_get("hfsm_intent_topic", cfg.hfsm_intent_topic);
+  declare_get("intent_out_topic", cfg.intent_out_topic);
   declare_get("hfsm_update_period_ms", cfg.hfsm_update_period_ms);
 
   cfg.arm_solve_client = ArmSolveClientConfig::Load(node);
@@ -194,8 +194,8 @@ inline TopHFSMConfig TopHFSMConfig::Load(rclcpp::Node &node) {
 }
 
 inline void TopHFSMConfig::validate() const {
-  if (hfsm_intent_topic.empty()) {
-    throw std::runtime_error("TopHFSMConfig: hfsm_intent_topic must not be empty");
+  if (intent_out_topic.empty()) {
+    throw std::runtime_error("TopHFSMConfig: intent_out_topic must not be empty");
   }
   if (hfsm_update_period_ms < 1 || hfsm_update_period_ms > 1000) {
     throw std::runtime_error("TopHFSMConfig: hfsm_update_period_ms must be in [1, 1000]");
@@ -207,7 +207,7 @@ inline std::string TopHFSMConfig::summary() const {
   oss << "=============================\n";
   oss << " TopHFSMNode Configuration\n\n";
   oss << " Topics:\n";
-  oss << "   - hfsm_intent_topic   : " << hfsm_intent_topic << "\n";
+  oss << "   - intent_out_topic   : " << intent_out_topic << "\n";
   oss << "   - hfsm_update_period_ms: " << hfsm_update_period_ms << "\n\n";
   oss << " ArmSolve Client:\n";
   oss << arm_solve_client.summary() << "\n";

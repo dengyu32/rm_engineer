@@ -17,6 +17,7 @@ endif()
 
 # 引入 ament 构建支持
 find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
@@ -29,6 +30,14 @@ find_package(ament_cmake REQUIRED)
 install(DIRECTORY config launch
   DESTINATION share/${PROJECT_NAME}
 )
+
+# 安装并导出头文件
+install(DIRECTORY include/
+  DESTINATION include
+)
+
+ament_export_include_directories(include)
+ament_export_dependencies(rclcpp)
 
 # 输出包元数据
 ament_package()

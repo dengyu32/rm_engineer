@@ -23,6 +23,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
+find_package(engineer_bringup REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(control_msgs REQUIRED)
@@ -48,6 +49,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   rclcpp_components
+  engineer_bringup
   trajectory_msgs
   engineer_interfaces
   error_code_utils
