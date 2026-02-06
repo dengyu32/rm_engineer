@@ -28,14 +28,14 @@ TopHFSMNode::TopHFSMNode(const rclcpp::NodeOptions &options)
   // --------------------------------------------------------------------------
   // Intent init
   // --------------------------------------------------------------------------
-  latest_intent_.store(HFSMIntentType::IDLE, std::memory_order_relaxed);
-  applied_intent_ = HFSMIntentType::IDLE;
+  latest_intent_.store(IntentType::IDLE, std::memory_order_relaxed);
+  applied_intent_ = IntentType::IDLE;
 
   // --------------------------------------------------------------------------
   // Subscription: external intents
   // --------------------------------------------------------------------------
-  hfsm_intent_sub_ = this->create_subscription<engineer_interfaces::msg::HFSMIntent>(
-      config_.hfsm_intent_topic, rclcpp::QoS(10),
+  intent_sub_ = this->create_subscription<engineer_interfaces::msg::Intent>(
+      config_.intent_out_topic, rclcpp::QoS(10),
       std::bind(&TopHFSMNode::intentCallBack, this, std::placeholders::_1));
 
   // --------------------------------------------------------------------------
@@ -57,19 +57,19 @@ TopHFSMNode::~TopHFSMNode() { dispatcher_.stop(); }
 //  ROS callbacks
 // ============================================================================
 
-void TopHFSMNode::intentCallBack(engineer_interfaces::msg::HFSMIntent::ConstSharedPtr msg) {
+void TopHFSMNode::intentCallBack(engineer_interfaces::msg::Intent::ConstSharedPtr msg) {
 
   // --------------------------------------------------------------------------
   // Defensive: validate intent_id
   // --------------------------------------------------------------------------
   const auto raw = static_cast<uint8_t>(msg->intent_id);
 
-  if (raw > static_cast<uint8_t>(HFSMIntentType::TELEOP_SERVO)) {
+  if (raw > static_cast<uint8_t>(IntentType::TELEOP_SERVO)) {
     RCLCPP_WARN(this->get_logger(), "[scope=HFSM][status=invalid] invalid intent_id=%u, ignored", raw);
     return;
   }
 
-  latest_intent_.store(static_cast<HFSMIntentType>(raw), std::memory_order_relaxed);
+  latest_intent_.store(static_cast<IntentType>(raw), std::memory_order_relaxed);
 }
 
 void TopHFSMNode::machine_update_timer_callback() {
@@ -97,42 +97,42 @@ void TopHFSMNode::machine_update_timer_callback() {
     applied_intent_ = intent;
 
     switch (intent) {
-    case HFSMIntentType::AUTO_INIT:
+    case IntentType::AUTO_INIT:
       RCLCPP_INFO(get_logger(), "[scope=HFSM][status=intent] intent=AUTO_INIT");
       machine_.changeTo<AUTOINIT>();
       break;
 
-    case HFSMIntentType::TEST_SOLVE:
+    case IntentType::TEST_SOLVE:
       RCLCPP_INFO(get_logger(), "[scope=HFSM][status=intent] intent=TEST_SOLVE");
       machine_.changeTo<TESTSOLVE>();
       break;
 
-    case HFSMIntentType::TEST_CARTESIAN:
+    case IntentType::TEST_CARTESIAN:
       RCLCPP_INFO(get_logger(), "[HFSM] intent=TEST_CARTESIAN");
       machine_.changeTo<TESTCARTESIAN>();
       break;
 
-    case HFSMIntentType::AUTO_GRAB:
+    case IntentType::AUTO_GRAB:
       RCLCPP_INFO(get_logger(), "[HFSM] intent=AUTO_GRAB");
       machine_.changeTo<AUTOGRAB>();
       break;
 
-    case HFSMIntentType::AUTO_STORE:
+    case IntentType::AUTO_STORE:
       RCLCPP_INFO(get_logger(), "[HFSM] intent=AUTO_STORE");
       machine_.changeTo<AUTOSTORE>();
       break;
 
-    case HFSMIntentType::AUTO_GET:
+    case IntentType::AUTO_GET:
       RCLCPP_INFO(get_logger(), "[HFSM] intent=AUTO_GET");
       machine_.changeTo<AUTOGET>();
       break;
 
-    case HFSMIntentType::TELEOP_SERVO:
+    case IntentType::TELEOP_SERVO:
       RCLCPP_INFO(get_logger(), "[scope=HFSM][status=intent] intent=TELEOP_SERVO");
       machine_.changeTo<TELEOPSERVO>();
       break;
 
-    case HFSMIntentType::IDLE:
+    case IntentType::IDLE:
       RCLCPP_WARN(get_logger(), "[scope=HFSM][status=intent] intent=IDLE");
       machine_.changeTo<IDLE>();
       break;

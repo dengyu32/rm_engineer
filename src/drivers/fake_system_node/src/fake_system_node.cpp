@@ -1,6 +1,6 @@
 // Fake system
 #include "fake_system/fake_system_node.hpp"
-#include "fake_system/error_code.hpp"
+#include "error_code_utils/app_error.hpp"
 
 // utils
 #include "log_utils/log.hpp"
@@ -36,7 +36,7 @@ FakeSystemNode::FakeSystemNode(const rclcpp::NodeOptions &options)
   // log
   log_utils::init_console_logger("core");
   LOGI("\n{}",config_.summary());
-  RCLCPP_INFO(logger_, "FAKE_SYSTEM started"); // 与节点有关的日志还用ros日志
+  RCLCPP_INFO(logger_, "FAKE_SYSTEM_NODE START!!!"); // 与节点有关的日志还用ros日志
 }
 
 void FakeSystemNode::set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus) {
@@ -55,8 +55,8 @@ void FakeSystemNode::publish_error(const error_code_utils::Error &err) const {
 // ============================================================================
 void FakeSystemNode::initRosInterfaces() {
   // Publisher
-  hfsm_intent_pub_ = this->create_publisher<engineer_interfaces::msg::HFSMIntent>(
-      config_.hfsm_intent_topic, rclcpp::QoS(10));
+  intent_pub_ = this->create_publisher<engineer_interfaces::msg::Intent>(
+      config_.intent_out_topic, rclcpp::QoS(10));
   joint_states_pub_ = this->create_publisher<sensor_msgs::msg::JointState>(
       config_.joint_states_topic, rclcpp::QoS(10));
   joint_states_custom_pub_ =
@@ -94,10 +94,12 @@ void FakeSystemNode::execute(engineer_interfaces::msg::Joints::SharedPtr msg) {
         now_tp - last_warn >= std::chrono::milliseconds(2000)) {  // 限制频率 2秒最多告警一次
       last_warn = now_tp;
       LOGW("[fake_system] joint_commands size={} < {}, fill defaults",msg->joints.size(), expected);      
-      publish_error(make_error(FakeSystemErrc::JointCommandShort,
-                               "joint_commands size smaller than expected",
-                               {{"expected", std::to_string(expected)},
-                                {"actual", std::to_string(msg->joints.size())}}));
+      publish_error(error_code_utils::app::make_app_error(
+          error_code_utils::ErrorDomain::COMM,
+          error_code_utils::app::CommCode::FakeJointCommandShort,
+          "joint_commands size smaller than expected",
+          {{"expected", std::to_string(expected)},
+           {"actual", std::to_string(msg->joints.size())}}));
     }
   }
 }
@@ -129,7 +131,7 @@ void FakeSystemNode::publish_timer_callback() {
   joint_states.position.reserve(joint_count + 1);
 
   for (size_t i = 0; i < joint_count; ++i) {
-    joint_states.name.push_back("joint" + std::to_string(i + 1));
+    joint_states.name = config_.joint_names;
     joint_states.position.push_back(joint_positions_copy[i]);
   }
   joint_states.name.push_back("left_finger_joint");
@@ -145,7 +147,7 @@ void FakeSystemNode::publish_timer_callback() {
   joint_states_verbose.header.frame_id = "base_link";
   joint_states_verbose.joints.resize(joint_count);
   for (size_t i = 0; i < joint_count; ++i) {
-    joint_states_verbose.joints[i].name = "joint" + std::to_string(i + 1);
+    joint_states_verbose.joints[i].name = config_.joint_names[i];
     joint_states_verbose.joints[i].position = joint_positions_copy[i];
     joint_states_verbose.joints[i].velocity = 0;
     joint_states_verbose.joints[i].effort = 0;
@@ -159,10 +161,10 @@ void FakeSystemNode::publish_timer_callback() {
 
   // 发布 Intent（可选）
   if (config_.publish_intent) {
-    engineer_interfaces::msg::HFSMIntent hfsm_intent_msg;
-    hfsm_intent_msg.stamp = this->now();
-    hfsm_intent_msg.intent_id = 0; // 发送 IDLE
-    hfsm_intent_pub_->publish(hfsm_intent_msg);
+    engineer_interfaces::msg::Intent intent_msg;
+    intent_msg.stamp = this->now();
+    intent_msg.intent_id = 0; // 发送 IDLE
+    intent_pub_->publish(intent_msg);
   }
 }
 } // namespace fake_system

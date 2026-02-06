@@ -1,53 +1,123 @@
-### usb_cdc_node
-> 基于 USB CDC 的轻量级 ROS2 通信节点，用于稳定的虚拟串口数据交换。
-**简介**
-- 对 libusb 做简洁封装，提供可靠的数据收发能力。
-- 适用于上位机与下位机之间的高速通信与协议交互。
+# USB CDC Node
+基于 USB CDC 的 ROS2 通信节点，用于上位机与下位机的高速串口数据交换。
 
-#### 项目目标
-> 该节点的设计目标与边界。
-**目标清单**
-- 提供可复用的 USB CDC 通信节点。
-- 在 ROS2 中作为上位机通信模块。
-- 封装 libusb，简化调用并增强工程性。
-- 支持线程管理、数据缓冲、协议解析与消息发布的扩展。
+**架构概览**
+```text
+USB CDC Device (MCU)
+    ↓ USB CDC (libusb)
+┌──────────────────────────────────────────┐
+│              UsbCdcNode                  │
+│  ┌────────────────────────────────────┐  │
+│  │     Device (libusb PIMPL)           │  │ ← 打开设备 / 发送 / 事件循环
+│  └────────────────────────────────────┘  │
+│  ┌────────────────────────────────────┐  │
+│  │     DeviceParser (frame sync)       │  │ ← 帧同步 + CRC 校验 + 分发
+│  └────────────────────────────────────┘  │
+│  ┌────────────────────────────────────┐  │
+│  │     ROS Interfaces                  │  │ ← JointState / Joints / Intent
+│  └────────────────────────────────────┘  │
+└──────────────────────────────────────────┘
+    ↓
+ROS2 Topics
+```
 
-#### 适用场景
-> 典型应用与落地场景。
-**场景清单**
-- 工业机器人上位机通信。
-- 自研设备的 USB 虚拟串口数据交互。
-- 传感器/执行器 USB CDC 接口接入。
-- ROS2 上位机控制系统（C++）。
+**核心模块**
+1. `Device` (libusb 封装)
+- 异步 bulk IN 接收，同步 bulk OUT 发送
+- 热插拔检测与重连
+- 独立事件循环线程
 
-#### 使用libusb库
+2. `DeviceParser`
+- SoF / EoF 帧同步
+- CRC16 校验
+- 通过帧 ID 分发解析回调
 
-1) libusb_init / libusb_exit 是什么
+3. `UsbCdcNode`
+- 订阅关节/夹爪/意图指令
+- 发布 JointState / Joints / Intent
 
-- libusb_init(&ctx_) 相当于“创建一个 libusb 的运行环境对象（context）”，里面包含线程、事件循环、内存缓
-存等资源。
-- libusb_exit(ctx_) 相当于“销毁这个运行环境对象并释放资源”。
+**通信协议**
+- 帧结构：`SoF | len | id | crc | payload | EoF`
+- CRC 覆盖范围：`len + id + payload`
+- CRC 算法：`CRC-16/MODBUS`
 
-2) 现在的代码做了什么
+`HeaderFrame`
+```cpp
+struct HeaderFrame {
+  uint8_t sof;   // 0x5A
+  uint8_t len;   // payload length
+  uint8_t id;    // packet id
+  uint16_t crc;  // CRC16(MODBUS)
+};
+```
 
-- 每次 open() 都执行 libusb_init(&ctx_)。
-- 但代码里没有任何地方调用 libusb_exit(ctx_)。
-- 这意味着：如果设备断开→重连→再次 open()，就会重复创建新的 context，而旧的 context 没被释放。
+接收包：`EngineerReceiveData`
+```text
+actualJointPosition[7]
+customJointPosition[6]
+IntentStatus
+IntentAck
+```
 
-3) 为什么会有风险
+发送包：`EngineerTransmitData`
+```text
+targetJointPosition[6]
+targetJointVelocity[6]
+gripperCommand
+IntentFinish
+```
 
-- 每次 libusb_init 都会分配资源（内存、文件描述符、事件处理结构）。
-- 不 libusb_exit 就不会释放。
-- 反复重连，资源会越来越多，最终可能导致内存膨胀或系统资源耗尽。
+**Intent 信号语义**
+- `IntentStatus`: 下位机当前意图状态
+- `IntentAck`: 下位机确认信号
+- `IntentFinish`: 上位机完成信号（电平信号）
 
-4) “重连不初始化会不会出事？”
+**话题**
+发布：
+- `intent_out_topic` (`engineer_interfaces/Intent`)
+- `joint_states_topic` (`sensor_msgs/JointState`)
+- `joint_states_verbose_topic` (`engineer_interfaces/Joints`)
+- `joint_states_custom_topic` (`engineer_interfaces/Joints`)
 
-- 不会。libusb_context 只是库的运行环境，初始化一次就可以重复用来打开/关闭设备。
-- 重连的关键是重新 libusb_open_device_with_vid_pid，而不是重新 libusb_init。
+订阅：
+- `intent_in_topic` (`engineer_interfaces/Intent`)
+- `joint_cmd_topic` (`engineer_interfaces/Joints`)
+- `gripper_cmd_topic` (`engineer_interfaces/GripperCommand`)
 
-5) 正确的生命周期
+**参数**
+参数由 `config/usb_cdc_node.yaml` 与 `BaseRobotConfig` 提供。
 
-- 初始化一次（通常在构造函数或第一次 open 时）
-- 多次打开/关闭设备句柄（重连）
-- 程序退出时再 libusb_exit（析构函数或显式 close）
+常用参数：
+- `vendor_id` / `product_id`
+- `publish_period_ms` / `send_period_ms`
+- `intent_out_topic` / `intent_in_topic`
+- `joint_states_topic` / `joint_states_verbose_topic` / `joint_states_custom_topic`
+- `joint_cmd_topic` / `gripper_cmd_topic`
+- `joint_count` / `joint_names`
 
+**使用**
+构建：
+```bash
+colcon build --packages-select usb_cdc
+```
+
+启动：
+```bash
+ros2 launch usb_cdc usb_cdc_node.launch.py
+```
+
+自定义参数：
+```bash
+ros2 launch usb_cdc usb_cdc_node.launch.py \
+  params_file:=/path/to/usb_cdc_node.yaml
+```
+
+**依赖**
+- ROS2 Humble+
+- libusb-1.0
+- CRCpp
+- `engineer_interfaces`
+
+**注意事项**
+- 帧同步依赖完整帧传输，若设备端可能粘包/拆包，需升级解析器为流式状态机。
+- CRC 未在实机上验证时，需与下位机参数对齐。

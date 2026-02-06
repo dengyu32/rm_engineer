@@ -90,7 +90,7 @@ bool Device::Impl::open(uint16_t vid, uint16_t pid) {
         this, &hp_handle_);
     if (rc != LIBUSB_SUCCESS)
       RCLCPP_INFO(rclcpp::get_logger("usb_cdc"),
-                  "[scope=usb_cdc_driver][status=failed] Hot-plug callback reg failed: {%s}",
+                  " [FAILED] Hot-plug callback reg failed: {%s} ",
                   libusb_error_name(rc));
     else
       hotplug_registered_ = true;
@@ -99,6 +99,9 @@ bool Device::Impl::open(uint16_t vid, uint16_t pid) {
   // 启动异步接收
   submit_transfer();
   handling_events_ = true;
+  disconnected_ = false;
+  hotplug_arrived_ = false;
+  rx_transfer_done_ = false;
   return true;
 }
 
@@ -159,12 +162,19 @@ void Device::Impl::alloc_transfer() {
       sizeof(rx_buf_),
       [](libusb_transfer *tr) {
         auto self = static_cast<Impl *>(tr->user_data);
-        if (!self->handling_events_)
+        if (tr->status == LIBUSB_TRANSFER_CANCELLED) {
+          self->rx_transfer_done_ = true;
           return;
+        }
+        if (!self->handling_events_) {
+          self->rx_transfer_done_ = true;
+          return;
+        }
 
         // USB 中断 / 拔出
         if (tr->status != LIBUSB_TRANSFER_COMPLETED) {
           self->disconnected_ = true;
+          self->rx_transfer_done_ = true;
           return;
         }
 
@@ -183,8 +193,10 @@ void Device::Impl::alloc_transfer() {
 
         // 继续提交下一次接收
         int rc = libusb_submit_transfer(tr);
-        if (rc != 0)
+        if (rc != 0) {
           self->disconnected_ = true;
+          self->rx_transfer_done_ = true;
+        }
       },
       this, 0);
 }
@@ -218,6 +230,13 @@ void Device::Impl::cleanup() {
   }
   if (rx_transfer_) {
     libusb_cancel_transfer(rx_transfer_);
+    rx_transfer_done_ = false;
+    if (ctx_) {
+      timeval tv{0, 1000}; // 1ms
+      for (int i = 0; i < 200 && !rx_transfer_done_; ++i) {
+        libusb_handle_events_timeout_completed(ctx_, &tv, nullptr);
+      }
+    }
     libusb_free_transfer(rx_transfer_);
     rx_transfer_ = nullptr;
   }
@@ -242,10 +261,14 @@ void Device::Impl::cleanup() {
  * 若设备断开（disconnected_ = true），则会自动进入 try_reopen().
  */
 void Device::Impl::process_once() {
+  if (!ctx_) {
+    return;
+  }
   timeval tv{0, 1000}; // 1ms to avoid busy loop
   libusb_handle_events_timeout_completed(ctx_, &tv, nullptr);
 
-  if (disconnected_) {
+  if (disconnected_ || hotplug_arrived_) {
+    hotplug_arrived_ = false;
     cleanup();
     try_reopen();
   }
@@ -264,10 +287,7 @@ void Device::Impl::on_hotplug(libusb_hotplug_event ev) {
   if (ev == LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT) {
     disconnected_ = true;
   } else if (ev == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
-    if (!handle_) {
-      try_reopen();
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
+    hotplug_arrived_ = true;
   }
 }
 
@@ -290,7 +310,7 @@ bool Device::Impl::try_reopen() {
       if (open(VID)) {
         disconnected_ = false;
         RCLCPP_INFO(rclcpp::get_logger("usb_cdc"),
-                    "[scope=usb_cdc_driver][status=success] USB re-connected");
+                    " [SUCCESS] USB re-connected ");
         return true;
       }
     } catch (...) {
@@ -298,6 +318,10 @@ bool Device::Impl::try_reopen() {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
   return false;
+}
+
+void Device::Impl::request_reconnect() {
+  disconnected_ = true;
 }
 
 // ============================================================================
@@ -340,6 +364,8 @@ bool Device::send_data(uint8_t *d, std::size_t s) {
   return impl_->sync_send(d, s);
 }
 void Device::handle_events() { impl_->process_once(); }
+bool Device::is_open() const { return impl_->is_open(); }
+void Device::request_reconnect() { impl_->request_reconnect(); }
 
 // ============================================================================
 //  Parser
@@ -350,7 +376,7 @@ void DeviceParser::parse(const std::byte *data, size_t size) {
   if (size < sizeof(HeaderFrame) + sizeof(uint8_t)) { // 检验最小长度 HeaderFrame + 1(eof)
     RCLCPP_WARN_THROTTLE(rclcpp::get_logger("usb_cdc"),
                          *clock, 2000,
-                         "[scope=usb_cdc_driver][status=warn] Frame size too small, expected 0x%X, got 0x%X",
+                         " [WARN] Frame size too small, expected 0x%X, got 0x%X ",
                          static_cast<unsigned int>(sizeof(HeaderFrame) + sizeof(uint8_t)),
                          static_cast<unsigned int>(size));
     return;
@@ -361,7 +387,7 @@ void DeviceParser::parse(const std::byte *data, size_t size) {
   if (header_frame.sof != HeaderFrame::SoF()) { // 校验包头 SOF
     RCLCPP_WARN_THROTTLE(rclcpp::get_logger("usb_cdc"),
                          *clock, 2000,
-                         "[scope=usb_cdc_driver][status=warn] Frame header invalid, expected 0x%X, got 0x%X",
+                         " [WARN] Frame header invalid, expected 0x%X, got 0x%X ",
                          static_cast<unsigned int>(HeaderFrame::SoF()),
                          static_cast<unsigned int>(header_frame.sof));
     return;
@@ -371,9 +397,21 @@ void DeviceParser::parse(const std::byte *data, size_t size) {
   if (size != expected_size) { // 检验总长  HF + len + 1(eof)
     RCLCPP_WARN_THROTTLE(rclcpp::get_logger("usb_cdc"),
                          *clock, 2000,
-                         "[scope=usb_cdc_driver][status=warn] Frame length mismatch, expected 0x%X, got 0x%X",
+                         " [WARN] Frame length mismatch, expected 0x%X, got 0x%X ",
                          static_cast<unsigned int>(expected_size),
                          static_cast<unsigned int>(size));
+    return;
+  }
+
+  const uint16_t computed_crc =
+      calc_crc_len_id_payload(header_frame.len, header_frame.id,
+                              data + sizeof(HeaderFrame));
+  if (computed_crc != header_frame.crc) { // 校验 CRC
+    RCLCPP_WARN_THROTTLE(rclcpp::get_logger("usb_cdc"),
+                         *clock, 2000,
+                         " [WARN] Frame crc invalid, expected 0x%X, got 0x%X ",
+                         static_cast<unsigned int>(computed_crc),
+                         static_cast<unsigned int>(header_frame.crc));
     return;
   }
 
@@ -381,7 +419,7 @@ void DeviceParser::parse(const std::byte *data, size_t size) {
   if (eof != HeaderFrame::EoF()) { // 检验包尾 eof
     RCLCPP_WARN_THROTTLE(rclcpp::get_logger("usb_cdc"),
                          *clock, 2000,
-                         "[scope=usb_cdc_driver][status=warn] Frame eof invalid, expected 0x%X, got 0x%X",
+                         " [WARN] Frame eof invalid, expected 0x%X, got 0x%X ",
                          static_cast<unsigned int>(HeaderFrame::EoF()),
                          static_cast<unsigned int>(eof));
     return;
@@ -393,7 +431,7 @@ void DeviceParser::parse(const std::byte *data, size_t size) {
   } else {
     RCLCPP_WARN_THROTTLE(rclcpp::get_logger("usb_cdc"),
                          *clock, 2000,
-                         "[scope=usb_cdc_driver][status=warn] Unknown header 0x%X",
+                         " [WARN] Unknown header 0x%X ",
                          header_frame.id);
     return;
   }
