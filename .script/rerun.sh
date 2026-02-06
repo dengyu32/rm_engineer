@@ -18,6 +18,7 @@ Usage:
   ./rerun.sh [default fakesystem]
   ./rerun.sh --fakesystem
   ./rerun.sh --realsystem
+  ./rerun.sh --vision-only
   ./rerun.sh --build-only
   ./rerun.sh --packages-only pkg1,pkg2
   ./rerun.sh --package pkg1 --package pkg2
@@ -25,6 +26,7 @@ Usage:
 Options:
   --fakesystem, fakesystem        Launch: bringup + fake_system (no usb_cdc)
   --realsystem, realsystem        Launch: bringup + usb_cdc
+  --vision-only                   Launch: vision only (detect_node launch)
   --build-only                    Only Clean + build then exit
   --packages-only pkg1,pkg2       Only build selected packages (comma-separated)
   --package, --pkg <name>         Add one package to the build-only list (repeatable)
@@ -41,6 +43,7 @@ EOF
 # 默认参数
 # ----------------------------------------------------------------------------
 SYSTEM="fakesystem"
+VISION_ONLY=0
 BUILD_ONLY=0
 KILL_PRIOR=0
 KILL_ONLY=0
@@ -64,6 +67,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --realsystem|realsystem)
       SYSTEM="realsystem"
+      shift
+      ;;
+    --vision-only)
+      VISION_ONLY=1
       shift
       ;;
     --build-only)
@@ -225,6 +232,7 @@ print_color cyan "rerun config:"
 print_color cyan "  workspace : $WS_ROOT"
 print_color cyan "  system    : $SYSTEM"
 print_color cyan "  foxglove  : port=$FOXGLOVE_PORT"
+print_color cyan "  vision    : $([[ $VISION_ONLY -eq 1 ]] && echo "vision-only" || echo "with system")"
 if [[ "$SYSTEM" == "realsystem" ]]; then
   print_color cyan "  bringup   : enabled"
   print_color cyan "  usb_cdc   : enabled"
@@ -239,17 +247,25 @@ print_color cyan "=============================================="
 # ----------------------------------------------------------------------------
 # 启动 bringup（两种模式都要）
 # ----------------------------------------------------------------------------
-print_color green "Start bringup.launch.py ..."
-# open_term "engineer bringup" "ros2 launch engineer_bringup robot_bringup.launch.py"
-open_term "engineer bringup" "ros2 launch engineer_bringup base_bringup.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE" # 包括 arm_solve
-open_term "servo container" "ros2 launch arm_servo servo_container.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
-open_term "top hfsm" "ros2 launch top_hfsm top_hfsm_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
-open_term "foxglove bridge" "ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=${FOXGLOVE_PORT}" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+if [[ $VISION_ONLY -eq 1 ]]; then
+  print_color green "Start vision only ..."
+  open_term "vision" "ros2 launch detect_node detect.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+else
+  print_color green "Start bringup.launch.py ..."
+  # open_term "engineer bringup" "ros2 launch engineer_bringup robot_bringup.launch.py"
+  open_term "engineer bringup" "ros2 launch engineer_bringup base_bringup.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE" # 包括 arm_solve
+  open_term "servo container" "ros2 launch arm_servo servo_container.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+  open_term "top hfsm" "ros2 launch top_hfsm top_hfsm_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+  open_term "foxglove bridge" "ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=${FOXGLOVE_PORT}" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+  open_term "vision" "ros2 launch detect_node detect.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+fi
 
 # ----------------------------------------------------------------------------
 # 模式差异
 # ----------------------------------------------------------------------------
-if [[ "$SYSTEM" == "fakesystem" ]]; then
+if [[ $VISION_ONLY -eq 1 ]]; then
+  true
+elif [[ "$SYSTEM" == "fakesystem" ]]; then
   # fake：额外启动 fake_system_node
   print_color green "Start fake_system_node ... (fakesystem only)"
   open_term "fake system" "ros2 launch fake_system fake_system_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"

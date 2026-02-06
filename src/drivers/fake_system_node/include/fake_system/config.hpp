@@ -86,7 +86,8 @@ inline FakeSystemConfig FakeSystemConfig::Load(rclcpp::Node& node) {
 
   //  Joint Layout
   declare_get_checked("joint_count", cfg.joint_count,
-                      [](int v) { return v >= 1 && v <= 12; }, "must be in [1, 12]");
+                      [](int v){ return v >= 1 && v <= 12; },
+                      "must be in [1, 12]");
 
   cfg.joint_names = default_joint_names(cfg.joint_count);
   declare_get("joint_names", cfg.joint_names);
@@ -111,6 +112,7 @@ inline FakeSystemConfig FakeSystemConfig::Load(rclcpp::Node& node) {
 inline void FakeSystemConfig::validate() const {
   //  Semantic / cross-field checks 
   // 字段范围校验已在 declare_get_checked 做完，这里只保留组合语义校验。
+
   if (static_cast<int>(joint_names.size()) != joint_count) {
     throw std::runtime_error("ArmServoConfig: joint_names size must match joint_count");
   }
