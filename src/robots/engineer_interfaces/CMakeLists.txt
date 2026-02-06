@@ -34,7 +34,6 @@ find_package(std_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/HFSMIntent.msg"
   "msg/Joint.msg"
-  "msg/JointCommand.msg"
   "msg/Joints.msg"
   "msg/ModeCommand.msg"
   "msg/Target.msg"

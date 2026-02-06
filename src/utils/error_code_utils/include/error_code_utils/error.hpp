@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rclcpp/logger.hpp"
 #include <map>
 #include <sstream>
 #include <string>
@@ -14,6 +15,12 @@ enum class ErrorDomain {
   UNKNOWN = 99,
 };
 
+enum class ErrorLevel {
+  Warnging,
+  Error,
+  Critical,
+};
+
 struct Error {
   ErrorDomain domain{ErrorDomain::UNKNOWN};
   int code_value{0};
@@ -21,6 +28,18 @@ struct Error {
   std::string message;
   std::map<std::string, std::string> context;
 };
+
+/*
+struct Error {
+  ErrorDomain domain{ErrorDomain::UNKNOWN};
+  int error_code{0};     // 实际话题通信发布的值
+  int error_count{0};
+  std::string message;
+  std::unordered_map<std::string, int> serverity;
+}
+
+每个节点维护一个Error集合，make_error同时使相应错误++
+*/
 
 inline const char *domain_name(ErrorDomain domain) {
   switch (domain) {

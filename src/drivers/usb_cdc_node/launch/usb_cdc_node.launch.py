@@ -17,7 +17,7 @@ def generate_launch_description():
         executable="usb_cdc_node",
         output="screen",
     )
-
+    
     # -------------------------------
     #  LaunchDescription 组装
     # -------------------------------

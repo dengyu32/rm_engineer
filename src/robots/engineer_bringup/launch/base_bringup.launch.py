@@ -123,6 +123,14 @@ def generate_launch_description():
         arguments=["-d", rviz_config_path]
     )
     
+    static_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='static_transform_publisher',
+        output='both',
+        arguments=['0', '0', '0', '0', '0', '0', 'world', 'base_link'], # x y z roll pitch yaw frame_id child_frame_id
+    )
+    
     # arm_solve_server 节点 : 提供 IK/轨迹求解服务，读取 MoveIt 参数与 bringup.yaml 的业务配置
     node_arm_solve = Node(
         package="arm_solve",
@@ -146,6 +154,7 @@ def generate_launch_description():
         node_robot_state_publisher,
         node_move_group,
         node_rviz,
+        static_tf,
         late_init
     ])
     
