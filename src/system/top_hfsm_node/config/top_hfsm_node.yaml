@@ -1,6 +1,7 @@
 top_hfsm_node:
   ros__parameters:
-    intent_out_topic: /intents
+    intent_cmd_topic: /hfsm/intent_commands
+    intent_fb_topic: /hfsm/intent_feedback
     hfsm_update_period_ms: 20
 
     arm_action_name: move_arm

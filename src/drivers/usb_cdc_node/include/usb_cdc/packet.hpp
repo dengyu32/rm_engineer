@@ -14,10 +14,11 @@
 #include <iostream>
 
 // CRC
-#ifndef CRCPP_INCLUDE_ESOTERIC_CRC_DEFINITIONS
-#define CRCPP_INCLUDE_ESOTERIC_CRC_DEFINITIONS
-#endif
-#include "CRCpp/CRC.h"
+// NO_CRC
+// #ifndef CRCPP_INCLUDE_ESOTERIC_CRC_DEFINITIONS
+// #define CRCPP_INCLUDE_ESOTERIC_CRC_DEFINITIONS
+// #endif
+// #include "CRCpp/CRC.h"
 
 namespace usb_cdc {
 
@@ -37,7 +38,6 @@ struct HeaderFrame {
   uint8_t sof; // 0x5A
   uint8_t len; // 数据区长度（不含 header & eof）
   uint8_t id;  // 数据包 ID（区分不同功能包）
-  uint16_t crc;
 };
 
 // ============================================================================
@@ -49,9 +49,10 @@ struct EngineerReceiveData {
     float actualJointPosition[7]; // 当前关节位置
     float customJointPosition[6]; // 自定义关节角度
     uint8_t IntentStatus; ///< 当前意图
-    uint8_t IntentAck; ///< 清除请求并返回ACK
   } data;
   uint8_t eof; ///< 0xA5
+  // NO_CRC
+  // uint16_t crc;
 };
 
 // ============================================================================
@@ -62,19 +63,16 @@ struct EngineerTransmitData {
   struct {
     float targetJointPosition[6];  ///< 目标关节位置
     float targetJointVelocity[6];  ///< 目标关节速度
-    uint8_t gripperCommand;        ///< 夹爪开合指令
-    uint8_t IntentFinish;       ///< 完成请求并返回Finish
+    float targetGripperPosition;   ///< 夹爪目标位置
+    uint8_t IntentFinish;          ///< 完成请求并返回Finish
   } data;
   uint8_t eof; ///< 0xA5
+  // NO_CRC
+  // uint16_t crc;
 };
 
 #pragma pack() // 取消字节对齐
 
-/**
- * @brief 数据包打印模板函数（调试用）
- *
- * @param packet 待打印的数据包
- */
 inline const char* switch_intent(uint8_t intent)
 {
   switch (intent) {
@@ -99,23 +97,27 @@ inline const char* switch_intent(uint8_t intent)
   }
 }
 
+// NO_CRC
 // ============================================================================
 //  CRC utils
 // ----------------------------------------------------------------------------
 //  - CRC 覆盖范围：len + id + payload（不含 sof/crc/eof）
 //  - 使用 CRC++ 内置 CRC-16/MODBUS 参数
 // ============================================================================
-inline uint16_t calc_crc_len_id_payload(uint8_t len, uint8_t id,
-                                        const void *payload) {
-  const auto &params = CRC::CRC_16_MODBUS();
-  uint16_t crc = CRC::Calculate<uint16_t, 16>(&len, sizeof(len), params);
-  crc = CRC::Calculate<uint16_t, 16>(&id, sizeof(id), params, crc);
-  if (len > 0 && payload != nullptr) {
-    crc = CRC::Calculate<uint16_t, 16>(payload, len, params, crc);
-  }
-  return crc;
-}
+// inline uint16_t calc_crc_len_id_payload(uint8_t len, uint8_t id,
+//                                         const void *payload) {
+//   const auto &params = CRC::CRC_16_MODBUS();
+//   uint16_t crc = CRC::Calculate<uint16_t, 16>(&len, sizeof(len), params);
+//   crc = CRC::Calculate<uint16_t, 16>(&id, sizeof(id), params, crc);
+//   if (len > 0 && payload != nullptr) {
+//     crc = CRC::Calculate<uint16_t, 16>(payload, len, params, crc);
+//   }
+//   return crc;
+// }
 
+// ============================================================================
+//  Print Func
+// ============================================================================
 inline void engineer_print_receive_data(const EngineerReceiveData &rx_data) {
   std::cout << "\n=================== RECEIVE PACKET ===================\n";
   // Header
@@ -125,8 +127,10 @@ inline void engineer_print_receive_data(const EngineerReceiveData &rx_data) {
   std::cout << "  Length : " << static_cast<int>(rx_data.header.len) << '\n';
   std::cout << "  ID     : 0x" << std::hex << std::setw(2) << std::setfill('0')
             << static_cast<int>(rx_data.header.id) << std::dec << '\n';
-  std::cout << "  CRC    : 0x" << std::hex << std::setw(4) << std::setfill('0')
-            << static_cast<unsigned>(rx_data.header.crc) << std::dec << '\n';
+
+  // NO_CRC
+  // std::cout << "  CRC    : 0x" << std::hex << std::setw(4) << std::setfill('0')
+  //           << static_cast<unsigned>(rx_data.header.crc) << std::dec << '\n';
 
   // Data
   std::cout << "Data:\n";
@@ -153,14 +157,6 @@ inline void engineer_print_receive_data(const EngineerReceiveData &rx_data) {
             << static_cast<unsigned>(intent) << std::dec << ")\n";
   std::cout << "    Meaning : " << switch_intent(intent) << '\n';
 
-  // IntentAck (bool flag: 0/1)
-  std::cout << "  Intent Ack (0=no, 1=yes):\n";
-  uint8_t ack = rx_data.data.IntentAck;
-  std::cout << "    Value   : " << static_cast<unsigned>(ack) << " (0x"
-            << std::hex << std::setw(2) << std::setfill('0')
-            << static_cast<unsigned>(ack) << std::dec << ")\n";
-  std::cout << "    State   : " << (ack ? "ACKED" : "NOT_ACKED") << '\n';
-
   // End
   std::cout << "EoF    : 0x" << std::hex << std::setw(2) << std::setfill('0')
             << static_cast<int>(rx_data.eof) << std::dec << '\n';
@@ -177,8 +173,10 @@ inline void engineer_print_transmit_data(const EngineerTransmitData &tx_data) {
   std::cout << "  Length : " << static_cast<int>(tx_data.header.len) << '\n';
   std::cout << "  ID     : 0x" << std::hex << std::setw(2) << std::setfill('0')
             << static_cast<int>(tx_data.header.id) << std::dec << '\n';
-  std::cout << "  CRC    : 0x" << std::hex << std::setw(4) << std::setfill('0')
-            << static_cast<unsigned>(tx_data.header.crc) << std::dec << '\n';
+
+  // NO_CRC
+  // std::cout << "  CRC    : 0x" << std::hex << std::setw(4) << std::setfill('0')
+  //           << static_cast<unsigned>(tx_data.header.crc) << std::dec << '\n';
 
   // Data
   std::cout << "Data:\n";
@@ -197,10 +195,9 @@ inline void engineer_print_transmit_data(const EngineerTransmitData &tx_data) {
               << '\n';
   }
 
-  std::cout << "  Gripper Command:\n";
-  std::cout << "    Value   : " << static_cast<unsigned>(tx_data.data.gripperCommand)
-            << " (0x" << std::hex << std::setw(2) << std::setfill('0')
-            << static_cast<unsigned>(tx_data.data.gripperCommand) << std::dec << ")\n";
+  std::cout << "  Target Gripper Position:\n";
+  std::cout << "    Value   : " << std::fixed << std::setprecision(6)
+            << tx_data.data.targetGripperPosition << '\n';
 
   // IntentFinish (bool flag: 0/1)
   std::cout << "  Intent Finish (0=running, 1=fin):\n";

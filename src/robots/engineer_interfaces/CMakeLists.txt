@@ -35,7 +35,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Intent.msg"
   "msg/Joint.msg"
   "msg/Joints.msg"
-  "msg/ModeCommand.msg"
   "msg/Target.msg"
   "msg/GripperCommand.msg"
   "action/Move.action"

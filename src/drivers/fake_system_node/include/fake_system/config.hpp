@@ -12,8 +12,7 @@ namespace fake_system {
 
 struct FakeSystemConfig : public engineer_bringup::BaseRobotConfig {
   //  Timing 
-  int publish_period_ms{20};
-  bool publish_intent{false};
+  int publish_period_ms{33};
 
   //  Initialization 
   std::vector<double> initial_joint_positions{0, 0, 0, 0, 0, 0};
@@ -50,7 +49,6 @@ inline FakeSystemConfig FakeSystemConfig::Load(rclcpp::Node& node) {
   declare_get_checked(
       "publish_period_ms", cfg.publish_period_ms,
       [](int v) { return v > 0; }, "must be > 0");
-  declare_get("publish_intent", cfg.publish_intent);
 
   //  Initialization 
   cfg.initial_joint_positions.assign(static_cast<std::size_t>(cfg.joint_count), 0.0);
@@ -86,7 +84,6 @@ inline std::string FakeSystemConfig::summary() const {
 
   oss << " Timing:\n";
   oss << "   - publish_period_ms           : " << publish_period_ms << "\n";
-  oss << "   - publish_intent              : " << (publish_intent ? "true" : "false") << "\n\n";
 
   oss << engineer_bringup::BaseRobotConfig::summary();
 

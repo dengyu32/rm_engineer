@@ -8,7 +8,9 @@
 // C++
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <string>
+#include <algorithm>
 
 // ROS2
 #include <rclcpp/node_options.hpp>
@@ -25,6 +27,45 @@ FakeSystemNode::FakeSystemNode(const rclcpp::NodeOptions &options)
       logger_(this->get_logger()),
       fake_joint_positions_(config_.initial_joint_positions),
       fake_gripper_position_(config_.initial_gripper_position) {
+
+  // 声明获取动态参数
+  this->declare_parameter<int>("fake_intent_id", 0);
+  int init_id = this->get_parameter("fake_intent_id").as_int();
+  init_id = std::clamp(init_id, 0, 255);
+  fake_intent_id_ = static_cast<uint8_t>(init_id);
+
+  // 参数动态回调
+  // dynamic param callback
+  param_callback_handle_ = this->add_on_set_parameters_callback(
+      [this](const std::vector<rclcpp::Parameter> &params) {
+        rcl_interfaces::msg::SetParametersResult result;
+        result.successful = true;
+        result.reason = "";
+
+        for (const auto &p : params) {
+          if (p.get_name() != "fake_intent_id") {
+            continue;
+          }
+
+          if (p.get_type() != rclcpp::ParameterType::PARAMETER_INTEGER) {
+            result.successful = false;
+            result.reason = "fake_intent_id must be integer";
+            return result;
+          }
+
+          const int v = p.as_int();
+          if (v < 0 || v > 255) {
+            result.successful = false;
+            result.reason = "fake_intent_id out of range [0,255]";
+            return result;
+          }
+
+          fake_intent_id_.store(static_cast<uint8_t>(v), std::memory_order_relaxed);
+          RCLCPP_INFO(logger_, "[fake_system] fake_intent_id set to %d", v);
+        }
+        return result;
+      });
+
 
   // ros init
   initRosInterfaces();
@@ -55,8 +96,8 @@ void FakeSystemNode::publish_error(const error_code_utils::Error &err) const {
 // ============================================================================
 void FakeSystemNode::initRosInterfaces() {
   // Publisher
-  intent_pub_ = this->create_publisher<engineer_interfaces::msg::Intent>(
-      config_.intent_out_topic, rclcpp::QoS(10));
+  intent_cmd_pub_ = this->create_publisher<engineer_interfaces::msg::Intent>(
+      config_.intent_cmd_topic, rclcpp::QoS(10));
   joint_states_pub_ = this->create_publisher<sensor_msgs::msg::JointState>(
       config_.joint_states_topic, rclcpp::QoS(10));
   joint_states_custom_pub_ =
@@ -65,7 +106,11 @@ void FakeSystemNode::initRosInterfaces() {
   joint_states_verbose_pub_ =
       this->create_publisher<engineer_interfaces::msg::Joints>(
           config_.joint_states_verbose_topic, rclcpp::QoS(10));
+
   // Subscriber
+  intent_fb_sub_ = this->create_subscription<engineer_interfaces::msg::Intent>(
+      config_.intent_fb_topic, rclcpp::QoS(10),
+      [this](engineer_interfaces::msg::Intent::SharedPtr msg) { this->intent_feedback_callback(msg); });
   joint_cmd_sub_ = this->create_subscription<engineer_interfaces::msg::Joints>(
       config_.joint_cmd_topic, rclcpp::QoS(10),
       [this](engineer_interfaces::msg::Joints::SharedPtr msg) { this->execute(msg); });
@@ -87,6 +132,7 @@ void FakeSystemNode::execute(engineer_interfaces::msg::Joints::SharedPtr msg) {
   for (size_t i = count; i < expected; ++i) {
     fake_joint_positions_[i] = 0.0;
   }
+
   if (msg->joints.size() < expected) {
     static auto last_warn = std::chrono::steady_clock::time_point{};
     const auto now_tp = std::chrono::steady_clock::now();
@@ -106,9 +152,21 @@ void FakeSystemNode::execute(engineer_interfaces::msg::Joints::SharedPtr msg) {
 
 void FakeSystemNode::execute(engineer_interfaces::msg::GripperCommand::SharedPtr msg) {
   std::scoped_lock<std::mutex> lock(fake_mutex_);
-  fake_gripper_position_ = (msg->gripper_command == 1) ? 0.03 : 0.0;
+  fake_gripper_position_ = msg->target_position;
 }
 
+void FakeSystemNode::intent_feedback_callback(const engineer_interfaces::msg::Intent::SharedPtr msg) {
+  if (msg->intent_finish != 1) {
+    return; // 只关心意图完成的反馈
+  }
+  const uint8_t current_intent_id = fake_intent_id_.load(std::memory_order_acquire);
+
+  if (current_intent_id != 0 && msg->intent_id == current_intent_id) {
+    LOGI("[fake_system] intent finished: id={}, reset fake_intent_id to 0", msg->intent_id);
+    fake_intent_id_.store(0, std::memory_order_release); // 任务完成，重置为IDLE
+  }
+}
+ 
 // ============================================================================
 //  Timers
 // ============================================================================
@@ -155,17 +213,13 @@ void FakeSystemNode::publish_timer_callback() {
   }
   joint_states_verbose_pub_->publish(joint_states_verbose);
 
-  // JointStateCustom（与 verbose 相同格式，供下游兼容）
-  auto joint_states_custom = joint_states_verbose;
-  joint_states_custom_pub_->publish(joint_states_custom);
+  // fake system 不需要发布 joint_states_custom (重要)
 
-  // 发布 Intent（可选）
-  if (config_.publish_intent) {
-    engineer_interfaces::msg::Intent intent_msg;
-    intent_msg.stamp = this->now();
-    intent_msg.intent_id = 0; // 发送 IDLE
-    intent_pub_->publish(intent_msg);
-  }
+  // 发布 Intent
+  engineer_interfaces::msg::Intent intent_msg;
+  intent_msg.stamp = this->now();
+  intent_msg.intent_id = fake_intent_id_.load(std::memory_order_relaxed);
+  intent_cmd_pub_->publish(intent_msg);
 }
 } // namespace fake_system
 

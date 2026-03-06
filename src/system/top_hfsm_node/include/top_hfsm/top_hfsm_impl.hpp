@@ -1,19 +1,19 @@
 #pragma once
 
 // HFSM
-#include "machine.hpp"
+#include "HFSM2/machine.hpp"
 
 // Context & Executors
 #include "top_hfsm/context.hpp"
-#include "executors/arm_solve_client.hpp"
-#include "executors/gripper_control_node.hpp"
+#include "top_hfsm/executors/arm_solve_client.hpp"
+#include "top_hfsm/executors/gripper_control_node.hpp"
 #include "top_hfsm/executors/moveit_servo_client.hpp"
 
 // Tasks
 #include "top_hfsm/tasks/auto_testcartesian_task.hpp"
 #include "top_hfsm/tasks/auto_testsolve_task.hpp"
 #include "top_hfsm/tasks/sequence_task.hpp"
-#include "top_hfsm/target_helper.hpp"
+#include "top_hfsm/util/target_helper.hpp"
 
 // ROS2
 #include <rclcpp/rclcpp.hpp>

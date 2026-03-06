@@ -1,6 +1,5 @@
 fake_system:
   ros__parameters:
-    publish_period_ms: 20
+    publish_period_ms: 33
     initial_joint_positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     initial_gripper_position: 0.0
-    publish_intent: false

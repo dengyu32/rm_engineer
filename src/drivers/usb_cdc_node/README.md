@@ -74,13 +74,13 @@ IntentFinish
 
 **话题**
 发布：
-- `intent_out_topic` (`engineer_interfaces/Intent`)
+- `intent_cmd_topic` (`engineer_interfaces/Intent`)
 - `joint_states_topic` (`sensor_msgs/JointState`)
 - `joint_states_verbose_topic` (`engineer_interfaces/Joints`)
 - `joint_states_custom_topic` (`engineer_interfaces/Joints`)
 
 订阅：
-- `intent_in_topic` (`engineer_interfaces/Intent`)
+- `intent_fb_topic` (`engineer_interfaces/Intent`)
 - `joint_cmd_topic` (`engineer_interfaces/Joints`)
 - `gripper_cmd_topic` (`engineer_interfaces/GripperCommand`)
 
@@ -90,7 +90,7 @@ IntentFinish
 常用参数：
 - `vendor_id` / `product_id`
 - `publish_period_ms` / `send_period_ms`
-- `intent_out_topic` / `intent_in_topic`
+- `intent_cmd_topic` / `intent_fb_topic`
 - `joint_states_topic` / `joint_states_verbose_topic` / `joint_states_custom_topic`
 - `joint_cmd_topic` / `gripper_cmd_topic`
 - `joint_count` / `joint_names`

@@ -60,7 +60,7 @@ void ArmServoNode::initRosInterfaces() {
   //  Publisher: -> hardware adapter / controller
   // --------------------------------------------------------------------------
   joint_cmd_pub_ = create_publisher<engineer_interfaces::msg::Joints>(
-      config_.output_topic, rclcpp::QoS(10));
+      config_.joint_cmd_topic, rclcpp::QoS(10));
 
   // --------------------------------------------------------------------------
   //  Subscriber: <- moveit_servo output trajectory

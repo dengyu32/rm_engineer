@@ -56,7 +56,6 @@ add_library(${PROJECT_NAME} SHARED
 target_include_directories(${PROJECT_NAME} PUBLIC
   ${LIBUSB_INCLUDE_DIRS}  # libusb 头文件
   $<BUILD_INTERFACE:${MY_ROBOT_INTERFACE}>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>          # for CRCpp/CRC.h
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  # 本项目 include
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CRCpp>    # CRC++ headers
 )
