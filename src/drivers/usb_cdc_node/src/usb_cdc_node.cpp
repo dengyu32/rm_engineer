@@ -3,7 +3,8 @@
 #include "error_code_utils/app_error.hpp"
 #include "usb_cdc/packet.hpp"
 
-// uitls
+// uitlsws:
+//localhost:8765
 #include "log_utils/log.hpp"
 
 // C++
@@ -68,7 +69,7 @@ UsbCdcNode::UsbCdcNode(const rclcpp::NodeOptions &options)
 void UsbCdcNode::initRosInterfaces() {
   // Publisher
   intent_pub_ = this->create_publisher<engineer_interfaces::msg::Intent>(
-      config_.intent_out_topic, rclcpp::QoS(10));
+      config_.intent_cmd_topic, rclcpp::QoS(10));
   joint_states_pub_ = this->create_publisher<sensor_msgs::msg::JointState>(
       config_.joint_states_topic, rclcpp::QoS(10));
   joint_states_custom_pub_ = this->create_publisher<engineer_interfaces::msg::Joints>(
@@ -77,7 +78,7 @@ void UsbCdcNode::initRosInterfaces() {
       config_.joint_states_verbose_topic, rclcpp::QoS(10));
   // Subscriber
   intent_sub_ = this->create_subscription<engineer_interfaces::msg::Intent>(
-      config_.intent_in_topic,rclcpp::QoS(10),
+      config_.intent_fb_topic,rclcpp::QoS(10),
       std::bind(&UsbCdcNode::IntentCallback, this, std::placeholders::_1));
   joint_cmd_sub_ = this->create_subscription<engineer_interfaces::msg::Joints>(
       config_.joint_cmd_topic, rclcpp::QoS(10),
@@ -165,7 +166,7 @@ void UsbCdcNode::engineer_handle_packet(const std::byte *data, size_t size) {
   // 限频打印收到的数据，便于串口调试
   static int i = 0;
   i++;
-  if (i == 50) {
+  if (i == 100) {
     i = 0;
     engineer_print_receive_data(rx_data_);
   }
@@ -181,7 +182,6 @@ void UsbCdcNode::send_timer_callback() {
     if (last_device_open_) {
       RCLCPP_WARN(this->get_logger(),
                   " [DISCONNECT] USB device disconnected, waiting to reconnect ");
-      send_enabled_ = false;
     }
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
                          " [WAITING] waiting for USB reconnect ");
@@ -189,12 +189,6 @@ void UsbCdcNode::send_timer_callback() {
     return;
   }
   last_device_open_ = true;
-  // TODO: 取消注释
-  // if (!send_enabled_) { // 未收到控制指令前不发串口数据
-  //   RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-  //                        " [blocked] waiting for joint_commands before sending");
-  //   return;
-  // }
 
   // 按协议填充发送帧
   EngineerTransmitData tx_data;
@@ -203,13 +197,15 @@ void UsbCdcNode::send_timer_callback() {
   tx_data.header.sof = HeaderFrame::SoF();
   tx_data.eof = HeaderFrame::EoF();
   tx_data.data = tx_data_.data;
-  tx_data.header.crc = calc_crc_len_id_payload(
-      tx_data.header.len, tx_data.header.id, &tx_data.data);
+
+  // NO_CRC
+  // tx_data.header.crc = calc_crc_len_id_payload(
+  //     tx_data.header.len, tx_data.header.id, &tx_data.data);
 
   // 周期性打印发送帧，观测编码是否正确
   static int i = 0;
   i++;
-  if (i == 50) {
+  if (i == 100) {
     i = 0;
     engineer_print_transmit_data(tx_data);
   }
@@ -229,6 +225,23 @@ void UsbCdcNode::publish_timer_callback() {
   std::scoped_lock<std::mutex> lock(rx_data_mutex_);
   const auto &d = rx_data_.data;
   const rclcpp::Time stamp = this->now();
+
+  // 发布 custom 关节消息,用于自定义控制
+  engineer_interfaces::msg::Joints joint_states_custom;
+  joint_states_custom.joints.resize(6);
+  for (size_t i = 0; i < 6; ++i) {
+    joint_states_custom.joints[i].name = config_.joint_names[i];
+    joint_states_custom.joints[i].position = d.customJointPosition[i];
+    joint_states_custom.joints[i].velocity = 0;
+    joint_states_custom.joints[i].effort = 0;
+    joint_states_custom.joints[i].mode = "custom";
+  }
+  joint_states_custom_pub_->publish(joint_states_custom);
+
+  // 开启servo_teleop_mode后， 只发布 custom_joint_state
+  if (config_.servo_teleop_mode) {
+    return;
+  }
 
   // 发布 JointState
   sensor_msgs::msg::JointState joint_states;
@@ -261,23 +274,10 @@ void UsbCdcNode::publish_timer_callback() {
   }
   joint_states_verbose_pub_->publish(joint_states_verbose);
 
-  // 发布 custom 关节消息,用于自定义控制
-  engineer_interfaces::msg::Joints joint_states_custom;
-  joint_states_custom.joints.resize(6);
-  for (size_t i = 0; i < 6; ++i) {
-    joint_states_custom.joints[i].name = config_.joint_names[i];
-    joint_states_custom.joints[i].position = d.customJointPosition[i];
-    joint_states_custom.joints[i].velocity = 0;
-    joint_states_custom.joints[i].effort = 0;
-    joint_states_custom.joints[i].mode = "custom";
-  }
-  joint_states_custom_pub_->publish(joint_states_custom);
-
   // 发布 HFSM 意图，驱动上层状态机
   engineer_interfaces::msg::Intent intent;
   intent.stamp = this->now();
   intent.intent_id = d.IntentStatus;
-  intent.intent_ack = d.IntentAck;
   intent_pub_->publish(intent);
 }
 
@@ -294,7 +294,6 @@ void UsbCdcNode::IntentCallback(
 void UsbCdcNode::jointCommandCallback(
     const engineer_interfaces::msg::Joints::SharedPtr msg) {
   std::scoped_lock<std::mutex> lock(tx_data_mutex_);
-  send_enabled_ = true; // 接受到控制命令，send_enabled 允许发送
 
   // 将 JointCommand 映射到目标关节位置/速度，超出部分清零
   for (const auto &joint : msg->joints) {
@@ -310,8 +309,8 @@ void UsbCdcNode::jointCommandCallback(
 void UsbCdcNode::GripperCommandCallback(
     const engineer_interfaces::msg::GripperCommand::SharedPtr msg) {
   std::scoped_lock<std::mutex> lock(tx_data_mutex_);
-  // 覆盖夹爪指令，随发送定时器一起输出
-  tx_data_.data.gripperCommand = msg->gripper_command;
+  // 透传夹爪目标位置，随发送定时器一起输出
+  tx_data_.data.targetGripperPosition = static_cast<float>(msg->target_position);
 }
 }; // namespace usb_cdc
 

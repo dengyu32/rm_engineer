@@ -2,5 +2,7 @@ usb_cdc:
   ros__parameters:
     vendor_id: 0x0483
     product_id: 0x5740
-    publish_period_ms: 20
+    publish_period_ms: 33
     send_period_ms: 20
+    servo_teleop_mode: true # 设置为true时，发布的消息只有custom_joint_state，其余消息不发送 需同时打开fake_system
+                            # 这里先设置为true覆盖

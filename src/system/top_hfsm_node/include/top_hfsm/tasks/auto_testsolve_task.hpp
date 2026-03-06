@@ -6,7 +6,7 @@
 #pragma once
 
 #include "top_hfsm/tasks/sequence_task.hpp"
-#include "top_hfsm/target_helper.hpp"
+#include "top_hfsm/util/target_helper.hpp"
 
 namespace top_hfsm {
 

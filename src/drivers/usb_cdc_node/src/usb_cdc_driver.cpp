@@ -48,6 +48,8 @@ namespace usb_cdc {
  * 8. 提交异步接收 submit_transfer()，开始持续收包
  */
 bool Device::Impl::open(uint16_t vid, uint16_t pid) {
+  std::lock_guard<std::mutex> lock(io_mutex_);
+
   if (!ctx_) { // 防止重复初始化，只有在第一次调用open()时执行
     if (libusb_init(&ctx_) != 0)
       throw error(LIBUSB_ERROR_OTHER);
@@ -55,6 +57,9 @@ bool Device::Impl::open(uint16_t vid, uint16_t pid) {
 
   if (pid == 0)
     pid = find_device(vid);
+
+  reconnect_vid_ = vid;
+  reconnect_pid_ = pid;
 
   // 打开设备句柄
   handle_ = libusb_open_device_with_vid_pid(ctx_, vid, pid);
@@ -264,14 +269,21 @@ void Device::Impl::process_once() {
   if (!ctx_) {
     return;
   }
-  timeval tv{0, 1000}; // 1ms to avoid busy loop
-  libusb_handle_events_timeout_completed(ctx_, &tv, nullptr);
 
-  if (disconnected_ || hotplug_arrived_) {
-    hotplug_arrived_ = false;
-    cleanup();
-    try_reopen();
+  {
+    std::lock_guard<std::mutex> lock(io_mutex_);
+    timeval tv{0, 1000}; // 1ms to avoid busy loop
+    libusb_handle_events_timeout_completed(ctx_, &tv, nullptr);
+
+    if (disconnected_ || hotplug_arrived_) {
+      hotplug_arrived_ = false;
+      cleanup();
+    } else {
+      return;
+    }
   }
+
+  try_reopen();
 }
 // timeval tv{0, 0};
 
@@ -307,7 +319,7 @@ void Device::Impl::on_hotplug(libusb_hotplug_event ev) {
 bool Device::Impl::try_reopen() {
   while (handling_events_) {
     try {
-      if (open(VID)) {
+      if (open(reconnect_vid_, reconnect_pid_)) {
         disconnected_ = false;
         RCLCPP_INFO(rclcpp::get_logger("usb_cdc"),
                     " [SUCCESS] USB re-connected ");
@@ -341,12 +353,19 @@ void Device::Impl::request_reconnect() {
  */
 bool Device::Impl::sync_send(uint8_t *data, std::size_t size,
                              unsigned tout_ms) {
+  std::lock_guard<std::mutex> lock(io_mutex_);
+
   if (!handle_)
     return false;
   int actual = 0;
   int rc = libusb_bulk_transfer(handle_, EP_OUT, data, static_cast<int>(size),
                                 &actual, tout_ms);
   return rc == 0 && actual == static_cast<int>(size);
+}
+
+bool Device::Impl::is_open() const {
+  std::lock_guard<std::mutex> lock(io_mutex_);
+  return handle_ != nullptr;
 }
 
 // ============================================================================
@@ -403,17 +422,18 @@ void DeviceParser::parse(const std::byte *data, size_t size) {
     return;
   }
 
-  const uint16_t computed_crc =
-      calc_crc_len_id_payload(header_frame.len, header_frame.id,
-                              data + sizeof(HeaderFrame));
-  if (computed_crc != header_frame.crc) { // 校验 CRC
-    RCLCPP_WARN_THROTTLE(rclcpp::get_logger("usb_cdc"),
-                         *clock, 2000,
-                         " [WARN] Frame crc invalid, expected 0x%X, got 0x%X ",
-                         static_cast<unsigned int>(computed_crc),
-                         static_cast<unsigned int>(header_frame.crc));
-    return;
-  }
+  // NO_CRC
+  // const uint16_t computed_crc =
+  //     calc_crc_len_id_payload(header_frame.len, header_frame.id,
+  //                             data + sizeof(HeaderFrame));
+  // if (computed_crc != header_frame.crc) { // 校验 CRC
+  //   RCLCPP_WARN_THROTTLE(rclcpp::get_logger("usb_cdc"),
+  //                        *clock, 2000,
+  //                        " [WARN] Frame crc invalid, expected 0x%X, got 0x%X ",
+  //                        static_cast<unsigned int>(computed_crc),
+  //                        static_cast<unsigned int>(header_frame.crc));
+  //   return;
+  // }
 
   const uint8_t eof = static_cast<uint8_t>(data[expected_size - 1]);
   if (eof != HeaderFrame::EoF()) { // 检验包尾 eof

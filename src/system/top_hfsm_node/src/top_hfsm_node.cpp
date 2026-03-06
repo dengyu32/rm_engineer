@@ -34,8 +34,8 @@ TopHFSMNode::TopHFSMNode(const rclcpp::NodeOptions &options)
   // --------------------------------------------------------------------------
   // Subscription: external intents
   // --------------------------------------------------------------------------
-  intent_sub_ = this->create_subscription<engineer_interfaces::msg::Intent>(
-      config_.intent_out_topic, rclcpp::QoS(10),
+  intent_cmd_sub_ = this->create_subscription<engineer_interfaces::msg::Intent>(
+      config_.intent_cmd_topic, rclcpp::QoS(10),
       std::bind(&TopHFSMNode::intentCallBack, this, std::placeholders::_1));
 
   // --------------------------------------------------------------------------

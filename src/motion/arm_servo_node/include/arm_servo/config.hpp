@@ -6,13 +6,15 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <vector>
 
 namespace arm_servo {
 
 struct ArmServoConfig : public engineer_bringup::BaseRobotConfig {
   bool use_last_point_only{true};
   int publish_period_ms{30};   // 0 = no throttle
+
+  // Servo pipeline topics   
+  std::string servo_out_topic{"/moveit_servo/joint_trajectory"};      
 
   static ArmServoConfig Load(rclcpp::Node &node);
   void validate() const;
@@ -36,7 +38,9 @@ inline ArmServoConfig ArmServoConfig::Load(rclcpp::Node &node) {
     }
   };
 
-  engineer_bringup::BaseRobotConfig::Load(node, static_cast<engineer_bringup::BaseRobotConfig &>(cfg));
+  engineer_bringup::BaseRobotConfig::Load(node, static_cast<engineer_bringup::BaseRobotConfig &>(cfg));\
+  declare_get("servo_out_topic", cfg.servo_out_topic);       
+
   declare_get_checked("publish_period_ms", cfg.publish_period_ms,
                       [](int v) { return v >= 0 && v <= 1000; }, "must be in [0, 1000]");
   declare_get("use_last_point_only", cfg.use_last_point_only);
@@ -59,6 +63,8 @@ inline std::string ArmServoConfig::summary() const {
   oss << " Rate:\n";
   oss << "   - publish_period_ms    : " << publish_period_ms << "\n";
   oss << "   - use_last_point_only  : " << (use_last_point_only ? "true" : "false") << "\n\n";
+  oss << " Servo topics:\n";     
+  oss << "   - servo_out_topic          : " << servo_out_topic << "\n\n";
   oss << "\n=======================\n";
   return oss.str();
 }

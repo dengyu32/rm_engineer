@@ -13,7 +13,7 @@
 #include <engineer_interfaces/msg/intent.hpp>
 
 // Executors
-#include "executors/arm_solve_client.hpp"
+#include "top_hfsm/executors/arm_solve_client.hpp"
 #include "top_hfsm/executors/gripper_control_node.hpp"
 #include "top_hfsm/util/async_dispatcher.hpp"
 
@@ -106,7 +106,8 @@ private:
   // -----------------------------------------------------------------------
   //  ROS handles
   // -----------------------------------------------------------------------
-  rclcpp::Subscription<engineer_interfaces::msg::Intent>::SharedPtr intent_sub_;
+  rclcpp::Subscription<engineer_interfaces::msg::Intent>::SharedPtr intent_cmd_sub_;
+  rclcpp::Publisher<engineer_interfaces::msg::Intent>::SharedPtr intent_fb_pub_;
   rclcpp::TimerBase::SharedPtr machine_update_timer_;
 
   std::shared_ptr<error_code_utils::ErrorBus> error_bus_;

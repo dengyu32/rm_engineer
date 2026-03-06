@@ -144,7 +144,18 @@ fi
 cd "$WS_ROOT"
 
 print_color green "Cleaning previous builds, install, logs ..."
-rm -rf "$COLCON_BUILD" "$COLCON_INSTALL" "$COLCON_LOG" compile_commands.json
+if [[ ${#PACKAGES_SELECT[@]} -gt 0 ]]; then
+  print_color green "Cleaning selected package artifacts ..."
+  for _pkg in "${PACKAGES_SELECT[@]}"; do
+    print_color yellow "  - $_pkg"
+    rm -rf "$COLCON_BUILD/$_pkg" "$COLCON_INSTALL/$_pkg"
+    rm -rf "$COLCON_LOG/latest_build/$_pkg" "$COLCON_LOG/latest_test/$_pkg"
+    rm -rf "$COLCON_LOG/build_$_pkg" "$COLCON_LOG/test_$_pkg"
+  done
+  rm -f compile_commands.json
+else
+  rm -rf "$COLCON_BUILD" "$COLCON_INSTALL" "$COLCON_LOG" compile_commands.json
+fi
 
 # ----------------------------------------------------------------------------
 # 清理遗留的 prefix 环境，避免不存在的 install 路径导致 colcon 提示警告
@@ -247,6 +258,19 @@ print_color cyan "=============================================="
 # ----------------------------------------------------------------------------
 # 启动 bringup（两种模式都要）
 # ----------------------------------------------------------------------------
+# if [[ $VISION_ONLY -eq 1 ]]; then
+#   print_color green "Start vision only ..."
+#   open_term "vision" "ros2 launch detect_node detect.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+# else
+#   print_color green "Start bringup.launch.py ..."
+#   # open_term "engineer bringup" "ros2 launch engineer_bringup robot_bringup.launch.py"
+#   open_term "engineer bringup" "ros2 launch engineer_bringup base_bringup.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE" # 包括 arm_solve
+#   open_term "servo container" "ros2 launch arm_servo servo_container.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+#   open_term "top hfsm" "ros2 launch top_hfsm top_hfsm_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+#   open_term "foxglove bridge" "ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=${FOXGLOVE_PORT}" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+#   open_term "vision" "ros2 launch detect_node detect.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+# fi
+
 if [[ $VISION_ONLY -eq 1 ]]; then
   print_color green "Start vision only ..."
   open_term "vision" "ros2 launch detect_node detect.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
@@ -255,7 +279,8 @@ else
   # open_term "engineer bringup" "ros2 launch engineer_bringup robot_bringup.launch.py"
   open_term "engineer bringup" "ros2 launch engineer_bringup base_bringup.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE" # 包括 arm_solve
   open_term "servo container" "ros2 launch arm_servo servo_container.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
-  open_term "top hfsm" "ros2 launch top_hfsm top_hfsm_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+  open_term "top hfsm" "ros2 launch top_hfsm_node_v2 top_hfsm_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+  open_term "teleop node" "ros2 launch teleop_node teleop_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
   open_term "foxglove bridge" "ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=${FOXGLOVE_PORT}" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
   open_term "vision" "ros2 launch detect_node detect.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
 fi
@@ -269,6 +294,7 @@ elif [[ "$SYSTEM" == "fakesystem" ]]; then
   # fake：额外启动 fake_system_node
   print_color green "Start fake_system_node ... (fakesystem only)"
   open_term "fake system" "ros2 launch fake_system fake_system_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+  open_term "usb cdc" "ros2 launch usb_cdc usb_cdc_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
 else
   # real：额外启动 usb_cdc
   print_color green "Open usb cdc node ... (realsystem only)"

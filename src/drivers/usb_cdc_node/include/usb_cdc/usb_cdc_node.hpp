@@ -79,12 +79,11 @@ private:
   //  Timers & callbacks
   // -----------------------------------------------------------------------
   void publish_timer_callback();
-  void IntentCallback(const engineer_interfaces::msg::Intent::SharedPtr msg);
-  void jointCommandCallback(
-      const engineer_interfaces::msg::Joints::SharedPtr msg);
-  void GripperCommandCallback(
-      const engineer_interfaces::msg::GripperCommand::SharedPtr msg);
   void send_timer_callback();
+
+  void IntentCallback(const engineer_interfaces::msg::Intent::SharedPtr msg);
+  void jointCommandCallback(const engineer_interfaces::msg::Joints::SharedPtr msg);
+  void GripperCommandCallback(const engineer_interfaces::msg::GripperCommand::SharedPtr msg);
   void publish_error(const error_code_utils::Error &err) const;
 
   // Protocol
@@ -115,7 +114,6 @@ private:
 
   // Runtime state
   std::atomic_bool running_;
-  bool send_enabled_{false};
   std::atomic_bool last_device_open_{false};
   std::thread thread_; // 底层读写循环线程
 

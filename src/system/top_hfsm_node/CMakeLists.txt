@@ -33,6 +33,7 @@ find_package(rclcpp_action REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(error_code_utils REQUIRED)
+find_package(top_hfsm_executors REQUIRED)
 
 # ----------------------------------------------------------------------------
 #  构建库和可执行文件
@@ -40,10 +41,6 @@ find_package(error_code_utils REQUIRED)
 
 # 将 HFSM 节点实现编译为共享库
 add_library(${PROJECT_NAME} SHARED 
-  src/executors/arm_solve_client.cpp 
-  src/executors/vision_detect_client.cpp 
-  src/executors/gripper_control_node.cpp
-  src/executors/moveit_servo_client.cpp          
   src/top_hfsm_node.cpp
 )
 
@@ -65,6 +62,7 @@ ament_target_dependencies(${PROJECT_NAME}
   std_srvs
   control_msgs
   error_code_utils
+  top_hfsm_executors
 )
 
 # 注册组件并生成可执行入口
