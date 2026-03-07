@@ -55,14 +55,6 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "info"],
     )
     
-    arm_servo_node = Node(
-        package="arm_solve",
-        executable="arm_solve_node",
-        name="arm_solve_node",
-        output="screen",
-        parameters=[robot_description],
-    )
-    
     rviz_node = Node(
         package="rviz2",
         executable="rviz2",
