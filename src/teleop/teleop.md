@@ -5,7 +5,6 @@
 > 碰撞检测通过MoveIt API实现
 
 #### 文件结构
-
 .
 ├── teleop.md
 └── teleop_node
