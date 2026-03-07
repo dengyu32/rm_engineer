@@ -337,8 +337,6 @@ bool ArmSolveServer::planTrajectory(const std::shared_ptr<GoalContext>& ctx,
 
   auto res = solve_core_->plan(req,err);
   if (!res) {
-    err = "Planning failed";
-    err_code = static_cast<int>(error_code_utils::app::SolveCode::PlanningFailed);
     RCLCPP_ERROR(get_logger(), "[scope=arm_solve_server][status=error] %s", err.c_str());
     publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::PlanningFailed, err));
     return false;

@@ -9,6 +9,10 @@
 #include "solve_core/error_code.hpp"
 #include "solve_core/planner/limit_planner.hpp"
 #include "solve_core/planner/straight_planner.hpp"
+<<<<<<< HEAD
+=======
+#include "error_code_utils/app_error.hpp"
+>>>>>>> 9228b13 (solve-1.0: with move_group)
 
 #include <Eigen/Geometry>
 
