@@ -125,13 +125,6 @@ def generate_launch_description():
         ))
     )
     
-    # arm_servo launch 文件
-    launch_arm_servo = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(
-            arm_servo_config, "launch", "servo_container.launch.py"
-        ))
-    )
-    
     # move_group 节点 : MoveIt 核心规划节点，使用 URDF/SRDF/规划配置提供规划与执行服务
     node_move_group = Node(
         package="moveit_ros_move_group",
