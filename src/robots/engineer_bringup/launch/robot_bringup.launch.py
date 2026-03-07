@@ -153,6 +153,5 @@ def generate_launch_description():
         node_rviz,
         node_arm_solve,
         launch_top_hfsm,
-        launch_arm_servo,
     ])
     

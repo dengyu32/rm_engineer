@@ -156,14 +156,15 @@ void FakeSystemNode::execute(engineer_interfaces::msg::GripperCommand::SharedPtr
 }
 
 void FakeSystemNode::intent_feedback_callback(const engineer_interfaces::msg::Intent::SharedPtr msg) {
-  if (msg->intent_finish != 1) {
-    return; // 只关心意图完成的反馈
+  if (msg->intent_finish == 0) {
+    return; // 0=Running，不清零
   }
   const uint8_t current_intent_id = fake_intent_id_.load(std::memory_order_acquire);
 
-  if (current_intent_id != 0 && msg->intent_id == current_intent_id) {
-    LOGI("[fake_system] intent finished: id={}, reset fake_intent_id to 0", msg->intent_id);
-    fake_intent_id_.store(0, std::memory_order_release); // 任务完成，重置为IDLE
+  if (current_intent_id != 0) {
+    LOGI("[fake_system] intent feedback: id={}, finish={}, reset fake_intent_id({}) -> 0",
+         msg->intent_id, msg->intent_finish, current_intent_id);
+    fake_intent_id_.store(0, std::memory_order_release); // 非 Running 反馈即重置为 IDLE
   }
 }
  

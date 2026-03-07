@@ -85,9 +85,20 @@ exec </dev/null
 wait "\$tee_pid" >/dev/null 2>&1 || true
 rm -f "\$fifo"
 print_color yellow "[${title}] launch exited with code \$exit_code"
-exec bash
+if [[ "\${RERUN_KEEP_SHELL_ON_EXIT:-1}" == "1" ]]; then
+  exec bash
+fi
 EOF
 
   chmod +x "$runner_file"
-  gnome-terminal --window --title="$title" -- bash -ic "bash '$runner_file'"
+  if [[ "${RERUN_NO_TERM:-0}" == "1" || -z "${DISPLAY:-}" ]]; then
+    print_color yellow "[open_term] headless mode: $title"
+    RERUN_KEEP_SHELL_ON_EXIT=0 bash "$runner_file" >/dev/null 2>&1 &
+    return
+  fi
+
+  if ! gnome-terminal --window --title="$title" -- bash -ic "RERUN_KEEP_SHELL_ON_EXIT=1 bash '$runner_file'"; then
+    print_color yellow "[open_term] gnome-terminal failed, fallback to headless: $title"
+    RERUN_KEEP_SHELL_ON_EXIT=0 bash "$runner_file" >/dev/null 2>&1 &
+  fi
 }

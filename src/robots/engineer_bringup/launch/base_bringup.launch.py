@@ -80,7 +80,6 @@ def generate_launch_description():
     joint_limits = {"robot_description_planning": load_yaml(joint_limits_path)}
     moveit_controllers = load_yaml(moveit_controllers_path)
 
-
     # ---------------------------------------------------------------------------------------------
     #  普通参数列表
     # ---------------------------------------------------------------------------------------------
@@ -113,15 +112,15 @@ def generate_launch_description():
         parameters=common_params + [bringup_config_path]
     )
     
-    # rviz2 节点 : 可视化节点，读取 robot_description 系列参数与 RViz 配置展示模型与规划结果
-    node_rviz = Node(
-        package="rviz2",
-        executable="rviz2",
-        name="rviz2",
-        output="screen",
-        parameters=common_params,
-        arguments=["-d", rviz_config_path]
-    )
+    # # rviz2 节点 : 可视化节点，读取 robot_description 系列参数与 RViz 配置展示模型与规划结果
+    # node_rviz = Node(
+    #     package="rviz2",
+    #     executable="rviz2",
+    #     name="rviz2",
+    #     output="screen",
+    #     parameters=common_params,
+    #     arguments=["-d", rviz_config_path]
+    # )
     
     static_tf = Node(
         package='tf2_ros',
@@ -153,7 +152,7 @@ def generate_launch_description():
     return LaunchDescription([
         node_robot_state_publisher,
         node_move_group,
-        node_rviz,
+        # node_rviz,
         static_tf,
         late_init
     ])
