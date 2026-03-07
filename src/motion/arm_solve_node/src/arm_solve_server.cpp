@@ -34,7 +34,7 @@ public:
       return nullptr;
     }
     return move_group_->getRobotModel();
-  }
+ }
 
   const moveit::core::JointModelGroup *joint_model_group(
       const std::string &group_name) const override {
@@ -66,18 +66,18 @@ public:
   std::optional<solve_core::Trajectory> plan_to_joint_target(
       const std::vector<std::string> &joint_names,
       const std::vector<double> &joint_values,
-      const solve_core::PlannerOptions &options) override {
+      const solve_core::PlannerConfigs &configs) override {
     if (!move_group_) {
       RCLCPP_ERROR(logger_, "[arm_solve_server] MoveGroup not ready");
       return std::nullopt;
     }
 
-    move_group_->setPlanningTime(options.planning_time);
-    move_group_->setNumPlanningAttempts(options.num_planning_attempts);
-    move_group_->setMaxVelocityScalingFactor(options.max_velocity_scaling);
-    move_group_->setMaxAccelerationScalingFactor(options.max_acc_scaling);
-    move_group_->setGoalPositionTolerance(options.goal_position_tolerance);
-    move_group_->setGoalOrientationTolerance(options.goal_orientation_tolerance);
+    move_group_->setPlanningTime(configs.planning_time);
+    move_group_->setNumPlanningAttempts(configs.num_planning_attempts);
+    move_group_->setMaxVelocityScalingFactor(configs.max_velocity_scaling);
+    move_group_->setMaxAccelerationScalingFactor(configs.max_acc_scaling);
+    move_group_->setGoalPositionTolerance(configs.goal_position_tolerance);
+    move_group_->setGoalOrientationTolerance(configs.goal_orientation_tolerance);
 
     move_group_->setJointValueTarget(joint_names, joint_values);
 
@@ -178,7 +178,7 @@ ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions& options)
     : Node("arm_solve_action_server",
            rclcpp::NodeOptions(options)),
       config_(ArmSolveConfig::Load(*this)),
-      last_plan_time_(now() - rclcpp::Duration(std::chrono::milliseconds(config_.plan_min_interval_ms))) {
+      last_plan_time_(now() - rclcpp::Duration(std::chrono::milliseconds(config_.plan_min_interval_ms))) {  //避免第一次规划被节流
 
   // 等待构造完成后再创建 MoveGroup，防止节点还未 fully spinning 就调用
   init_timer_ = this->create_wall_timer(
@@ -322,17 +322,16 @@ bool ArmSolveServer::planTrajectory(const std::shared_ptr<GoalContext>& ctx,
     req.current_joints.names.push_back(j.name);
     req.current_joints.positions.push_back(j.position);
   }
-  req.planner.goal_position_tolerance = config_.goal_position_tolerance;
-  req.planner.goal_orientation_tolerance = config_.goal_orientation_tolerance;
-  req.planner.planning_time = config_.planning_time;
-  req.planner.num_planning_attempts = config_.num_planning_attempts;
-  req.planner.max_velocity_scaling = config_.max_velocity_scaling;
-  req.planner.max_acc_scaling = config_.max_acc_scaling;
+  req.planner_config.goal_position_tolerance = config_.goal_position_tolerance;
+  req.planner_config.goal_orientation_tolerance = config_.goal_orientation_tolerance;
+  req.planner_config.planning_time = config_.planning_time;
+  req.planner_config.num_planning_attempts = config_.num_planning_attempts;
+  req.planner_config.max_velocity_scaling = config_.max_velocity_scaling;
+  req.planner_config.max_acc_scaling = config_.max_acc_scaling;
   req.group_name = config_.group_name;
 
-  auto res = solve_core_->plan(req);
+  auto res = solve_core_->plan(req,err);
   if (!res) {
-    err = "Planning failed";
     RCLCPP_ERROR(get_logger(), "[scope=arm_solve_server][status=error] %s", err.c_str());
     publish_error(make_error(ArmSolveErrc::PlanningFailed, err));
     return false;

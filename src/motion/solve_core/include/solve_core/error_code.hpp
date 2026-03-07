@@ -80,6 +80,7 @@ inline SYSTEM_ERROR2_NAMESPACE::system_code to_system_code(SolveErrc code) {
   }
 }
 
+
 inline error_code_utils::Error make_error(
     SolveErrc code,
     const std::string &message,

@@ -2,10 +2,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <unordered_map>
 
 #include "log_utils/log.hpp"
 #include "solve_core/error_code.hpp"
+#include "solve_core/planner/limit_planner.hpp"
+#include "solve_core/planner/straight_planner.hpp"
 
 #include <Eigen/Geometry>
 
@@ -19,6 +22,7 @@
 namespace solve_core {
 namespace {
 
+// 四元数转变换矩阵
 Eigen::Isometry3d pose_to_isometry(const Pose &pose) {
   Eigen::Isometry3d iso = Eigen::Isometry3d::Identity();
   iso.translation() << pose.x, pose.y, pose.z;
@@ -28,6 +32,7 @@ Eigen::Isometry3d pose_to_isometry(const Pose &pose) {
   return iso;
 }
 
+// 将关节角写进robotstate，可以缺失
 bool fill_joint_state_allow_missing(const JointState &js,
                                     const moveit::core::JointModelGroup *jmg,
                                     moveit::core::RobotState &state) {
@@ -53,6 +58,7 @@ bool fill_joint_state_allow_missing(const JointState &js,
   return true;
 }
 
+// 将关节角写进robotstate，必须齐全
 bool fill_joint_state_require_all(const JointState &js,
                                   const moveit::core::JointModelGroup *jmg,
                                   moveit::core::RobotState &state,
@@ -86,6 +92,7 @@ bool fill_joint_state_require_all(const JointState &js,
   return true;
 }
 
+// 将Moveit自带的Trajectory转为自己定义的Trajectory
 Trajectory trajectory_from_robot_trajectory(const moveit::core::RobotModelConstPtr &robot_model,
                                             const std::string &group_name,
                                             const robot_trajectory::RobotTrajectory &rt) {
@@ -112,62 +119,21 @@ Trajectory trajectory_from_robot_trajectory(const moveit::core::RobotModelConstP
   return out;
 }
 
-std::optional<Trajectory> time_parameterize_path(
-    const moveit::core::RobotModelConstPtr &robot_model,
-    const std::string &group_name,
-    const std::vector<std::vector<double>> &q_path,
-    const moveit::core::RobotState &start_state,
-    double path_tolerance = 1.0) {
-  if (!robot_model) {
-    LOGE("[solve_core] RobotModel is null");
-    return std::nullopt;
-  }
-  const auto *jmg = robot_model->getJointModelGroup(group_name);
-  if (!jmg) {
-    LOGE("[solve_core] JointModelGroup not found");
-    return std::nullopt;
-  }
-  if (q_path.empty()) {
-    LOGE("[solve_core] q_path is empty");
-    return std::nullopt;
-  }
-
-  robot_trajectory::RobotTrajectory rt(robot_model, group_name);
-  moveit::core::RobotState st = start_state;
-  st.update();
-
-  for (std::size_t i = 0; i < q_path.size(); ++i) {
-    if (q_path[i].size() != jmg->getVariableCount()) {
-      LOGE("[solve_core] q_path size mismatch");
-      return std::nullopt;
-    }
-    st.setJointGroupPositions(jmg, q_path[i]);
-    st.update();
-    const double dt = (i == 0) ? 0.0 : 0.0;
-    rt.addSuffixWayPoint(st, dt);
-  }
-
-  trajectory_processing::TimeOptimalTrajectoryGeneration totg(path_tolerance);
-  if (!totg.computeTimeStamps(rt)) {
-    LOGE("[solve_core] Time parameterization failed");
-    return std::nullopt;
-  }
-
-  return trajectory_from_robot_trajectory(robot_model, group_name, rt);
-}
-
 } // namespace
 
+// 构造函数，初始化日志
 SolveCore::SolveCore(std::shared_ptr<MoveItAdapter> adapter)
     : adapter_(std::move(adapter)) {
   log_utils::init_console_logger("solve_core");
   LOGI("[solve_core] logger init");
 }
 
+// 错误发布通道
 void SolveCore::set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus) {
   error_bus_ = bus;
 }
 
+// 发布错误
 void SolveCore::publish_error(const error_code_utils::Error &err) const {
   if (!error_bus_) {
     return;
@@ -175,7 +141,8 @@ void SolveCore::publish_error(const error_code_utils::Error &err) const {
   error_bus_->publish(err);
 }
 
-std::optional<SolveResponse> SolveCore::plan(const SolveRequest &req) {
+// 规划总入口
+std::optional<SolveResponse> SolveCore::plan(const SolveRequest &req, std::string &err) {
   if (!adapter_) {
     LOGE("[solve_core] MoveIt adapter not set");
     publish_error(make_error(SolveErrc::AdapterMissing, "MoveIt adapter not set"));
@@ -184,11 +151,14 @@ std::optional<SolveResponse> SolveCore::plan(const SolveRequest &req) {
 
   switch (req.option) {
   case PlanOption::NORMAL:
-    return plan_normal(req);
+    
+    //加采样的话，这里要加一个if条件
+    
+    return plan_normal(req,err);
   case PlanOption::CARTESIAN:
-    return plan_cartesian(req);
+    return plan_cartesian(req,err);
   case PlanOption::JOINTS:
-    return plan_joints(req);
+    return plan_joints(req,err);
   default:
     LOGE("[solve_core] Unknown planning option");
     publish_error(make_error(SolveErrc::UnknownOption, "Unknown planning option"));
@@ -196,7 +166,8 @@ std::optional<SolveResponse> SolveCore::plan(const SolveRequest &req) {
   }
 }
 
-std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req) {
+// 使用ompl采样规划
+std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std::string &err) {
   const auto robot_model = adapter_->robot_model();
   if (!robot_model) {
     LOGE("[solve_core] RobotModel is null");
@@ -247,142 +218,63 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req) {
   }
 
   Eigen::Isometry3d target_iso = pose_to_isometry(req.target_pose);
-  moveit::core::RobotState ik_state(start_state);
-  bool ik_ok = ik_state.setFromIK(jmg, target_iso, ee_link, 2.0);
-  if (!ik_ok) {
-    const Eigen::Isometry3d current_fk = start_state.getGlobalLinkTransform(ee_link);
-    ik_ok = ik_state.setFromIK(jmg, current_fk, ee_link, 2.0);
-    if (!ik_ok) {
-      LOGE("[solve_core] IK failed");
-      publish_error(make_error(SolveErrc::IkFailed, "IK failed",
-                               {{"group_name", group_name}, {"ee_link", ee_link}}));
-      return std::nullopt;
-    }
-  }
 
-  std::vector<double> q_target;
-  ik_state.copyJointGroupPositions(jmg, q_target);
-  if (q_target.size() != jmg->getVariableCount()) {
-    LOGE("[solve_core] IK variables size mismatch");
-    publish_error(make_error(SolveErrc::TargetSizeMismatch, "IK variables size mismatch",
-                             {{"group_name", group_name}}));
+  std::shared_ptr<LimitPlanner> planner = std::make_shared<LimitPlanner>(adapter_);
+  auto out_traj = planner->plan(jmg, ee_link, start_state, target_iso, LimitPlannerOptions(), err, PlannerConfigs());
+
+  auto resp = std::make_optional<SolveResponse>();
+  if (out_traj) {
+    resp->trajectory = std::move(*out_traj);
+  } else {
+    
     return std::nullopt;
   }
-
-  const auto joint_names = jmg->getVariableNames();
-  auto plan_res = adapter_->plan_to_joint_target(joint_names, q_target, req.planner);
-  if (!plan_res) {
-    LOGE("[solve_core] plan_to_joint_target failed");
-    publish_error(make_error(SolveErrc::PlanFailed, "plan_to_joint_target failed",
-                             {{"group_name", group_name}}));
-    return std::nullopt;
-  }
-
-  SolveResponse resp;
-  resp.trajectory = std::move(*plan_res);
   return resp;
 }
 
-std::optional<SolveResponse> SolveCore::plan_cartesian(const SolveRequest &req) {
-  const auto robot_model = adapter_->robot_model();
-  if (!robot_model) {
-    LOGE("[solve_core] RobotModel is null");
-    publish_error(make_error(SolveErrc::RobotModelMissing, "RobotModel is null"));
+// 直线规划
+std::optional<SolveResponse>
+SolveCore::plan_cartesian(const SolveRequest &req, std::string &err) {
+
+  auto robot_model = adapter_->robot_model();
+  std::string group_name =
+      req.group_name.empty() ?
+      adapter_->group_name() :
+      req.group_name;
+
+  moveit::core::RobotState start_state(robot_model);
+  if (!fill_joint_state_require_all(
+          req.current_joints,
+          adapter_->joint_model_group(group_name),
+          start_state, err))
     return std::nullopt;
-  }
-  const std::string group_name = !req.group_name.empty()
-                                     ? req.group_name
-                                     : adapter_->group_name();
-  const auto *jmg = adapter_->joint_model_group(group_name);
-  if (!jmg) {
-    LOGE("[solve_core] JointModelGroup not found");
-    publish_error(make_error(SolveErrc::JointModelGroupMissing, "JointModelGroup not found",
-                             {{"group_name", group_name}}));
+
+  start_state.update();
+
+  std::string ee_link =
+      req.ee_link.empty() ?
+      adapter_->end_effector_link() :
+      req.ee_link;
+
+  StraightPlanner planner(robot_model, group_name, ee_link);
+  StraightPlannerOptions opt;
+
+  auto traj = planner.plan(
+      start_state,
+      pose_to_isometry(req.target_pose),
+      opt);
+
+  if (!traj)
     return std::nullopt;
-  }
-
-  moveit::core::RobotState kinematic_state(robot_model);
-  std::string err;
-  if (!fill_joint_state_require_all(req.current_joints, jmg, kinematic_state, err)) {
-    LOGE("[solve_core] {}", err);
-    publish_error(make_error(SolveErrc::JointStateMissing, err,
-                             {{"group_name", group_name}}));
-    return std::nullopt;
-  }
-  kinematic_state.update();
-
-  std::string ee_link = !req.ee_link.empty() ? req.ee_link : adapter_->end_effector_link();
-  if (ee_link.empty()) {
-    ee_link = "link6";
-  }
-
-  const auto *ee_link_model = robot_model->getLinkModel(ee_link);
-  if (!ee_link_model) {
-    LOGE("[solve_core] End-effector link missing");
-    publish_error(make_error(SolveErrc::InvalidRequest, "End-effector link missing",
-                             {{"ee_link", ee_link}}));
-    return std::nullopt;
-  }
-  const Eigen::Isometry3d start_pose = kinematic_state.getGlobalLinkTransform(ee_link_model);
-  const Eigen::Isometry3d target_pose = pose_to_isometry(req.target_pose);
-
-  const int num_points = 50;
-  std::vector<Eigen::Isometry3d> waypoints;
-  waypoints.reserve(static_cast<std::size_t>(num_points));
-
-  Eigen::Quaterniond q_start(start_pose.rotation());
-  Eigen::Quaterniond q_end(target_pose.rotation());
-  q_start.normalize();
-  q_end.normalize();
-
-  for (int i = 1; i <= num_points; ++i) {
-    const double ratio = static_cast<double>(i) / num_points;
-    Eigen::Isometry3d interp = Eigen::Isometry3d::Identity();
-    interp.translation() = start_pose.translation() +
-                           (target_pose.translation() - start_pose.translation()) * ratio;
-    Eigen::Quaterniond q_interp = q_start.slerp(ratio, q_end);
-    interp.linear() = q_interp.toRotationMatrix();
-    waypoints.push_back(interp);
-  }
-
-  std::vector<double> q_prev;
-  kinematic_state.copyJointGroupPositions(jmg, q_prev);
-
-  std::vector<std::vector<double>> q_path;
-  q_path.reserve(waypoints.size());
-
-  moveit::core::RobotState st(robot_model);
-  st.setJointGroupPositions(jmg, q_prev);
-  st.update();
-
-  for (std::size_t i = 0; i < waypoints.size(); ++i) {
-    if (!st.setFromIK(jmg, waypoints[i], ee_link, 0.02)) {
-      LOGE("[solve_core] IK failed on waypoint");
-      publish_error(make_error(SolveErrc::IkFailed, "IK failed on waypoint",
-                               {{"group_name", group_name}, {"ee_link", ee_link}}));
-      return std::nullopt;
-    }
-    std::vector<double> q_i;
-    st.copyJointGroupPositions(jmg, q_i);
-    q_path.push_back(q_i);
-    q_prev = q_i;
-  }
-
-  auto traj_res = time_parameterize_path(robot_model, group_name, q_path, kinematic_state);
-  if (!traj_res) {
-    publish_error(make_error(SolveErrc::TimeParameterizationFailed,
-                             "Time parameterization failed",
-                             {{"group_name", group_name}}));
-    return std::nullopt;
-  }
 
   SolveResponse resp;
-  resp.trajectory = std::move(*traj_res);
-  resp.joint_path = std::move(q_path);
+  resp.trajectory = std::move(*traj);
   return resp;
 }
 
-std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req) {
+
+// 关节空间规划
+std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std::string &err) {
   const auto robot_model = adapter_->robot_model();
   if (!robot_model) {
     LOGE("[solve_core] RobotModel is null");
@@ -411,7 +303,6 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req) {
 
   moveit::core::RobotState start_state(robot_model);
   start_state.setToDefaultValues();
-  std::string err;
   if (!fill_joint_state_require_all(req.current_joints, jmg, start_state, err)) {
     LOGE("[solve_core] {}", err);
     publish_error(make_error(SolveErrc::JointStateMissing, err,

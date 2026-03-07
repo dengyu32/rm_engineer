@@ -9,7 +9,12 @@ find_package(error_code_utils REQUIRED)
 find_package(log_utils REQUIRED)
 find_package(moveit_core REQUIRED)
 
-add_library(${PROJECT_NAME} SHARED src/solve_core.cpp)
+add_library(${PROJECT_NAME} SHARED
+  src/solve_core.cpp
+  src/calculate_tools/hybrid_ik.cpp
+  src/planner/straight_planner.cpp
+  src/calculate_tools/cost_func.cpp
+)
 
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

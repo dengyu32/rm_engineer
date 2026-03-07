@@ -18,6 +18,15 @@ namespace solve_core {
 // ============================================================================
 //  Basic data types (ROS-agnostic)
 // ============================================================================
+struct PlannerConfigs {
+  double goal_position_tolerance{1e-3};
+  double goal_orientation_tolerance{1e-3};
+  double planning_time{2.0};
+  int num_planning_attempts{5};
+  double max_velocity_scaling{0.6};
+  double max_acc_scaling{0.6};
+};
+
 struct Pose {
   double x{0.0};
   double y{0.0};
@@ -33,14 +42,7 @@ struct JointState {
   std::vector<double> positions;
 };
 
-struct PlannerOptions {
-  double goal_position_tolerance{1e-3};
-  double goal_orientation_tolerance{1e-3};
-  double planning_time{2.0};
-  int num_planning_attempts{5};
-  double max_velocity_scaling{0.6};
-  double max_acc_scaling{0.6};
-};
+
 
 enum class PlanOption {
   NORMAL = 0,
@@ -53,7 +55,7 @@ struct SolveRequest {
   Pose target_pose{};
   std::vector<double> target_joints;
   JointState current_joints;
-  PlannerOptions planner;
+  PlannerConfigs planner_config;
   std::string group_name;
   std::string ee_link;
 };
@@ -71,7 +73,7 @@ struct Trajectory {
 
 struct SolveResponse {
   Trajectory trajectory;
-  std::vector<std::vector<double>> joint_path;
+  // std::vector<std::vector<double>> joint_path;
 };
 
 // ============================================================================
@@ -92,7 +94,7 @@ public:
   virtual std::optional<Trajectory> plan_to_joint_target(
       const std::vector<std::string> &joint_names,
       const std::vector<double> &joint_values,
-      const PlannerOptions &options) = 0;
+      const PlannerConfigs &options) = 0;
 
   virtual bool check_self_collision(
       const moveit::core::RobotState &state,
@@ -107,16 +109,16 @@ class SolveCore {
 public:
   explicit SolveCore(std::shared_ptr<MoveItAdapter> adapter);
 
-  std::optional<SolveResponse> plan(const SolveRequest &req);
+  std::optional<SolveResponse> plan(const SolveRequest &req, std::string &err);
   void set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus);
 
 private:
   std::shared_ptr<MoveItAdapter> adapter_;
   std::shared_ptr<error_code_utils::ErrorBus> error_bus_;
 
-  std::optional<SolveResponse> plan_normal(const SolveRequest &req);
-  std::optional<SolveResponse> plan_cartesian(const SolveRequest &req);
-  std::optional<SolveResponse> plan_joints(const SolveRequest &req);
+  std::optional<SolveResponse> plan_normal(const SolveRequest &req, std::string &err);
+  std::optional<SolveResponse> plan_cartesian(const SolveRequest &req, std::string &err);
+  std::optional<SolveResponse> plan_joints(const SolveRequest &req, std::string &err);
 
   void publish_error(const error_code_utils::Error &err) const;
 };
