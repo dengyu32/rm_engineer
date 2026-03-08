@@ -11,9 +11,11 @@ find_package(moveit_core REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
   src/solve_core.cpp
-  src/calculate_tools/hybrid_ik.cpp
-  src/planner/straight_planner.cpp
   src/calculate_tools/cost_func.cpp
+  src/calculate_tools/hybrid_ik.cpp
+  src/calculate_tools/sample.cpp
+  src/planner/straight_planner.cpp
+  src/planner/limit_planner.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

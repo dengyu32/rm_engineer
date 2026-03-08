@@ -7,13 +7,9 @@
 
 #include "log_utils/log.hpp"
 #include "solve_core/calculate_tools/wrap.hpp"
-#include "solve_core/error_code.hpp"
 #include "solve_core/planner/limit_planner.hpp"
 #include "solve_core/planner/straight_planner.hpp"
-<<<<<<< HEAD
-=======
 #include "error_code_utils/app_error.hpp"
->>>>>>> 9228b13 (solve-1.0: with move_group)
 
 #include <Eigen/Geometry>
 
@@ -27,7 +23,7 @@
 namespace solve_core {
 namespace {
 
-// 四元数转变换矩阵
+// _四元数转变换矩阵
 Eigen::Isometry3d pose_to_isometry(const Pose &pose) {
   Eigen::Isometry3d iso = Eigen::Isometry3d::Identity();
   iso.translation() << pose.x, pose.y, pose.z;
@@ -35,6 +31,20 @@ Eigen::Isometry3d pose_to_isometry(const Pose &pose) {
   q.normalize();
   iso.linear() = q.toRotationMatrix();
   return iso;
+}
+
+// _坐标轴向量归一化
+bool parse_direction_vector(const std::array<double, 3> &direction, Eigen::Vector3d &dir,
+                            std::string &err) {
+  constexpr double kEps = 1e-9;   //eps：epsilon，一个非常小的数，用于数值计算中避免除以零或判断数值是否接近零的情况
+  dir = Eigen::Vector3d(direction[0], direction[1], direction[2]);
+  const double norm = dir.norm();   //norm：向量的模长
+  if (!std::isfinite(norm) || norm <= kEps) {
+    err = "Cartesian request direction vector is invalid";
+    return false;
+  }
+  dir /= norm;
+  return true;
 }
 
 // 将关节角写进robotstate，可以缺失
@@ -122,6 +132,40 @@ Trajectory trajectory_from_robot_trajectory(const moveit::core::RobotModelConstP
     out.points.push_back(std::move(p));
   }
   return out;
+}
+
+void parameterize_time_from_start(Trajectory &traj, double velocity_scaling) {
+  if (traj.points.empty()) {
+    return;
+  }
+
+  constexpr double kNominalJointSpeedRadPerSec = 1.0;
+  constexpr double kMinDtSec = 0.02;
+  const double scale = std::clamp(velocity_scaling, 0.05, 1.0);
+
+  traj.points[0].time_from_start = 0.0;
+  traj.points[0].velocities.assign(traj.points[0].positions.size(), 0.0);
+
+  for (std::size_t i = 1; i < traj.points.size(); ++i) {
+    const auto &prev = traj.points[i - 1];
+    auto &curr = traj.points[i];
+    const std::size_t dof = std::min(prev.positions.size(), curr.positions.size());
+
+    double max_delta = 0.0;
+    for (std::size_t j = 0; j < dof; ++j) {
+      max_delta = std::max(max_delta, std::fabs(curr.positions[j] - prev.positions[j]));
+    }
+
+    const double dt = std::max(kMinDtSec, max_delta / (kNominalJointSpeedRadPerSec * scale));
+    curr.time_from_start = prev.time_from_start + dt;
+
+    curr.velocities.assign(curr.positions.size(), 0.0);
+    if (dt > 1e-9) {
+      for (std::size_t j = 0; j < dof; ++j) {
+        curr.velocities[j] = (curr.positions[j] - prev.positions[j]) / dt;
+      }
+    }
+  }
 }
 
 } // namespace
@@ -237,13 +281,13 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
   limit_opt.ik_distance_weight = config_.limit_ik_distance_weight;
   limit_opt.joint_motion_weight = config_.limit_joint_motion_weight;
 
-  PlannerConfigs planner_cfg = req.planner_config;
-  if (planner_cfg.planning_time <= 0.0) {
-    planner_cfg.planning_time = 2.0;
-  }
-  if (planner_cfg.num_planning_attempts <= 0) {
-    planner_cfg.num_planning_attempts = 5;
-  }
+  PlannerConfigs planner_cfg;
+  planner_cfg.goal_position_tolerance = config_.goal_position_tolerance;
+  planner_cfg.goal_orientation_tolerance = config_.goal_orientation_tolerance;
+  planner_cfg.planning_time = config_.planning_time;
+  planner_cfg.num_planning_attempts = config_.num_planning_attempts;
+  planner_cfg.max_velocity_scaling = config_.max_velocity_scaling;
+  planner_cfg.max_acc_scaling = config_.max_acc_scaling;
 
   std::shared_ptr<LimitPlanner> planner = std::make_shared<LimitPlanner>(adapter_);
   auto out_traj = planner->plan(jmg, ee_link, start_state, target_iso, limit_opt, err, planner_cfg);
@@ -282,25 +326,37 @@ SolveCore::plan_cartesian(const SolveRequest &req, std::string &err) {
       adapter_->end_effector_link() :
       req.ee_link;
 
+  Eigen::Vector3d direction;
+  if (!parse_direction_vector(req.target_direction, direction, err)) {
+    LOGE("[solve_core] {}", err);
+    publish_error(error_code_utils::app::make_app_error(
+        error_code_utils::ErrorDomain::SOLVE,
+        error_code_utils::app::SolveCode::InvalidRequest,
+        err));
+    return std::nullopt;
+  }
+
   StraightPlanner planner(robot_model, group_name, ee_link);
   StraightPlannerOptions opt;
   opt.num_waypoints = config_.cartesian_num_waypoints;
-  opt.use_directional_sampling = config_.cartesian_use_directional_sampling;
+  opt.use_directional_sampling = true;
   opt.sample_step_m = config_.cartesian_sample_step_m;
-  opt.direction_x = config_.cartesian_direction_x;
-  opt.direction_y = config_.cartesian_direction_y;
-  opt.direction_z = config_.cartesian_direction_z;
+  opt.direction_x = direction.x();
+  opt.direction_y = direction.y();
+  opt.direction_z = direction.z();
 
   auto traj = planner.plan(
       start_state,
       pose_to_isometry(req.target_pose),
-      opt);
+      opt,
+      config_.straight_cost_options);
 
   if (!traj)
     return std::nullopt;
 
   SolveResponse resp;
   resp.trajectory = std::move(*traj);
+  parameterize_time_from_start(resp.trajectory, config_.max_velocity_scaling);
   return resp;
 }
 
@@ -410,12 +466,12 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
 
     TrajectoryPoint p;
     p.positions = q;
-    p.time_from_start = 0.05 * k;
     traj.points.push_back(std::move(p));
   }
 
   SolveResponse resp;
   resp.trajectory = std::move(traj);
+  parameterize_time_from_start(resp.trajectory, config_.max_velocity_scaling);
   return resp;
 }
 

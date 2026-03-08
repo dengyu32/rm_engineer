@@ -129,21 +129,13 @@ def generate_launch_description():
     )
     
     # # rviz2 节点 : 可视化节点，读取 robot_description 系列参数与 RViz 配置展示模型与规划结果
-    # node_rviz = Node(
-    #     package="rviz2",
-    #     executable="rviz2",
-    #     name="rviz2",
-    #     output="screen",
-    #     parameters=common_params,
-    #     arguments=["-d", rviz_config_path]
-    # )
-    
-    static_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='static_transform_publisher',
-        output='both',
-        arguments=['0', '0', '0', '0', '0', '0', 'world', 'base_link'], # x y z roll pitch yaw frame_id child_frame_id
+    node_rviz = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="screen",
+        parameters=common_params,
+        arguments=["-d", rviz_config_path]
     )
     
     # arm_solve_server 节点 : 提供 IK/轨迹求解服务，读取 MoveIt 参数与 bringup.yaml 的业务配置
@@ -170,8 +162,7 @@ def generate_launch_description():
         static_tf,
         node_object_load,
         node_move_group,
-        # node_rviz,
-        static_tf,
+        node_rviz,
         late_init
     ])
     

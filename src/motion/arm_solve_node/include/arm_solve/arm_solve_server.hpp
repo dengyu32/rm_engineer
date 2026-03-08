@@ -7,7 +7,6 @@
 #include <array>
 
 // Error utils
-#include "error_code_utils/error_bus.hpp"
 
 // ROS2
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -46,6 +45,7 @@ struct GoalContext {
   solve_core::PlanOption option;
 
   geometry_msgs::msg::PoseStamped target_pose;
+  std::array<double, 3> target_direction{{0.0, 0.0, 0.0}};
   std::array<float, 6> target_joints{{0.f, 0.f, 0.f, 0.f, 0.f, 0.f}};
 
   // preempt
@@ -100,9 +100,9 @@ private:
   std::mutex current_joints_mutex_;
 
   // 当前活跃 goal（用于 cancel / preempt）
-  std::mutex active_mtx_;
-  std::weak_ptr<GoalHandleMove> active_goal_handle_;
-  std::shared_ptr<GoalContext> active_ctx_;
+  std::mutex active_mtx_; // 保护 active_goal_handle_ 和 active_ctx_
+  std::weak_ptr<GoalHandleMove> active_goal_handle_;  //GoalHandleMove用在客户端向服务端发送请求
+  std::shared_ptr<GoalContext> active_ctx_;   //GoalContext用在服务端处理每个goal的上下文
 
   // -----------------------------------------------------------------------
   //  Init / utils

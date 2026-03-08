@@ -24,6 +24,7 @@ public:
       moveit::core::RobotState& start_state,
       const Eigen::Isometry3d& target_pose,
       const StraightPlannerOptions& opt,
+      const CostOptions& cost_opt,
       std::vector<std::vector<double>>* joint_path_out = nullptr);
 
 private:

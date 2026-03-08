@@ -3,6 +3,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <array>
 #include <vector>
 
 #include "error_code_utils/error_bus.hpp"
@@ -54,9 +55,9 @@ enum class PlanOption {
 struct SolveRequest {
   PlanOption option{PlanOption::NORMAL};
   Pose target_pose{};
+  std::array<double, 3> target_direction{{0.0, 0.0, 0.0}};
   std::vector<double> target_joints;
   JointState current_joints;
-  PlannerConfigs planner_config;
   std::string group_name;
   std::string ee_link;
 };

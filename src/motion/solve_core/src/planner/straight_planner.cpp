@@ -38,6 +38,7 @@ std::optional<Trajectory>
 StraightPlanner::plan(moveit::core::RobotState& start_state,
                       const Eigen::Isometry3d& target_pose,
                       const StraightPlannerOptions& opt,
+                      const CostOptions& cost_opt,
                       std::vector<std::vector<double>>* joint_path_out) {
   if (!robot_model_) {
     LOGE("[solve_core][straight_planner] Robot model is null");
@@ -67,9 +68,9 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
   HybridIK ik(robot_model_, group_name_, ee_link_);
   IKOptions ik_opt;
 
-  // 起始末端位姿（只用于生成插值位姿）
+  // 起始末端位姿（用于生成直线离散路点）
   Eigen::Isometry3d T0 = start_state.getGlobalLinkTransform(link);
-  Eigen::Vector3d line_delta = target_pose.translation() - T0.translation();
+  Eigen::Vector3d line_delta = Eigen::Vector3d::Zero();
   if (opt.use_directional_sampling) {
     Eigen::Vector3d direction(opt.direction_x, opt.direction_y, opt.direction_z);
     const double norm = direction.norm();
@@ -77,8 +78,12 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
       direction /= norm;
       line_delta = direction * (opt.sample_step_m * static_cast<double>(opt.num_waypoints));
     } else {
-      LOGE("[solve_core][straight_planner] Invalid directional sampling params, fallback to target interpolation");
+      LOGE("[solve_core][straight_planner] Invalid directional sampling params");
+      return std::nullopt;
     }
+  } else {
+    LOGE("[solve_core][straight_planner] Directional sampling must be enabled");
+    return std::nullopt;
   }
 
   // 每个路点的候选解集合（sols_per_waypoint[i] = vector of q vectors）
@@ -161,7 +166,7 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
   std::vector<std::vector<double>> dp_costs(N);
   std::vector<std::vector<int>> prev_idx(N);
 
-  CostFunc cost_func(start_state, jmg, link);
+  CostFunc cost_func(start_state, jmg, link, cost_opt);
 
   // 初始化第一层 dp（从 start_state 到第一层每个候选的代价）
   dp_costs[0].assign(sols_per_waypoint[0].size(), std::numeric_limits<double>::infinity());

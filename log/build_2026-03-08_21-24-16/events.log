@@ -1,0 +1,31 @@
+[0.000000] (-) TimerEvent: {}
+[0.000168] (-) JobUnselected: {'identifier': 'YOLOs-CPP'}
+[0.000187] (-) JobUnselected: {'identifier': 'arm_solve'}
+[0.000199] (-) JobUnselected: {'identifier': 'arm_solve_client'}
+[0.000210] (-) JobUnselected: {'identifier': 'auto_node'}
+[0.000219] (-) JobUnselected: {'identifier': 'detect_node'}
+[0.000228] (-) JobUnselected: {'identifier': 'ee_path_node'}
+[0.000237] (-) JobUnselected: {'identifier': 'engineer_bringup'}
+[0.000246] (-) JobUnselected: {'identifier': 'engineer_description'}
+[0.000254] (-) JobUnselected: {'identifier': 'engineer_interfaces'}
+[0.000263] (-) JobUnselected: {'identifier': 'engineer_moveit_config'}
+[0.000272] (-) JobUnselected: {'identifier': 'error_code_utils'}
+[0.000280] (-) JobUnselected: {'identifier': 'fake_system'}
+[0.000289] (-) JobUnselected: {'identifier': 'gripper_control_node'}
+[0.000297] (-) JobUnselected: {'identifier': 'log_utils'}
+[0.000306] (-) JobUnselected: {'identifier': 'object_load'}
+[0.000314] (-) JobUnselected: {'identifier': 'realsense2_camera'}
+[0.000322] (-) JobUnselected: {'identifier': 'realsense2_camera_msgs'}
+[0.000330] (-) JobUnselected: {'identifier': 'realsense2_description'}
+[0.000339] (-) JobUnselected: {'identifier': 'realsense2_ros_mqtt_bridge'}
+[0.000348] (-) JobUnselected: {'identifier': 'realsense2_rviz_plugin'}
+[0.000356] (-) JobUnselected: {'identifier': 'step_executor'}
+[0.000365] (-) JobUnselected: {'identifier': 'task_orchestrator'}
+[0.000373] (-) JobUnselected: {'identifier': 'task_step_library'}
+[0.000381] (-) JobUnselected: {'identifier': 'teleop_node'}
+[0.000390] (-) JobUnselected: {'identifier': 'usb_cdc'}
+[0.000398] (-) JobUnselected: {'identifier': 'vision_detect_client'}
+[0.000619] (solve_core) JobQueued: {'identifier': 'solve_core', 'dependencies': OrderedDict([('error_code_utils', '/home/zc/rm_engineer/install/error_code_utils'), ('log_utils', '/home/zc/rm_engineer/install/log_utils')])}
+[0.000814] (solve_core) JobStarted: {'identifier': 'solve_core'}
+[0.009332] (solve_core) JobEnded: {'identifier': 'solve_core', 'rc': 1}
+[0.020045] (-) EventReactorShutdown: {}
