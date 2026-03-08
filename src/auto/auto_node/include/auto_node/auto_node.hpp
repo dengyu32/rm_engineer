@@ -15,8 +15,8 @@
 
 //< Other Modules
 #include "step_executor/step_executor.hpp"
-#include "task_orchestrator/static_task_orchestrator.hpp"
-#include "task_step_library/types.hpp"
+#include "task_orchestrator/task_orchestrator.hpp"
+#include "task_step_library/task.hpp"
 
 namespace engineer_auto {
 
@@ -65,7 +65,7 @@ private:
   AutoNodeConfig config_;
   rclcpp::Logger logger_;
 
-  task_orchestrator::StaticTaskOrchestrator orchestrator_;
+  task_orchestrator::TaskOrchestrator orchestrator_;
   step_executor::StepExecutor executor_;
 
   // 下游状态，内部不能修改，只能通过intentCallback更新

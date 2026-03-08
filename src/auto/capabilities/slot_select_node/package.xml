@@ -1,17 +1,17 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>task_orchestrator</name>
+  <name>slot_select_node</name>
   <version>0.0.0</version>
-  <description>Task to step orchestration for auto execution.</description>
+  <description>Slot selection capability with internal memory and calibration subscription.</description>
   <maintainer email="2281904682@qq.com">wrj</maintainer>
   <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>engineer_interfaces</depend>
-  <depend>geometry_msgs</depend>
+  <depend>rclcpp</depend>
   <depend>task_step_library</depend>
+  <depend>engineer_interfaces</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

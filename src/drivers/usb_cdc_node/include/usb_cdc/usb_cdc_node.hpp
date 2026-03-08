@@ -7,9 +7,10 @@
 #include "error_code_utils/error_bus.hpp"
 
 // ROS messages
-#include <engineer_interfaces/msg/gripper_command.hpp>
+#include <engineer_interfaces/msg/gripper.hpp>
 #include <engineer_interfaces/msg/intent.hpp>
 #include <engineer_interfaces/msg/joints.hpp>
+#include <engineer_interfaces/msg/slots.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
 // ROS2
@@ -83,7 +84,8 @@ private:
 
   void IntentCallback(const engineer_interfaces::msg::Intent::SharedPtr msg);
   void jointCommandCallback(const engineer_interfaces::msg::Joints::SharedPtr msg);
-  void GripperCommandCallback(const engineer_interfaces::msg::GripperCommand::SharedPtr msg);
+  void GripperCommandCallback(const engineer_interfaces::msg::Gripper::SharedPtr msg);
+  void SlotCommandCallback(const engineer_interfaces::msg::Slots::SharedPtr msg);
   void publish_error(const error_code_utils::Error &err) const;
 
   // Protocol
@@ -96,10 +98,12 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_states_pub_;
   rclcpp::Publisher<engineer_interfaces::msg::Joints>::SharedPtr joint_states_custom_pub_;
   rclcpp::Publisher<engineer_interfaces::msg::Joints>::SharedPtr joint_states_verbose_pub_;
+  rclcpp::Publisher<engineer_interfaces::msg::Slots>::SharedPtr slot_states_pub_;
 
   rclcpp::Subscription<engineer_interfaces::msg::Intent>::SharedPtr intent_sub_;
   rclcpp::Subscription<engineer_interfaces::msg::Joints>::SharedPtr joint_cmd_sub_;
-  rclcpp::Subscription<engineer_interfaces::msg::GripperCommand>::SharedPtr gripper_cmd_sub_;
+  rclcpp::Subscription<engineer_interfaces::msg::Gripper>::SharedPtr gripper_cmd_sub_;
+  rclcpp::Subscription<engineer_interfaces::msg::Slots>::SharedPtr slot_cmd_sub_;
 
   rclcpp::TimerBase::SharedPtr send_timer_;
   rclcpp::TimerBase::SharedPtr publish_timer_;

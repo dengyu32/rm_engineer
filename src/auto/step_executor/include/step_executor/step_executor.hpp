@@ -7,7 +7,8 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "step_executor/capability_bridge.hpp"
-#include "task_step_library/types.hpp"
+#include "task_step_library/context.hpp"
+#include "task_step_library/task.hpp"
 
 namespace step_executor {
 
@@ -28,6 +29,10 @@ public:
   task_step_library::TaskId activeTaskId() const;
 
 private:
+  bool deriveStepFromRuntimeCtx(const task_step_library::Step &input,
+                                task_step_library::Step &derived,
+                                std::string &error) const;
+  void updateRuntimeCtx(const task_step_library::StepResult &result);
   void fail(task_step_library::TaskStatus status, const std::string &message);
   void enterNextStep();
 
@@ -43,6 +48,7 @@ private:
   bool running_{false};
   bool finished_{false};
   task_step_library::TaskResult report_;
+  task_step_library::RuntimeContext ctx_{};
 };
 
 } // namespace step_executor

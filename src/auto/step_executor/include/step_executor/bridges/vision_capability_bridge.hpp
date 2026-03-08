@@ -11,7 +11,8 @@ class VisionCapabilityBridge {
 public:
   explicit VisionCapabilityBridge(rclcpp::Node &node);
 
-  BridgeResult runVisionStep(const task_step_library::Step &step);
+  BridgeResult runVisionStep(const task_step_library::Step &step,
+                             task_step_library::StepResult *out_result);
   void cancel() {}
   const char *lastError() const { return last_error_.c_str(); }
 

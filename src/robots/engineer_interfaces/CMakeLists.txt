@@ -35,8 +35,11 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Intent.msg"
   "msg/Joint.msg"
   "msg/Joints.msg"
+  "msg/Pose.msg"
+  "msg/Gripper.msg"
+  "msg/Slot.msg"
+  "msg/Slots.msg"
   "msg/Target.msg"
-  "msg/GripperCommand.msg"
   "action/Move.action"
   DEPENDENCIES 
     builtin_interfaces

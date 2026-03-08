@@ -1,4 +1,4 @@
-# Intent.msg     # 操作手对于 HFSM 的预期状态
+# Intent.msg     # 操作手控制意图消息包
 
 uint8 intent_id
 uint8 intent_finish
