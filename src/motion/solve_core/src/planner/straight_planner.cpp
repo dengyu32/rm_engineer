@@ -2,6 +2,7 @@
 #include "solve_core/calculate_tools/cost_func.hpp"
 #include "solve_core/calculate_tools/hybrid_ik.hpp"
 #include "solve_core/solve_core.hpp"
+#include "log_utils/log.hpp"
 #include <limits>
 #include <cmath>
 #include <unordered_set>
@@ -38,16 +39,47 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
                       const Eigen::Isometry3d& target_pose,
                       const StraightPlannerOptions& opt,
                       std::vector<std::vector<double>>* joint_path_out) {
+  if (!robot_model_) {
+    LOGE("[solve_core][straight_planner] Robot model is null");
+    return std::nullopt;
+  }
+  if (group_name_.empty()) {
+    LOGE("[solve_core][straight_planner] Planning group is empty");
+    return std::nullopt;
+  }
+  if (ee_link_.empty()) {
+    LOGE("[solve_core][straight_planner] End-effector link is empty");
+    return std::nullopt;
+  }
+  if (opt.num_waypoints <= 0) {
+    LOGE("[solve_core][straight_planner] Invalid num_waypoints: {}", opt.num_waypoints);
+    return std::nullopt;
+  }
 
   const auto* jmg = robot_model_->getJointModelGroup(group_name_);
   const auto* link = robot_model_->getLinkModel(ee_link_);
-  if (!jmg || !link) return std::nullopt;
+  if (!jmg || !link) {
+    LOGE("[solve_core][straight_planner] Invalid model handles: jmg={}, link={}",
+         jmg != nullptr, link != nullptr);
+    return std::nullopt;
+  }
 
   HybridIK ik(robot_model_, group_name_, ee_link_);
   IKOptions ik_opt;
 
   // 起始末端位姿（只用于生成插值位姿）
   Eigen::Isometry3d T0 = start_state.getGlobalLinkTransform(link);
+  Eigen::Vector3d line_delta = target_pose.translation() - T0.translation();
+  if (opt.use_directional_sampling) {
+    Eigen::Vector3d direction(opt.direction_x, opt.direction_y, opt.direction_z);
+    const double norm = direction.norm();
+    if (opt.sample_step_m > 0.0 && norm > 1e-9) {
+      direction /= norm;
+      line_delta = direction * (opt.sample_step_m * static_cast<double>(opt.num_waypoints));
+    } else {
+      LOGE("[solve_core][straight_planner] Invalid directional sampling params, fallback to target interpolation");
+    }
+  }
 
   // 每个路点的候选解集合（sols_per_waypoint[i] = vector of q vectors）
   std::vector<std::vector<std::vector<double>>> sols_per_waypoint;
@@ -73,7 +105,7 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
     Eigen::Isometry3d Ti = Eigen::Isometry3d::Identity();   //用单位矩阵初始化路点 i = insert
     Ti.translation() =
         T0.translation() +
-        (target_pose.translation() - T0.translation()) * r;
+        line_delta * r;
     Ti.linear() = T0.linear();    // linear 旋转矩阵
 
     // 收集该路点所有候选解（从每个 prev_solution 作为 seed 去调用 ik.solveAll）
@@ -112,7 +144,10 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
     }
 
     // 如果该路点没有候选解则整个规划失败
-    if (candidates.empty()) return std::nullopt;
+    if (candidates.empty()) {
+      LOGE("[solve_core][straight_planner] No IK candidates at waypoint {}", i);
+      return std::nullopt;
+    }
 
     // 保存该路点候选解，并作为下一层 prev_solutions 的来源
     sols_per_waypoint.push_back(candidates);
@@ -171,7 +206,10 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
     for (double v : dp_costs[i]) {
       if (std::isfinite(v)) { any_ok = true; break; }
     }
-    if (!any_ok) return std::nullopt;
+    if (!any_ok) {
+      LOGE("[solve_core][straight_planner] DP disconnected at layer {}", i);
+      return std::nullopt;
+    }
   }
 
   // 3) 回溯得到最优路径（最后一层选择最小 dp）
@@ -195,6 +233,7 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
     cur_idx = prev_idx[i][cur_idx];
     if (i > 0 && cur_idx < 0) {
       // 不应该发生 —— 表示回溯失败
+      LOGE("[solve_core][straight_planner] DP traceback failed at layer {}", i);
       return std::nullopt;
     }
   }

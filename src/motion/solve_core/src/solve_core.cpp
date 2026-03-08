@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "log_utils/log.hpp"
+#include "solve_core/calculate_tools/wrap.hpp"
 #include "solve_core/error_code.hpp"
 #include "solve_core/planner/limit_planner.hpp"
 #include "solve_core/planner/straight_planner.hpp"
@@ -126,8 +127,9 @@ Trajectory trajectory_from_robot_trajectory(const moveit::core::RobotModelConstP
 } // namespace
 
 // 构造函数，初始化日志
-SolveCore::SolveCore(std::shared_ptr<MoveItAdapter> adapter)
-    : adapter_(std::move(adapter)) {
+SolveCore::SolveCore(std::shared_ptr<MoveItAdapter> adapter,
+                     const SolveCoreConfig &config)
+    : adapter_(std::move(adapter)), config_(config) {
   log_utils::init_console_logger("solve_core");
   LOGI("[solve_core] logger init");
 }
@@ -223,8 +225,28 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
 
   Eigen::Isometry3d target_iso = pose_to_isometry(req.target_pose);
 
+  LimitPlannerOptions limit_opt;
+  limit_opt.sampling_mode = config_.limit_enable_target_pose_sampling
+                                ? SamplingMode::ROLL_SAMPLE
+                                : SamplingMode::NORMAL;
+  limit_opt.enable_target_pose_sampling = config_.limit_enable_target_pose_sampling;
+  limit_opt.roll_samples = config_.limit_roll_samples;
+  limit_opt.roll_range_rad = config_.limit_roll_range_rad;
+  limit_opt.top_k_after_ik = config_.limit_top_k_after_ik;
+  limit_opt.orientation_weight = config_.limit_orientation_weight;
+  limit_opt.ik_distance_weight = config_.limit_ik_distance_weight;
+  limit_opt.joint_motion_weight = config_.limit_joint_motion_weight;
+
+  PlannerConfigs planner_cfg = req.planner_config;
+  if (planner_cfg.planning_time <= 0.0) {
+    planner_cfg.planning_time = 2.0;
+  }
+  if (planner_cfg.num_planning_attempts <= 0) {
+    planner_cfg.num_planning_attempts = 5;
+  }
+
   std::shared_ptr<LimitPlanner> planner = std::make_shared<LimitPlanner>(adapter_);
-  auto out_traj = planner->plan(jmg, ee_link, start_state, target_iso, LimitPlannerOptions(), err, PlannerConfigs());
+  auto out_traj = planner->plan(jmg, ee_link, start_state, target_iso, limit_opt, err, planner_cfg);
 
   auto resp = std::make_optional<SolveResponse>();
   if (out_traj) {
@@ -262,6 +284,12 @@ SolveCore::plan_cartesian(const SolveRequest &req, std::string &err) {
 
   StraightPlanner planner(robot_model, group_name, ee_link);
   StraightPlannerOptions opt;
+  opt.num_waypoints = config_.cartesian_num_waypoints;
+  opt.use_directional_sampling = config_.cartesian_use_directional_sampling;
+  opt.sample_step_m = config_.cartesian_sample_step_m;
+  opt.direction_x = config_.cartesian_direction_x;
+  opt.direction_y = config_.cartesian_direction_y;
+  opt.direction_z = config_.cartesian_direction_z;
 
   auto traj = planner.plan(
       start_state,
@@ -327,7 +355,7 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
     start_joint_position.emplace(jn, pos_now);
   }
 
-  double max_step_rad = 0.05;
+  double max_step_rad = config_.joints_max_step_rad;
   double max_delta = 0.0;
   for (std::size_t i = 0; i < dof; ++i) {
     const auto &jn = group_joint_names[i];
@@ -338,7 +366,8 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
                                {{"group_name", group_name}}));
       return std::nullopt;
     }
-    max_delta = std::max(max_delta, std::fabs(req.target_joints[i] - it->second));
+    const double target_near = ikc::wrapToNearby(req.target_joints[i], it->second);
+    max_delta = std::max(max_delta, std::fabs(target_near - it->second));
   }
   const int N = std::max(1, static_cast<int>(std::ceil(max_delta / std::max(1e-6, max_step_rad))));
 
@@ -349,7 +378,9 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
   moveit::core::RobotState rs = start_state;
 
   for (int k = 0; k <= N; ++k) {
-    const double t = static_cast<double>(k) / static_cast<double>(N);
+    const double t_raw = static_cast<double>(k) / static_cast<double>(N);
+    // 平滑插值（前缓中匀后缓），降低速度突变
+    const double t = t_raw * t_raw * (3.0 - 2.0 * t_raw);
     std::vector<double> q(dof);
     for (std::size_t i = 0; i < dof; ++i) {
       const auto &jn = group_joint_names[i];
@@ -360,7 +391,8 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
                                  {{"group_name", group_name}}));
         return std::nullopt;
       }
-      q[i] = it->second + (req.target_joints[i] - it->second) * t;
+      const double target_near = ikc::wrapToNearby(req.target_joints[i], it->second);
+      q[i] = it->second + (target_near - it->second) * t;
     }
 
     rs.setJointGroupPositions(jmg, q);

@@ -282,7 +282,7 @@ else
   open_term "top hfsm" "ros2 launch top_hfsm_node_v2 top_hfsm_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
   open_term "teleop node" "ros2 launch teleop_node teleop_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
   open_term "foxglove bridge" "ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=${FOXGLOVE_PORT}" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
-  open_term "vision" "ros2 launch detect_node detect.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+  # open_term "vision" "ros2 launch detect_node detect.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
 fi
 
 # ----------------------------------------------------------------------------
@@ -294,7 +294,7 @@ elif [[ "$SYSTEM" == "fakesystem" ]]; then
   # fake：额外启动 fake_system_node
   print_color green "Start fake_system_node ... (fakesystem only)"
   open_term "fake system" "ros2 launch fake_system fake_system_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
-  open_term "usb cdc" "ros2 launch usb_cdc usb_cdc_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+  # open_term "usb cdc" "ros2 launch usb_cdc usb_cdc_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
 else
   # real：额外启动 usb_cdc
   print_color green "Open usb cdc node ... (realsystem only)"

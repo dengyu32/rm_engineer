@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "error_code_utils/error_bus.hpp"
+#include "solve_core/config.hpp"
 
 namespace moveit::core {
 class RobotModel;
@@ -107,13 +108,15 @@ public:
 // ============================================================================
 class SolveCore {
 public:
-  explicit SolveCore(std::shared_ptr<MoveItAdapter> adapter);
+  explicit SolveCore(std::shared_ptr<MoveItAdapter> adapter,
+                     const SolveCoreConfig &config = SolveCoreConfig{});
 
   std::optional<SolveResponse> plan(const SolveRequest &req, std::string &err);
   void set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus);
 
 private:
   std::shared_ptr<MoveItAdapter> adapter_;
+  SolveCoreConfig config_;
   std::shared_ptr<error_code_utils::ErrorBus> error_bus_;
 
   std::optional<SolveResponse> plan_normal(const SolveRequest &req, std::string &err);

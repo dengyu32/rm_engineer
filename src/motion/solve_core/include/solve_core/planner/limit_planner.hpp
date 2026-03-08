@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "solve_core/calculate_tools/sample.hpp"
-#include "solve_core/error_code.hpp"
 #include "solve_core/solve_core.hpp"
 
 /*

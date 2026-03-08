@@ -79,6 +79,7 @@ public:
 private:
   // Parameters
   ArmSolveConfig config_;
+  solve_core::SolveCoreConfig solve_core_config_;
   rclcpp::Time last_plan_time_;
 
   // ROS interfaces

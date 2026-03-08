@@ -1,7 +1,5 @@
-// Strongly-typed configuration for ArmSolveServer with manual summary.
+// Strongly-typed configuration for SolveCore with manual summary.
 #pragma once
-
-#include <rclcpp/rclcpp.hpp>
 
 #include <sstream>
 #include <stdexcept>
@@ -10,171 +8,104 @@
 namespace solve_core {
 
 struct CostOptions {
-  double continuity_weight{1.0};    //连续性权重
-  double condition_weight{0.5};     //雅可比条件数权重
-  double hard_condition_threshold{500.0};   //雅可比条件数阈值
-  double hard_penalty{1e6};     //超过阈值的雅可比条件数惩罚
+  double continuity_weight{1.0};           // 连续性权重
+  double condition_weight{0.5};            // 雅可比条件数权重
+  double hard_condition_threshold{500.0};  // 雅可比条件数阈值
+  double hard_penalty{1e6};                // 超阈值惩罚
 };
 
 struct IKOptions {
-  int max_attempts{50};       // 总尝试次数
-  int max_solutions{10};      // 最多收集多少个解
-  double timeout{0.02};       // setFromIK timeout (seconds)
-
-  // 方法二：在 seed 附近扰动的噪声参数
-  double noise_sigma{0.2};    // rad（或 prismatic 的单位），高斯噪声标准差
-  double dedup_eps{1e-3};     // 去重阈值：关节空间 L∞ 距离小于该值认为重复
+  int max_attempts{50};    // 总尝试次数
+  int max_solutions{10};   // 最多收集多少个解
+  double timeout{0.02};    // setFromIK timeout (seconds)
+  double noise_sigma{0.2}; // 高斯噪声标准差
+  double dedup_eps{1e-3};  // 去重阈值（L∞）
 };
 
 struct StraightPlannerOptions {
-  int num_waypoints = 50;
+  int num_waypoints{50};               // 直线离散路点数
+  bool use_directional_sampling{false}; // 是否启用“方向+步长”模式
+  double sample_step_m{0.0};           // 每步位移（米）
+  double direction_x{0.0};             // 方向向量 X
+  double direction_y{0.0};             // 方向向量 Y
+  double direction_z{0.0};             // 方向向量 Z
 };
+
+struct SolveCoreConfig {
+  // 是否开启目标姿态 roll 采样
+  bool limit_enable_target_pose_sampling{false};
+  // roll 采样点数量
+  int limit_roll_samples{5};
+  // roll 采样范围（±弧度）
+  double limit_roll_range_rad{0.35};
+  // IK 候选过滤后保留前 K 个（-1 表示不过滤）
+  int limit_top_k_after_ik{3};
+  // 姿态偏差代价权重
+  double limit_orientation_weight{1.0};
+  // IK 距离代价权重
+  double limit_ik_distance_weight{1.0};
+  // 关节运动代价权重
+  double limit_joint_motion_weight{1.0};
+
+  // 笛卡尔直线规划路点数
+  int cartesian_num_waypoints{50};
+  // 是否启用“方向+步长”模式
+  bool cartesian_use_directional_sampling{false};
+  // 每个路点的位移步长（米）
+  double cartesian_sample_step_m{0.0};
+  // 方向向量 X
+  double cartesian_direction_x{0.0};
+  // 方向向量 Y
+  double cartesian_direction_y{0.0};
+  // 方向向量 Z
+  double cartesian_direction_z{0.0};
+
+  // JOINTS 模式单步最大关节变化（弧度）
+  double joints_max_step_rad{0.05};
+
+  void validate() const;
+  std::string summary() const;
+};
+
+inline void SolveCoreConfig::validate() const {
+  if (limit_top_k_after_ik == 0) {
+    throw std::runtime_error(
+        "SolveCoreConfig: limit_top_k_after_ik must not be 0 (use -1 for no filter)");
+  }
+  if (cartesian_num_waypoints <= 0) {
+    throw std::runtime_error("SolveCoreConfig: cartesian_num_waypoints must be > 0");
+  }
+  if (cartesian_use_directional_sampling && cartesian_sample_step_m <= 0.0) {
+    throw std::runtime_error(
+        "SolveCoreConfig: cartesian_sample_step_m must be > 0 when directional sampling is enabled");
+  }
 }
 
-// namespace arm_solve {
+inline std::string SolveCoreConfig::summary() const {
+  std::ostringstream oss;
+  oss << "=========\n";
+  oss << " SolveCore Configuration\n\n";
+  oss << " Limit Sampling:\n";
+  oss << "   - limit_enable_target_pose_sampling : "
+      << (limit_enable_target_pose_sampling ? "true" : "false") << "\n";
+  oss << "   - limit_roll_samples                : " << limit_roll_samples << "\n";
+  oss << "   - limit_roll_range_rad              : " << limit_roll_range_rad << "\n";
+  oss << "   - limit_top_k_after_ik              : " << limit_top_k_after_ik << "\n";
+  oss << "   - limit_orientation_weight          : " << limit_orientation_weight << "\n";
+  oss << "   - limit_ik_distance_weight          : " << limit_ik_distance_weight << "\n";
+  oss << "   - limit_joint_motion_weight         : " << limit_joint_motion_weight << "\n\n";
+  oss << " Planners:\n";
+  oss << "   - cartesian_num_waypoints           : " << cartesian_num_waypoints << "\n";
+  oss << "   - cartesian_use_directional_sampling: "
+      << (cartesian_use_directional_sampling ? "true" : "false") << "\n";
+  oss << "   - cartesian_sample_step_m           : " << cartesian_sample_step_m << "\n";
+  oss << "   - cartesian_direction_xyz           : ["
+      << cartesian_direction_x << ", "
+      << cartesian_direction_y << ", "
+      << cartesian_direction_z << "]\n";
+  oss << "   - joints_max_step_rad               : " << joints_max_step_rad << "\n";
+  oss << "=========\n";
+  return oss.str();
+}
 
-// struct ArmSolveConfig {
-//   // planning params
-//   std::string group_name;
-//   double goal_position_tolerance{1e-3};
-//   double goal_orientation_tolerance{1e-3};
-//   double planning_time{2.0};
-//   int num_planning_attempts{5};
-
-//   //  ROS names / topics (usually fixed) 
-//   std::string arm_action_name{"move_arm"};
-//   std::string joint_states_topic{"/joint_states_verbose"};
-//   std::string joint_cmd_topic{"/joint_commands"};
-
-//   //  Scaling / throttling 
-//   double max_velocity_scaling{0.6};
-//   double max_acc_scaling{0.6};
-
-//   int late_init_delay_ms{10};
-//   int plan_min_interval_ms{0};
-
-//   //  API 
-//   static ArmSolveConfig Load(rclcpp::Node& node);
-//   void validate() const;
-//   std::string summary() const;
-// };
-
-// inline ArmSolveConfig ArmSolveConfig::Load(rclcpp::Node& node) {
-//   ArmSolveConfig cfg;
-
-//   //  Small helpers 
-//   auto declare_get = [&](const std::string& name, auto& value) {
-//     node.declare_parameter(name, value);
-//     node.get_parameter(name, value);
-//   };
-
-//   auto declare_get_checked = [&](const std::string& name,
-//                                  auto& value,
-//                                  auto&& check,
-//                                  const char* err_msg) {
-//     node.declare_parameter(name, value);
-//     node.get_parameter(name, value);
-//     if (!check(value)) {
-//       throw std::runtime_error("ArmSolveConfig: " + name + ": " + err_msg);
-//     }
-//   };
-
-//   //  Required / validated params 
-//   declare_get_checked(
-//       "group_name",
-//       cfg.group_name,
-//       [](const std::string& v) { return !v.empty(); },
-//       "must not be empty");
-
-//   declare_get_checked(
-//       "goal_position_tolerance",
-//       cfg.goal_position_tolerance,
-//       [](double v) { return v >= 0.0 && v <= 1.0; },
-//       "must be in [0, 1]");
-
-//   declare_get_checked(
-//       "goal_orientation_tolerance",
-//       cfg.goal_orientation_tolerance,
-//       [](double v) { return v >= 0.0 && v <= 1.0; },
-//       "must be in [0, 1]");
-
-//   declare_get_checked(
-//       "planning_time",
-//       cfg.planning_time,
-//       [](double v) { return v >= 0.0 && v <= 30.0; },
-//       "must be in [0, 30]");
-
-//   declare_get_checked(
-//       "num_planning_attempts",
-//       cfg.num_planning_attempts,
-//       [](int v) { return v >= 1 && v <= 50; },
-//       "must be in [1, 50]");
-
-//   declare_get_checked(
-//       "max_velocity_scaling",
-//       cfg.max_velocity_scaling,
-//       [](double v) { return v >= 0.0 && v <= 1.0; },
-//       "must be in [0, 1]");
-
-//   declare_get_checked(
-//       "max_acc_scaling",
-//       cfg.max_acc_scaling,
-//       [](double v) { return v >= 0.0 && v <= 1.0; },
-//       "must be in [0, 1]");
-
-//   declare_get_checked(
-//       "late_init_delay_ms",
-//       cfg.late_init_delay_ms,
-//       [](int v) { return v >= 0 && v <= 5000; },
-//       "must be in [0, 5000]");
-
-//   declare_get_checked(
-//       "plan_min_interval_ms",
-//       cfg.plan_min_interval_ms,
-//       [](int v) { return v >= 0 && v <= 5000; },
-//       "must be in [0, 5000]");
-
-//   //  Usually fixed (no check) 
-//   declare_get("arm_action_name", cfg.arm_action_name);
-//   declare_get("joint_states_topic", cfg.joint_states_topic);
-//   declare_get("joint_cmd_topic", cfg.joint_cmd_topic);
-
-//   //  Finalize 
-//   cfg.validate();  // keep only semantic / cross-field checks
-//   return cfg;
-// }
-
-// inline void ArmSolveConfig::validate() const {
-//   // 只保留“组合语义”检查
-//   if (plan_min_interval_ms > 0 && planning_time <= 0.0) {
-//     throw std::runtime_error(
-//         "ArmSolveConfig: plan_min_interval_ms > 0 requires planning_time > 0");
-//   }
-// }
-
-// inline std::string ArmSolveConfig::summary() const {
-//   std::ostringstream oss;
-//   oss << "=========\n";
-//   oss << " ArmSolveServer Configuration\n\n";
-//   oss << " Service:\n";
-//   oss << "   - arm_action_name        : " << arm_action_name << "\n\n";
-//   oss << " Planning:\n";
-//   oss << "   - group_name            : " << group_name << "\n";
-//   oss << "   - planning_time         : " << planning_time << "\n";
-//   oss << "   - num_planning_attempts : " << num_planning_attempts << "\n";
-//   oss << "   - goal_position_tolerance : " << goal_position_tolerance << "\n";
-//   oss << "   - goal_orientation_tolerance : " << goal_orientation_tolerance << "\n\n";
-//   oss << " Execution:\n";
-//   oss << "   - max_velocity_scaling  : " << max_velocity_scaling << "\n";
-//   oss << "   - max_acc_scaling       : " << max_acc_scaling << "\n";
-//   oss << "   - late_init_delay_ms    : " << late_init_delay_ms << "\n";
-//   oss << "   - plan_min_interval_ms  : " << plan_min_interval_ms << "\n\n";
-//   oss << " Topics:\n";
-//   oss << "   - joint_states_topic    : " << joint_states_topic << "\n";
-//   oss << "   - joint_cmd_topic       : " << joint_cmd_topic << "\n";
-//   oss << "=========\n";
-//   return oss.str();
-// }
-
-// }  // namespace arm_solve
-
+} // namespace solve_core

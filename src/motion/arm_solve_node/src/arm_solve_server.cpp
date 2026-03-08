@@ -179,7 +179,15 @@ ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions& options)
     : Node("arm_solve_action_server",
            rclcpp::NodeOptions(options)),
       config_(ArmSolveConfig::Load(*this)),
+      solve_core_config_(),
       last_plan_time_(now() - rclcpp::Duration(std::chrono::milliseconds(config_.plan_min_interval_ms))) {  //避免第一次规划被节流
+  solve_core_config_.cartesian_num_waypoints = config_.cartesian_num_waypoints;
+  solve_core_config_.cartesian_use_directional_sampling = config_.cartesian_use_directional_sampling;
+  solve_core_config_.cartesian_sample_step_m = config_.cartesian_sample_step_m;
+  solve_core_config_.cartesian_direction_x = config_.cartesian_direction_x;
+  solve_core_config_.cartesian_direction_y = config_.cartesian_direction_y;
+  solve_core_config_.cartesian_direction_z = config_.cartesian_direction_z;
+  solve_core_config_.validate();
 
   // 等待构造完成后再创建 MoveGroup，防止节点还未 fully spinning 就调用
   init_timer_ = this->create_wall_timer(
@@ -205,6 +213,7 @@ ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions& options)
 
   RCLCPP_INFO(this->get_logger(), "[ARM_SOLVE_SERVER] started");
   RCLCPP_INFO(this->get_logger(), "\n%s", config_.summary().c_str());
+  RCLCPP_INFO(this->get_logger(), "\n%s", solve_core_config_.summary().c_str());
 }
 
 void ArmSolveServer::set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus) {
@@ -237,13 +246,6 @@ void ArmSolveServer::lateInit() {
   auto node_shared = shared_from_this();
   move_group_      = std::make_unique<moveit::planning_interface::MoveGroupInterface>(node_shared, config_.group_name);
 
-  move_group_->setPlanningTime(config_.planning_time);
-  move_group_->setNumPlanningAttempts(config_.num_planning_attempts);
-  move_group_->setGoalPositionTolerance(config_.goal_position_tolerance);
-  move_group_->setGoalOrientationTolerance(config_.goal_orientation_tolerance);
-  move_group_->setMaxVelocityScalingFactor(config_.max_velocity_scaling);
-  move_group_->setMaxAccelerationScalingFactor(config_.max_acc_scaling);
-
   if (!psm_) {
     psm_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(shared_from_this(), "robot_description");
 
@@ -256,7 +258,7 @@ void ArmSolveServer::lateInit() {
     moveit_adapter_ = std::make_shared<MoveItAdapterImpl>(move_group_.get(), psm_, get_logger());
   }
   if (!solve_core_) {
-    solve_core_ = std::make_unique<solve_core::SolveCore>(moveit_adapter_);
+    solve_core_ = std::make_unique<solve_core::SolveCore>(moveit_adapter_, solve_core_config_);
     solve_core_->set_error_bus(error_bus_);
   }
 }

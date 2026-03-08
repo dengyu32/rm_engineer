@@ -6,6 +6,8 @@
 #include <Eigen/SVD>
 #include <moveit/robot_state/robot_state.h>
 
+#include "log_utils/log.hpp"
+
 namespace solve_core {
 namespace {
 //雅可比矩阵条件数计算代价
@@ -59,6 +61,10 @@ CostFunc::CostFunc(const moveit::core::RobotState &reference_state,
 
 double CostFunc::compute(const std::vector<double> &q_from,
                          const std::vector<double> &q_to) const {
+  if (!joint_model_group_ || !link_model_) {
+    LOGE("[solve_core][cost_func] Invalid model handles: joint_model_group or link_model is null");
+    return std::numeric_limits<double>::infinity();
+  }
   const double continuity_cost = joint_distance_l2(q_from, q_to);
 
   moveit::core::RobotState st_q(reference_state_);

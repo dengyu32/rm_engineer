@@ -4,19 +4,22 @@
 #include <cmath>
 #include <algorithm>
 
+#include "log_utils/log.hpp"
+
 namespace solve_core {
 
+//判断是否为关节添加了角度限制，确保每个关节都有限制
 static bool isFiniteVec(const std::vector<double>& q) {
   for (double v : q) {
-    if (!std::isfinite(v)) return false;
+    if (!std::isfinite(v)) return false;  //isfinite() 判断是否为有限制
   }
   return true;
 }
 
-// L∞ 距离去重：max_i |a[i]-b[i]|
+// 距离去重，如果两个解的关节角差相近，将被判定为同一个解
 static bool nearSame(const std::vector<double>& a,
                      const std::vector<double>& b,
-                     double eps) {
+                     double eps) {    //eps是去重阈值，
   if (a.size() != b.size()) return false;
   double m = 0.0;
   for (size_t i = 0; i < a.size(); ++i) {
@@ -39,18 +42,41 @@ bool HybridIK::solveAll(const moveit::core::RobotState& seed_state,
 {
   solutions.clear();
 
-  if (!robot_model_) return false;
+  if (!robot_model_) {
+    LOGE("[solve_core][hybrid_ik] Robot model is null");
+    return false;
+  }
+  if (group_name_.empty()) {
+    LOGE("[solve_core][hybrid_ik] Planning group is empty");
+    return false;
+  }
+  if (ee_link_.empty()) {
+    LOGE("[solve_core][hybrid_ik] End-effector link is empty");
+    return false;
+  }
+  if (opt.max_attempts <= 0 || opt.max_solutions <= 0) {
+    LOGE("[solve_core][hybrid_ik] Invalid IK options: max_attempts={}, max_solutions={}",
+         opt.max_attempts, opt.max_solutions);
+    return false;
+  }
+
   const auto* jmg = robot_model_->getJointModelGroup(group_name_);
-  if (!jmg) return false;
+  if (!jmg) {
+    LOGE("[solve_core][hybrid_ik] JointModelGroup not found: {}", group_name_);
+    return false;
+  }
 
   // 随机源：默认使用 random_device；想复现就改成固定 seed，例如 std::mt19937 rng(42);
   std::mt19937 rng(std::random_device{}());
   std::normal_distribution<double> noise(0.0, opt.noise_sigma);
 
-  // 基准关节（从 seed_state 读出来）
+  // 基准关节，做有限制校验
   std::vector<double> q_base;
   seed_state.copyJointGroupPositions(jmg, q_base);
-  if (!isFiniteVec(q_base)) return false;
+  if (!isFiniteVec(q_base)) {
+    LOGE("[solve_core][hybrid_ik] Seed joint vector has non-finite values");
+    return false;
+  }
 
   for (int attempt = 0; attempt < opt.max_attempts; ++attempt) {
     // 1) 从 seed_state 复制一份出来做扰动（不改原 seed_state）
@@ -101,7 +127,11 @@ bool HybridIK::solveAll(const moveit::core::RobotState& seed_state,
     }
   }
 
-  return !solutions.empty();
+  if (solutions.empty()) {
+    LOGE("[solve_core][hybrid_ik] IK solve failed: no valid solutions");
+    return false;
+  }
+  return true;
 }
 
 } // namespace solve_core
