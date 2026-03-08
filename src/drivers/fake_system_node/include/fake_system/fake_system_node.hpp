@@ -7,6 +7,7 @@
 #include "error_code_utils/error_bus.hpp"
 
 // C++
+#include <array>
 #include <mutex>
 #include <vector>
 #include <atomic>
@@ -15,7 +16,8 @@
 #include <engineer_interfaces/msg/intent.hpp>
 #include <engineer_interfaces/msg/joint.hpp>
 #include <engineer_interfaces/msg/joints.hpp>
-#include <engineer_interfaces/msg/gripper_command.hpp>
+#include <engineer_interfaces/msg/gripper.hpp>
+#include <engineer_interfaces/msg/slots.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
 #include "fake_system/config.hpp"
@@ -50,9 +52,11 @@ private:
   //  ROS callbacks
   // -----------------------------------------------------------------------
   void execute(const engineer_interfaces::msg::Joints::SharedPtr msg);
-  void execute(const engineer_interfaces::msg::GripperCommand::SharedPtr msg);
+  void execute(const engineer_interfaces::msg::Gripper::SharedPtr msg);
+  void execute(const engineer_interfaces::msg::Slots::SharedPtr msg);
   void intent_feedback_callback(const engineer_interfaces::msg::Intent::SharedPtr msg);
   void publish_timer_callback();
+  void publish_slot_states_now();
   void publish_error(const error_code_utils::Error &err) const;
 
   // Parameters / states
@@ -61,6 +65,7 @@ private:
 
   std::vector<double> fake_joint_positions_;
   double fake_gripper_position_{0.0};
+  std::array<bool, 2> fake_slot_status_{{false, false}};
   std::mutex fake_mutex_; // 保护仿真关节/夹爪状态
 
   // 动态配置 runtime_config_
@@ -75,10 +80,12 @@ private:
   rclcpp::Publisher<engineer_interfaces::msg::Joints>::SharedPtr joint_states_custom_pub_;
   rclcpp::Publisher<engineer_interfaces::msg::Joints>::SharedPtr joint_states_verbose_pub_;
   rclcpp::Publisher<engineer_interfaces::msg::Intent>::SharedPtr intent_cmd_pub_; // 人为调度（schedule）状态机意图
+  rclcpp::Publisher<engineer_interfaces::msg::Slots>::SharedPtr slot_states_pub_;
 
   rclcpp::Subscription<engineer_interfaces::msg::Intent>::SharedPtr intent_fb_sub_; // 状态机反馈
   rclcpp::Subscription<engineer_interfaces::msg::Joints>::SharedPtr joint_cmd_sub_;
-  rclcpp::Subscription<engineer_interfaces::msg::GripperCommand>::SharedPtr gripper_cmd_sub;
+  rclcpp::Subscription<engineer_interfaces::msg::Gripper>::SharedPtr gripper_cmd_sub;
+  rclcpp::Subscription<engineer_interfaces::msg::Slots>::SharedPtr slot_cmd_sub_;
 
   std::shared_ptr<error_code_utils::ErrorBus> error_bus_;
 };

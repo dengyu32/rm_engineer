@@ -55,21 +55,21 @@ struct HeaderFrame {
 ```text
 actualJointPosition[7]
 customJointPosition[6]
+realSlotStatus[2]
 IntentStatus
-IntentAck
 ```
 
 发送包：`EngineerTransmitData`
 ```text
 targetJointPosition[6]
 targetJointVelocity[6]
-gripperCommand
+targetGripperPosition
+targetSlotStatus[2]
 IntentFinish
 ```
 
 **Intent 信号语义**
 - `IntentStatus`: 下位机当前意图状态
-- `IntentAck`: 下位机确认信号
 - `IntentFinish`: 上位机完成信号（电平信号）
 
 **话题**
@@ -78,11 +78,13 @@ IntentFinish
 - `joint_states_topic` (`sensor_msgs/JointState`)
 - `joint_states_verbose_topic` (`engineer_interfaces/Joints`)
 - `joint_states_custom_topic` (`engineer_interfaces/Joints`)
+- `slot_state_topic` (`engineer_interfaces/Slots`)
 
 订阅：
 - `intent_fb_topic` (`engineer_interfaces/Intent`)
 - `joint_cmd_topic` (`engineer_interfaces/Joints`)
-- `gripper_cmd_topic` (`engineer_interfaces/GripperCommand`)
+- `gripper_cmd_topic` (`engineer_interfaces/Gripper`)
+- `slot_cmd_topic` (`engineer_interfaces/Slots`)
 
 **参数**
 参数由 `config/usb_cdc_node.yaml` 与 `BaseRobotConfig` 提供。

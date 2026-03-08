@@ -11,7 +11,8 @@ class ArmCapabilityBridge {
 public:
   explicit ArmCapabilityBridge(rclcpp::Node &node);
 
-  BridgeResult runArmStep(const task_step_library::Step &step);
+  BridgeResult runArmStep(const task_step_library::Step &step,
+                          task_step_library::StepResult *out_result);
   void cancel();
   const char *lastError() const { return last_error_.c_str(); }
 

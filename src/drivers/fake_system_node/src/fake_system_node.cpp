@@ -27,6 +27,10 @@ FakeSystemNode::FakeSystemNode(const rclcpp::NodeOptions &options)
       logger_(this->get_logger()),
       fake_joint_positions_(config_.initial_joint_positions),
       fake_gripper_position_(config_.initial_gripper_position) {
+  if (config_.initial_slot_status.size() == 2U) {
+    fake_slot_status_[0] = config_.initial_slot_status[0];
+    fake_slot_status_[1] = config_.initial_slot_status[1];
+  }
 
   // 声明获取动态参数
   this->declare_parameter<int>("fake_intent_id", 0);
@@ -106,6 +110,8 @@ void FakeSystemNode::initRosInterfaces() {
   joint_states_verbose_pub_ =
       this->create_publisher<engineer_interfaces::msg::Joints>(
           config_.joint_states_verbose_topic, rclcpp::QoS(10));
+  slot_states_pub_ = this->create_publisher<engineer_interfaces::msg::Slots>(
+      config_.slot_state_topic, rclcpp::QoS(10));
 
   // Subscriber
   intent_fb_sub_ = this->create_subscription<engineer_interfaces::msg::Intent>(
@@ -114,9 +120,12 @@ void FakeSystemNode::initRosInterfaces() {
   joint_cmd_sub_ = this->create_subscription<engineer_interfaces::msg::Joints>(
       config_.joint_cmd_topic, rclcpp::QoS(10),
       [this](engineer_interfaces::msg::Joints::SharedPtr msg) { this->execute(msg); });
-  gripper_cmd_sub = this->create_subscription<engineer_interfaces::msg::GripperCommand>(
+  gripper_cmd_sub = this->create_subscription<engineer_interfaces::msg::Gripper>(
       config_.gripper_cmd_topic, rclcpp::QoS(10),
-      [this](engineer_interfaces::msg::GripperCommand::SharedPtr msg) { this->execute(msg); });
+      [this](engineer_interfaces::msg::Gripper::SharedPtr msg) { this->execute(msg); });
+  slot_cmd_sub_ = this->create_subscription<engineer_interfaces::msg::Slots>(
+      config_.slot_cmd_topic, rclcpp::QoS(10),
+      [this](engineer_interfaces::msg::Slots::SharedPtr msg) { this->execute(msg); });
 }
 
 // ============================================================================
@@ -150,9 +159,32 @@ void FakeSystemNode::execute(engineer_interfaces::msg::Joints::SharedPtr msg) {
   }
 }
 
-void FakeSystemNode::execute(engineer_interfaces::msg::GripperCommand::SharedPtr msg) {
+void FakeSystemNode::execute(engineer_interfaces::msg::Gripper::SharedPtr msg) {
   std::scoped_lock<std::mutex> lock(fake_mutex_);
-  fake_gripper_position_ = msg->target_position;
+  fake_gripper_position_ = msg->position;
+}
+
+void FakeSystemNode::execute(engineer_interfaces::msg::Slots::SharedPtr msg) {
+  if (!msg) {
+    return;
+  }
+
+  bool changed = false;
+  {
+    std::scoped_lock<std::mutex> lock(fake_mutex_);
+    const std::size_t count = std::min<std::size_t>(fake_slot_status_.size(), msg->slots.size());
+    for (std::size_t i = 0; i < count; ++i) {
+      const bool desired = msg->slots[i].command;
+      if (desired != fake_slot_status_[i]) {
+        fake_slot_status_[i] = desired;
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    publish_slot_states_now();
+  }
 }
 
 void FakeSystemNode::intent_feedback_callback(const engineer_interfaces::msg::Intent::SharedPtr msg) {
@@ -186,11 +218,11 @@ void FakeSystemNode::publish_timer_callback() {
   sensor_msgs::msg::JointState joint_states;
   joint_states.header.stamp = this->now();
   joint_states.header.frame_id = "base_link";
+  joint_states.name = config_.joint_names;
   joint_states.name.reserve(joint_count + 1);
   joint_states.position.reserve(joint_count + 1);
 
   for (size_t i = 0; i < joint_count; ++i) {
-    joint_states.name = config_.joint_names;
     joint_states.position.push_back(joint_positions_copy[i]);
   }
   joint_states.name.push_back("left_finger_joint");
@@ -221,6 +253,32 @@ void FakeSystemNode::publish_timer_callback() {
   intent_msg.stamp = this->now();
   intent_msg.intent_id = fake_intent_id_.load(std::memory_order_relaxed);
   intent_cmd_pub_->publish(intent_msg);
+
+  publish_slot_states_now();
+}
+
+void FakeSystemNode::publish_slot_states_now() {
+  if (!slot_states_pub_) {
+    return;
+  }
+
+  std::array<bool, 2> slot_copy{{false, false}};
+  {
+    std::scoped_lock<std::mutex> lock(fake_mutex_);
+    slot_copy = fake_slot_status_;
+  }
+
+  engineer_interfaces::msg::Slots slots_msg;
+  slots_msg.header.stamp = this->now();
+  slots_msg.header.frame_id = "fake_system";
+  slots_msg.slots.resize(slot_copy.size());
+  for (std::size_t i = 0; i < slot_copy.size(); ++i) {
+    slots_msg.slots[i].header.stamp = slots_msg.header.stamp;
+    slots_msg.slots[i].header.frame_id = "slot_" + std::to_string(i);
+    slots_msg.slots[i].status = slot_copy[i];
+    slots_msg.slots[i].command = slot_copy[i];
+  }
+  slot_states_pub_->publish(slots_msg);
 }
 } // namespace fake_system
 

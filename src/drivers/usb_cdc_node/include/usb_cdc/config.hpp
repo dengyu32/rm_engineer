@@ -20,6 +20,8 @@ struct UsbCdcConfig : public engineer_bringup::BaseRobotConfig {
 
   //  Mode
   bool servo_teleop_mode{false};
+  std::string slot_state_topic{"/slot_states"};
+  std::string slot_cmd_topic{"/slot_cmds"};
 
   //  API
   static UsbCdcConfig Load(rclcpp::Node &node);
@@ -62,6 +64,8 @@ inline UsbCdcConfig UsbCdcConfig::Load(rclcpp::Node &node) {
 
   //  Mode
   declare_get(node, "servo_teleop_mode", cfg.servo_teleop_mode);
+  declare_get(node, "slot_state_topic", cfg.slot_state_topic);
+  declare_get(node, "slot_cmd_topic", cfg.slot_cmd_topic);
 
   //  Finalize
   cfg.validate();
@@ -71,6 +75,9 @@ inline UsbCdcConfig UsbCdcConfig::Load(rclcpp::Node &node) {
 inline void UsbCdcConfig::validate() const {
   if (joint_count < 1 || joint_count > 6) {
     throw std::runtime_error("UsbCdcConfig: joint_count must be in [1, 6]");
+  }
+  if (slot_state_topic.empty() || slot_cmd_topic.empty()) {
+    throw std::runtime_error("UsbCdcConfig: slot topics must not be empty");
   }
 }
 
@@ -90,6 +97,9 @@ inline std::string UsbCdcConfig::summary() const {
 
   oss << " Mode:\n";
   oss << "   - servo_teleop_mode   : " << (servo_teleop_mode ? "true" : "false") << "\n\n";
+  oss << " Slot:\n";
+  oss << "   - slot_state_topic    : " << slot_state_topic << "\n";
+  oss << "   - slot_cmd_topic      : " << slot_cmd_topic << "\n\n";
 
   oss << engineer_bringup::BaseRobotConfig::summary();
   oss << "=============================================================================\n";

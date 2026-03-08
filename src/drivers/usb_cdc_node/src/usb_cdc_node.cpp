@@ -10,6 +10,7 @@
 // C++
 #include <cstddef>
 #include <exception>
+#include <algorithm>
 #include <thread>
 #include <sys/types.h>
 #include <chrono>
@@ -76,6 +77,8 @@ void UsbCdcNode::initRosInterfaces() {
       config_.joint_states_custom_topic, rclcpp::QoS(10));
   joint_states_verbose_pub_ = this->create_publisher<engineer_interfaces::msg::Joints>(
       config_.joint_states_verbose_topic, rclcpp::QoS(10));
+  slot_states_pub_ = this->create_publisher<engineer_interfaces::msg::Slots>(
+      config_.slot_state_topic, rclcpp::QoS(10));
   // Subscriber
   intent_sub_ = this->create_subscription<engineer_interfaces::msg::Intent>(
       config_.intent_fb_topic,rclcpp::QoS(10),
@@ -83,9 +86,12 @@ void UsbCdcNode::initRosInterfaces() {
   joint_cmd_sub_ = this->create_subscription<engineer_interfaces::msg::Joints>(
       config_.joint_cmd_topic, rclcpp::QoS(10),
       std::bind(&UsbCdcNode::jointCommandCallback, this, std::placeholders::_1));
-  gripper_cmd_sub_ = this->create_subscription<engineer_interfaces::msg::GripperCommand>(
+  gripper_cmd_sub_ = this->create_subscription<engineer_interfaces::msg::Gripper>(
       config_.gripper_cmd_topic, rclcpp::QoS(10),
       std::bind(&UsbCdcNode::GripperCommandCallback, this, std::placeholders::_1));
+  slot_cmd_sub_ = this->create_subscription<engineer_interfaces::msg::Slots>(
+      config_.slot_cmd_topic, rclcpp::QoS(10),
+      std::bind(&UsbCdcNode::SlotCommandCallback, this, std::placeholders::_1));
 }
 
 void UsbCdcNode::set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus) {
@@ -279,6 +285,19 @@ void UsbCdcNode::publish_timer_callback() {
   intent.stamp = this->now();
   intent.intent_id = d.IntentStatus;
   intent_pub_->publish(intent);
+
+  // 发布 slot 状态（两槽）
+  engineer_interfaces::msg::Slots slot_states;
+  slot_states.header.stamp = stamp;
+  slot_states.header.frame_id = "usb_cdc";
+  slot_states.slots.resize(2);
+  for (size_t i = 0; i < 2; ++i) {
+    slot_states.slots[i].header.stamp = stamp;
+    slot_states.slots[i].header.frame_id = "slot_" + std::to_string(i);
+    slot_states.slots[i].status = d.realSlotStatus[i] != 0U;
+    slot_states.slots[i].command = d.realSlotStatus[i] != 0U;
+  }
+  slot_states_pub_->publish(slot_states);
 }
 
 // ============================================================================
@@ -307,10 +326,25 @@ void UsbCdcNode::jointCommandCallback(
 }
 
 void UsbCdcNode::GripperCommandCallback(
-    const engineer_interfaces::msg::GripperCommand::SharedPtr msg) {
+    const engineer_interfaces::msg::Gripper::SharedPtr msg) {
   std::scoped_lock<std::mutex> lock(tx_data_mutex_);
   // 透传夹爪目标位置，随发送定时器一起输出
-  tx_data_.data.targetGripperPosition = static_cast<float>(msg->target_position);
+  tx_data_.data.targetGripperPosition = static_cast<float>(msg->position);
+}
+
+void UsbCdcNode::SlotCommandCallback(
+    const engineer_interfaces::msg::Slots::SharedPtr msg) {
+  std::scoped_lock<std::mutex> lock(tx_data_mutex_);
+  tx_data_.data.targetSlotStatus[0] = 0U;
+  tx_data_.data.targetSlotStatus[1] = 0U;
+  if (!msg) {
+    return;
+  }
+
+  const size_t count = std::min<size_t>(2, msg->slots.size());
+  for (size_t i = 0; i < count; ++i) {
+    tx_data_.data.targetSlotStatus[i] = msg->slots[i].command ? 1U : 0U;
+  }
 }
 }; // namespace usb_cdc
 

@@ -20,15 +20,20 @@ ArmSolveClient::ArmSolveClient(rclcpp::Node &node,
   action_client_ = rclcpp_action::create_client<Move>(&node_, config_.action_name);
 }
 
-bool ArmSolveClient::sameTarget(const engineer_interfaces::msg::Target &lhs,
-                                const engineer_interfaces::msg::Target &rhs) {
+bool ArmSolveClient::sameTarget(const engineer_interfaces::msg::Pose &lhs,
+                                const engineer_interfaces::msg::Pose &rhs) {
   return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z && lhs.qx == rhs.qx &&
          lhs.qy == rhs.qy && lhs.qz == rhs.qz && lhs.qw == rhs.qw;
 }
 
+bool ArmSolveClient::sameVector(const geometry_msgs::msg::Vector3 &lhs,
+                                const geometry_msgs::msg::Vector3 &rhs) {
+  return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
+}
+
 bool ArmSolveClient::sameRequest(const ArmMoveSpec &lhs, const ArmMoveSpec &rhs) {
   return lhs.plan_option == rhs.plan_option && lhs.joints == rhs.joints &&
-         sameTarget(lhs.pose, rhs.pose);
+         sameTarget(lhs.pose, rhs.pose) && sameVector(lhs.vector, rhs.vector);
 }
 
 bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
@@ -64,6 +69,7 @@ bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
   goal.option_id = static_cast<uint8_t>(command.plan_option);
   goal.target_pose = command.pose;
   goal.target_joints = command.joints;
+  goal.target_vector = command.vector;
 
   rclcpp_action::Client<Move>::SendGoalOptions opts;
   opts.goal_response_callback = [this, ctx](std::shared_ptr<GoalHandleMove> gh) {

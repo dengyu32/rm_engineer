@@ -5,9 +5,9 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include <engineer_interfaces/msg/gripper_command.hpp>
+#include <engineer_interfaces/msg/gripper.hpp>
 
-#include "task_step_library/types.hpp"
+#include "task_step_library/step.hpp"
 
 namespace engineer_auto::gripper_control_node {
 
@@ -35,7 +35,7 @@ private:
   rclcpp::Logger logger_;
   GripperControlConfig config_;
 
-  rclcpp::Publisher<engineer_interfaces::msg::GripperCommand>::SharedPtr pub_;
+  rclcpp::Publisher<engineer_interfaces::msg::Gripper>::SharedPtr pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   std::mutex target_mutex_;

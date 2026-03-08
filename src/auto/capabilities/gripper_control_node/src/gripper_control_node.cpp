@@ -21,7 +21,7 @@ GripperControlNode::GripperControlNode(rclcpp::Node &node,
                                        const GripperControlConfig &config)
     : node_(node), logger_(node.get_logger()), config_(config) {
   target_position_ = config_.open_position;
-  pub_ = node_.create_publisher<engineer_interfaces::msg::GripperCommand>(
+  pub_ = node_.create_publisher<engineer_interfaces::msg::Gripper>(
       config_.gripper_cmd_topic, rclcpp::QoS(10));
   timer_ = node_.create_wall_timer(
       std::chrono::milliseconds(config_.publish_period_ms),
@@ -47,8 +47,8 @@ void GripperControlNode::onTimer() {
     pos = target_position_;
   }
 
-  engineer_interfaces::msg::GripperCommand msg;
-  msg.target_position = pos;
+  engineer_interfaces::msg::Gripper msg;
+  msg.position = pos;
   pub_->publish(msg);
 }
 

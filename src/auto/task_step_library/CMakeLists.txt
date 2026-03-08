@@ -9,6 +9,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 
 add_library(${PROJECT_NAME} INTERFACE)
@@ -22,6 +23,6 @@ install(DIRECTORY include/ DESTINATION include/)
 
 ament_export_targets(export_${PROJECT_NAME})
 ament_export_include_directories(include)
-ament_export_dependencies(engineer_interfaces)
+ament_export_dependencies(engineer_interfaces geometry_msgs)
 
 ament_package()

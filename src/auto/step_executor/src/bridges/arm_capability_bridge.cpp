@@ -5,7 +5,8 @@ namespace step_executor {
 ArmCapabilityBridge::ArmCapabilityBridge(rclcpp::Node &node)
     : client_(node, engineer_auto::arm_solve_client::ArmSolveClientConfig::load(node)) {}
 
-BridgeResult ArmCapabilityBridge::runArmStep(const task_step_library::Step &step) {
+BridgeResult ArmCapabilityBridge::runArmStep(const task_step_library::Step &step,
+                                             task_step_library::StepResult *out_result) {
   if (step.type != task_step_library::StepType::ArmMove) {
     last_error_ = "unsupported step type for arm bridge";
     return BridgeResult::Failed;

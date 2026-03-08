@@ -14,6 +14,7 @@
   <depend>task_step_library</depend>
   <depend>arm_solve_client</depend>
   <depend>gripper_control_node</depend>
+  <depend>slot_select_node</depend>
   <depend>vision_detect_client</depend>
 
   <test_depend>ament_lint_auto</test_depend>

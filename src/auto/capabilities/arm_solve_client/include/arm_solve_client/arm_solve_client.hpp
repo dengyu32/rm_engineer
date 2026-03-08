@@ -1,6 +1,5 @@
 #pragma once
 
-#include <array>
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -11,7 +10,7 @@
 
 #include <engineer_interfaces/action/move.hpp>
 
-#include "task_step_library/types.hpp"
+#include "task_step_library/step.hpp"
 
 namespace engineer_auto::arm_solve_client {
 
@@ -59,8 +58,10 @@ private:
   };
 
   bool sendGoal(const task_step_library::ArmMoveSpec &command);
-  static bool sameTarget(const engineer_interfaces::msg::Target &lhs,
-                         const engineer_interfaces::msg::Target &rhs);
+  static bool sameTarget(const engineer_interfaces::msg::Pose &lhs,
+                         const engineer_interfaces::msg::Pose &rhs);
+  static bool sameVector(const geometry_msgs::msg::Vector3 &lhs,
+                         const geometry_msgs::msg::Vector3 &rhs);
   static bool sameRequest(const task_step_library::ArmMoveSpec &lhs,
                           const task_step_library::ArmMoveSpec &rhs);
 

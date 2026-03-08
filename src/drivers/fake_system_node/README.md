@@ -32,7 +32,7 @@ arm_servo / controller
 
 订阅：
 - `joint_cmd_topic` (`engineer_interfaces/Joints`)
-- `gripper_cmd_topic` (`engineer_interfaces/GripperCommand`)
+- `gripper_cmd_topic` (`engineer_interfaces/Gripper`)
 
 **参数**
 参数由 `config/fake_system_node.yaml` 与 `BaseRobotConfig` 提供。

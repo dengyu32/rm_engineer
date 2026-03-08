@@ -48,6 +48,7 @@ struct EngineerReceiveData {
   struct {
     float actualJointPosition[7]; // 当前关节位置
     float customJointPosition[6]; // 自定义关节角度
+    uint8_t realSlotStatus[2];
     uint8_t IntentStatus; ///< 当前意图
   } data;
   uint8_t eof; ///< 0xA5
@@ -64,6 +65,7 @@ struct EngineerTransmitData {
     float targetJointPosition[6];  ///< 目标关节位置
     float targetJointVelocity[6];  ///< 目标关节速度
     float targetGripperPosition;   ///< 夹爪目标位置
+    uint8_t targetSlotStatus[2];
     uint8_t IntentFinish;          ///< 完成请求并返回Finish
   } data;
   uint8_t eof; ///< 0xA5
@@ -81,15 +83,15 @@ inline const char* switch_intent(uint8_t intent)
     case 1:  
       return "AUTO_INIT";
     case 2:
-      return "TEST_SOLVE";
-    case 3:
-      return "TEST_CARTESIAN";
-    case 4:
       return "AUTO_GRAB";
-    case 5:
+    case 3:
       return "AUTO_STORE";
-    case 6:
+    case 4:
       return "AUTO_GET";
+    case 5:
+      return "TEST_SOLVE";
+    case 6:
+      return "TEST_CARTESIAN";
     case 11:
       return "TELEOP_SERVO";
     default:
@@ -149,6 +151,12 @@ inline void engineer_print_receive_data(const EngineerReceiveData &rx_data) {
               << '\n';
   }
 
+  std::cout << "  Slot Status:\n";
+  for (size_t i = 0; i < 2; ++i) {
+    std::cout << "    Slot[" << i << "] : "
+              << static_cast<unsigned>(rx_data.data.realSlotStatus[i]) << '\n';
+  }
+
   // IntentStatus (enum)
   std::cout << "  Current Intent (Status):\n";
   uint8_t intent = rx_data.data.IntentStatus;
@@ -198,6 +206,12 @@ inline void engineer_print_transmit_data(const EngineerTransmitData &tx_data) {
   std::cout << "  Target Gripper Position:\n";
   std::cout << "    Value   : " << std::fixed << std::setprecision(6)
             << tx_data.data.targetGripperPosition << '\n';
+
+  std::cout << "  Target Slot Status:\n";
+  for (size_t i = 0; i < 2; ++i) {
+    std::cout << "    Slot[" << i << "] : "
+              << static_cast<unsigned>(tx_data.data.targetSlotStatus[i]) << '\n';
+  }
 
   // IntentFinish (bool flag: 0/1)
   std::cout << "  Intent Finish (0=running, 1=fin):\n";

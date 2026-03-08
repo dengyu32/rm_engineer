@@ -3,3 +3,6 @@ fake_system:
     publish_period_ms: 33
     initial_joint_positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     initial_gripper_position: 0.0
+    slot_cmd_topic: "/slot_cmds"
+    slot_state_topic: "/slot_states"
+    initial_slot_status: [false, false]

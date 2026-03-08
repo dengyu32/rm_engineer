@@ -11,7 +11,8 @@ class GripperCapabilityBridge {
 public:
   explicit GripperCapabilityBridge(rclcpp::Node &node);
 
-  BridgeResult runGripperStep(const task_step_library::Step &step);
+  BridgeResult runGripperStep(const task_step_library::Step &step,
+                              task_step_library::StepResult *out_result);
   void cancel();
   const char *lastError() const { return last_error_.c_str(); }
 
