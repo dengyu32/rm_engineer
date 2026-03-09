@@ -13,13 +13,15 @@
 namespace solve_core {
 namespace {
 
+// _正钳位，确保得到的值始终为正数
 inline double clamp_positive(double v, double fallback) {
   return (v > 0.0) ? v : fallback;
 }
 
+// _确保采样数量至少为1，避免除零等问题
 inline int clamp_count(int n) { return (n > 0) ? n : 1; }
 
-//数据清洗，确保使用模长为1的单位四元数来表示姿态
+// _数据清洗，确保使用模长为1的单位四元数来表示姿态
 Eigen::Quaterniond pose_to_quaternion(const Pose &pose) {
   Eigen::Quaterniond q(pose.qw, pose.qx, pose.qy, pose.qz);
   if (q.norm() < 1e-12) {
@@ -29,7 +31,7 @@ Eigen::Quaterniond pose_to_quaternion(const Pose &pose) {
   return q;
 }
 
-//构造轴采样后的新目标位姿
+// _构造轴采样后的新目标位姿
 Pose quaternion_to_pose_like(const Pose &base_pose, const Eigen::Quaterniond &q) {
   Pose out = base_pose;
   out.qx = q.x();
@@ -39,14 +41,14 @@ Pose quaternion_to_pose_like(const Pose &base_pose, const Eigen::Quaterniond &q)
   return out;
 }
 
-//将轴采样的偏移量归一化到 [0, 1] 范围，并平方以得到代价，确保在评估函数中不同轴的偏移可以直接加权求和
+// _将轴采样的偏移量归一化到 [0, 1] 范围，并平方以得到代价，确保在评估函数中不同轴的偏移可以直接加权求和
 double normalized_axis_offset_cost(double offset, double range) {
   const double safe_range = clamp_positive(range, 1e-6);
   const double r = offset / safe_range;
   return r * r;
 }
 
-//Pose转为旋转矩阵  --单位四元数拼接一个平移向量，得到一个齐次变换矩阵
+// _Pose转为旋转矩阵  --单位四元数拼接一个平移向量，得到一个齐次变换矩阵
 Eigen::Isometry3d pose_to_isometry(const Pose &pose) {
   Eigen::Isometry3d iso = Eigen::Isometry3d::Identity();    //初始化为单位矩阵
   iso.translation() << pose.x, pose.y, pose.z;

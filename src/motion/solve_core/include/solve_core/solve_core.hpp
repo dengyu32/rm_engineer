@@ -120,6 +120,7 @@ private:
   SolveCoreConfig config_;
   std::shared_ptr<error_code_utils::ErrorBus> error_bus_;
 
+  // NORMAL 模式默认使用 roll 采样模式；是否执行目标姿态采样由配置项控制。
   std::optional<SolveResponse> plan_normal(const SolveRequest &req, std::string &err);
   std::optional<SolveResponse> plan_cartesian(const SolveRequest &req, std::string &err);
   std::optional<SolveResponse> plan_joints(const SolveRequest &req, std::string &err);

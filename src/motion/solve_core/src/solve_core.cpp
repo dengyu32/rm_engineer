@@ -270,9 +270,7 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
   Eigen::Isometry3d target_iso = pose_to_isometry(req.target_pose);
 
   LimitPlannerOptions limit_opt;
-  limit_opt.sampling_mode = config_.limit_enable_target_pose_sampling
-                                ? SamplingMode::ROLL_SAMPLE
-                                : SamplingMode::NORMAL;
+  limit_opt.sampling_mode = SamplingMode::ROLL_SAMPLE;
   limit_opt.enable_target_pose_sampling = config_.limit_enable_target_pose_sampling;
   limit_opt.roll_samples = config_.limit_roll_samples;
   limit_opt.roll_range_rad = config_.limit_roll_range_rad;

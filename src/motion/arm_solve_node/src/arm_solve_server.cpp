@@ -586,9 +586,9 @@ bool ArmSolveServer::publishTrajectoryPoints(
       joint.velocity = (j < traj.points[i].velocities.size())
                            ? traj.points[i].velocities[j]
                            : 0.0;
-      //todo:
-      // 后续可将字段改为枚举值
-      // 
+      // todo:
+      //  后续可将字段改为枚举值
+      //
       joint.mode = "planned";
       cmd.joints.push_back(joint);
     }
@@ -598,7 +598,6 @@ bool ArmSolveServer::publishTrajectoryPoints(
     auto fb = std::make_shared<Move::Feedback>();
     fb->progress = static_cast<float>(i + 1) / traj.points.size();
     gh->publish_feedback(fb);
-
 
     // todo：可以改为绝对时间戳对齐
     if (i + 1 < traj.points.size()) {
