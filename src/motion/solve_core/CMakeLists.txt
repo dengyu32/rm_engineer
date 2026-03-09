@@ -5,7 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(ament_cmake REQUIRED)
-find_package(error_code_utils REQUIRED)
 find_package(log_utils REQUIRED)
 find_package(moveit_core REQUIRED)
 
@@ -24,7 +23,6 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 ament_target_dependencies(${PROJECT_NAME}
-  error_code_utils
   log_utils
   moveit_core
 )
@@ -42,6 +40,6 @@ install(DIRECTORY include/
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
-ament_export_dependencies(error_code_utils log_utils moveit_core)
+ament_export_dependencies(log_utils moveit_core)
 
 ament_package()

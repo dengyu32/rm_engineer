@@ -3,13 +3,13 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <sstream>
 #include <unordered_map>
 
 #include "log_utils/log.hpp"
 #include "solve_core/calculate_tools/wrap.hpp"
 #include "solve_core/planner/limit_planner.hpp"
 #include "solve_core/planner/straight_planner.hpp"
-#include "error_code_utils/app_error.hpp"
 
 #include <Eigen/Geometry>
 
@@ -22,6 +22,51 @@
 
 namespace solve_core {
 namespace {
+
+const char *to_string(SolveCore::SolveCode code) {
+  switch (code) {
+  case SolveCore::SolveCode::AdapterMissing:
+    return "AdapterMissing";
+  case SolveCore::SolveCode::RobotModelMissing:
+    return "RobotModelMissing";
+  case SolveCore::SolveCode::JointModelGroupMissing:
+    return "JointModelGroupMissing";
+  case SolveCore::SolveCode::IkSolverMissing:
+    return "IkSolverMissing";
+  case SolveCore::SolveCode::StartStateInvalid:
+    return "StartStateInvalid";
+  case SolveCore::SolveCode::InvalidRequest:
+    return "InvalidRequest";
+  case SolveCore::SolveCode::TargetSizeMismatch:
+    return "TargetSizeMismatch";
+  case SolveCore::SolveCode::JointStateMissing:
+    return "JointStateMissing";
+  case SolveCore::SolveCode::CollisionDetected:
+    return "CollisionDetected";
+  case SolveCore::SolveCode::JointLookupFailed:
+    return "JointLookupFailed";
+  case SolveCore::SolveCode::UnknownOption:
+    return "UnknownOption";
+  default:
+    return "Unknown";
+  }
+}
+
+std::string format_context(const std::map<std::string, std::string> &ctx) {
+  if (ctx.empty()) {
+    return "";
+  }
+  std::ostringstream oss;
+  bool first = true;
+  for (const auto &kv : ctx) {
+    if (!first) {
+      oss << ", ";
+    }
+    first = false;
+    oss << kv.first << "=" << kv.second;
+  }
+  return oss.str();
+}
 
 // _四元数转变换矩阵
 Eigen::Isometry3d pose_to_isometry(const Pose &pose) {
@@ -178,24 +223,24 @@ SolveCore::SolveCore(std::shared_ptr<MoveItAdapter> adapter,
   LOGI("[solve_core] logger init");
 }
 
-// 错误发布通道
-void SolveCore::set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus) {
-  error_bus_ = bus;
-}
-
-// 发布错误
-void SolveCore::publish_error(const error_code_utils::Error &err) const {
-  if (!error_bus_) {
+void SolveCore::publish_error(
+    SolveCode code, const std::string &message,
+    const std::map<std::string, std::string> &context) const {
+  const auto ctx = format_context(context);
+  if (ctx.empty()) {
+    LOGE("[solve_core][error][code={}][name={}] {}", static_cast<int>(code),
+         to_string(code), message);
     return;
   }
-  error_bus_->publish(err);
+  LOGE("[solve_core][error][code={}][name={}] {} [{}]", static_cast<int>(code),
+       to_string(code), message, ctx);
 }
 
 // 规划总入口
 std::optional<SolveResponse> SolveCore::plan(const SolveRequest &req, std::string &err) {
   if (!adapter_) {
     LOGE("[solve_core] MoveIt adapter not set");
-    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::AdapterMissing, "MoveIt adapter not set"));
+    publish_error(SolveCode::AdapterMissing, "MoveIt adapter not set");
     return std::nullopt;
   }
 
@@ -211,7 +256,7 @@ std::optional<SolveResponse> SolveCore::plan(const SolveRequest &req, std::strin
     return plan_joints(req,err);
   default:
     LOGE("[solve_core] Unknown planning option");
-    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::UnknownOption, "Unknown planning option"));
+    publish_error(SolveCode::UnknownOption, "Unknown planning option");
     return std::nullopt;
   }
 }
@@ -221,7 +266,7 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
   const auto robot_model = adapter_->robot_model();
   if (!robot_model) {
     LOGE("[solve_core] RobotModel is null");
-    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::RobotModelMissing, "RobotModel is null"));
+    publish_error(SolveCode::RobotModelMissing, "RobotModel is null");
     return std::nullopt;
   }
 
@@ -231,16 +276,16 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
   const auto *jmg = adapter_->joint_model_group(group_name);
   if (!jmg) {
     LOGE("[solve_core] JointModelGroup not found");
-    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::JointModelGroupMissing, "JointModelGroup not found",
-                             {{"group_name", group_name}}));
+    publish_error(SolveCode::JointModelGroupMissing, "JointModelGroup not found",
+                  {{"group_name", group_name}});
     return std::nullopt;
   }
 
   auto solver = jmg->getSolverInstance();
   if (!solver) {
     LOGE("[solve_core] IK solver missing");
-    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::IkSolverMissing, "IK solver missing",
-                             {{"group_name", group_name}}));
+    publish_error(SolveCode::IkSolverMissing, "IK solver missing",
+                  {{"group_name", group_name}});
     return std::nullopt;
   }
 
@@ -252,8 +297,8 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
   if (!start_state.satisfiesBounds(jmg)) {
     start_state.enforceBounds(jmg);
     LOGE("[solve_core] Start state out of bounds");
-    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::StartStateInvalid, "Start state out of bounds",
-                             {{"group_name", group_name}}));
+    publish_error(SolveCode::StartStateInvalid, "Start state out of bounds",
+                  {{"group_name", group_name}});
     return std::nullopt;
   }
 
@@ -327,10 +372,7 @@ SolveCore::plan_cartesian(const SolveRequest &req, std::string &err) {
   Eigen::Vector3d direction;
   if (!parse_direction_vector(req.target_direction, direction, err)) {
     LOGE("[solve_core] {}", err);
-    publish_error(error_code_utils::app::make_app_error(
-        error_code_utils::ErrorDomain::SOLVE,
-        error_code_utils::app::SolveCode::InvalidRequest,
-        err));
+    publish_error(SolveCode::InvalidRequest, err);
     return std::nullopt;
   }
 
@@ -364,7 +406,7 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
   const auto robot_model = adapter_->robot_model();
   if (!robot_model) {
     LOGE("[solve_core] RobotModel is null");
-    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::RobotModelMissing, "RobotModel is null"));
+    publish_error(SolveCode::RobotModelMissing, "RobotModel is null");
     return std::nullopt;
   }
   const std::string group_name = !req.group_name.empty()
@@ -373,8 +415,8 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
   const auto *jmg = adapter_->joint_model_group(group_name);
   if (!jmg) {
     LOGE("[solve_core] JointModelGroup not found");
-    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::JointModelGroupMissing, "JointModelGroup not found",
-                             {{"group_name", group_name}}));
+    publish_error(SolveCode::JointModelGroupMissing, "JointModelGroup not found",
+                  {{"group_name", group_name}});
     return std::nullopt;
   }
 
@@ -382,8 +424,8 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
   const std::size_t dof = group_joint_names.size();
   if (req.target_joints.size() < dof) {
     LOGE("[solve_core] Target joints size mismatch");
-    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::TargetSizeMismatch, "Target joints size mismatch",
-                             {{"group_name", group_name}}));
+    publish_error(SolveCode::TargetSizeMismatch, "Target joints size mismatch",
+                  {{"group_name", group_name}});
     return std::nullopt;
   }
 
@@ -391,8 +433,7 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
   start_state.setToDefaultValues();
   if (!fill_joint_state_require_all(req.current_joints, jmg, start_state, err)) {
     LOGE("[solve_core] {}", err);
-    publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::JointStateMissing, err,
-                             {{"group_name", group_name}}));
+    publish_error(SolveCode::JointStateMissing, err, {{"group_name", group_name}});
     return std::nullopt;
   }
   start_state.update();
@@ -416,8 +457,8 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
     auto it = start_joint_position.find(jn);
     if (it == start_joint_position.end()) {
       LOGE("[solve_core] Joint lookup failed");
-      publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::JointLookupFailed, "Joint lookup failed",
-                               {{"group_name", group_name}}));
+      publish_error(SolveCode::JointLookupFailed, "Joint lookup failed",
+                    {{"group_name", group_name}});
       return std::nullopt;
     }
     const double target_near = ikc::wrapToNearby(req.target_joints[i], it->second);
@@ -441,8 +482,8 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
       auto it = start_joint_position.find(jn);
       if (it == start_joint_position.end()) {
         LOGE("[solve_core] Joint lookup failed");
-        publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::JointLookupFailed, "Joint lookup failed",
-                                 {{"group_name", group_name}}));
+        publish_error(SolveCode::JointLookupFailed, "Joint lookup failed",
+                      {{"group_name", group_name}});
         return std::nullopt;
       }
       const double target_near = ikc::wrapToNearby(req.target_joints[i], it->second);
@@ -457,8 +498,8 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
       if (collision_err.empty())
         collision_err = "Self collision detected";
       LOGE("[solve_core] {}", collision_err);
-      publish_error(error_code_utils::app::make_app_error(error_code_utils::ErrorDomain::SOLVE, error_code_utils::app::SolveCode::CollisionDetected, collision_err,
-                               {{"group_name", group_name}}));
+      publish_error(SolveCode::CollisionDetected, collision_err,
+                    {{"group_name", group_name}});
       return std::nullopt;
     }
 

@@ -23,6 +23,7 @@ endif()
 # ----------------------------------------------------------------------------
 
 # 引入节点运行所需的 ROS 组件与消息包
+find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(log_utils REQUIRED)
@@ -33,8 +34,6 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(engineer_interfaces REQUIRED)
-find_package(error_code_utils REQUIRED)
-find_package(log_utils REQUIRED)
 
 # 通过 pkg-config 查询系统库
 find_package(PkgConfig REQUIRED)
@@ -84,7 +83,6 @@ ament_target_dependencies(${PROJECT_NAME}
   tf2_ros
   sensor_msgs
   engineer_interfaces
-  error_code_utils
 )
 
 # 注册组件，生成可执行入口

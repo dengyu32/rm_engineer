@@ -1,6 +1,5 @@
 // Fake system
 #include "fake_system/fake_system_node.hpp"
-#include "error_code_utils/app_error.hpp"
 
 // utils
 #include "log_utils/log.hpp"
@@ -17,6 +16,21 @@
 
 namespace fake_system {
 using namespace std::chrono_literals;
+
+namespace {
+enum class CommCode : int {
+  FakeJointCommandShort = 200,
+};
+
+const char *to_string(CommCode code) {
+  switch (code) {
+  case CommCode::FakeJointCommandShort:
+    return "FakeJointCommandShort";
+  default:
+    return "Unknown";
+  }
+}
+} // namespace
 
 // ============================================================================
 //  ctor
@@ -71,45 +85,6 @@ FakeSystemNode::FakeSystemNode(const rclcpp::NodeOptions &options)
       });
 
 
-  // 声明获取动态参数
-  this->declare_parameter<int>("fake_intent_id", 0);
-  int init_id = this->get_parameter("fake_intent_id").as_int();
-  init_id = std::clamp(init_id, 0, 255);
-  fake_intent_id_ = static_cast<uint8_t>(init_id);
-
-  // 参数动态回调
-  // dynamic param callback
-  param_callback_handle_ = this->add_on_set_parameters_callback(
-      [this](const std::vector<rclcpp::Parameter> &params) {
-        rcl_interfaces::msg::SetParametersResult result;
-        result.successful = true;
-        result.reason = "";
-
-        for (const auto &p : params) {
-          if (p.get_name() != "fake_intent_id") {
-            continue;
-          }
-
-          if (p.get_type() != rclcpp::ParameterType::PARAMETER_INTEGER) {
-            result.successful = false;
-            result.reason = "fake_intent_id must be integer";
-            return result;
-          }
-
-          const int v = p.as_int();
-          if (v < 0 || v > 255) {
-            result.successful = false;
-            result.reason = "fake_intent_id out of range [0,255]";
-            return result;
-          }
-
-          fake_intent_id_.store(static_cast<uint8_t>(v), std::memory_order_relaxed);
-          RCLCPP_INFO(logger_, "[fake_system] fake_intent_id set to %d", v);
-        }
-        return result;
-      });
-
-
   // ros init
   initRosInterfaces();
 
@@ -123,15 +98,10 @@ FakeSystemNode::FakeSystemNode(const rclcpp::NodeOptions &options)
   RCLCPP_INFO(logger_, "FAKE_SYSTEM_NODE START!!!"); // 与节点有关的日志还用ros日志
 }
 
-void FakeSystemNode::set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus) {
-  error_bus_ = bus;
-}
-
-void FakeSystemNode::publish_error(const error_code_utils::Error &err) const {
-  if (!error_bus_) {
-    return;
-  }
-  error_bus_->publish(err);
+void FakeSystemNode::publish_error(int code, const char *name,
+                                   const std::string &message) const {
+  RCLCPP_ERROR(logger_, "[fake_system][error][code=%d][name=%s] %s", code,
+               name ? name : "Unknown", message.c_str());
 }
 
 // ============================================================================
@@ -188,12 +158,11 @@ void FakeSystemNode::execute(engineer_interfaces::msg::Joints::SharedPtr msg) {
         now_tp - last_warn >= std::chrono::milliseconds(2000)) {  // 限制频率 2秒最多告警一次
       last_warn = now_tp;
       LOGW("[fake_system] joint_commands size={} < {}, fill defaults",msg->joints.size(), expected);      
-      publish_error(error_code_utils::app::make_app_error(
-          error_code_utils::ErrorDomain::COMM,
-          error_code_utils::app::CommCode::FakeJointCommandShort,
-          "joint_commands size smaller than expected",
-          {{"expected", std::to_string(expected)},
-           {"actual", std::to_string(msg->joints.size())}}));
+      publish_error(static_cast<int>(CommCode::FakeJointCommandShort),
+                    to_string(CommCode::FakeJointCommandShort),
+                    "joint_commands size smaller than expected expected=" +
+                        std::to_string(expected) +
+                        " actual=" + std::to_string(msg->joints.size()));
     }
   }
 }

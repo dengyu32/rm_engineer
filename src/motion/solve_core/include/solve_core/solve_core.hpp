@@ -1,12 +1,12 @@
 #pragma once
 
 #include <memory>
+#include <map>
 #include <optional>
 #include <string>
 #include <array>
 #include <vector>
 
-#include "error_code_utils/error_bus.hpp"
 #include "solve_core/config.hpp"
 
 namespace moveit::core {
@@ -109,23 +109,37 @@ public:
 // ============================================================================
 class SolveCore {
 public:
+  enum class SolveCode : int {
+    AdapterMissing = 100,
+    RobotModelMissing = 101,
+    JointModelGroupMissing = 102,
+    IkSolverMissing = 103,
+    StartStateInvalid = 104,
+    InvalidRequest = 105,
+    TargetSizeMismatch = 108,
+    JointStateMissing = 109,
+    CollisionDetected = 111,
+    JointLookupFailed = 112,
+    UnknownOption = 113,
+  };
+
   explicit SolveCore(std::shared_ptr<MoveItAdapter> adapter,
                      const SolveCoreConfig &config = SolveCoreConfig{});
 
   std::optional<SolveResponse> plan(const SolveRequest &req, std::string &err);
-  void set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus);
 
 private:
   std::shared_ptr<MoveItAdapter> adapter_;
   SolveCoreConfig config_;
-  std::shared_ptr<error_code_utils::ErrorBus> error_bus_;
 
   // NORMAL 模式默认使用 roll 采样模式；是否执行目标姿态采样由配置项控制。
   std::optional<SolveResponse> plan_normal(const SolveRequest &req, std::string &err);
   std::optional<SolveResponse> plan_cartesian(const SolveRequest &req, std::string &err);
   std::optional<SolveResponse> plan_joints(const SolveRequest &req, std::string &err);
 
-  void publish_error(const error_code_utils::Error &err) const;
+  void publish_error(SolveCode code,
+                     const std::string &message,
+                     const std::map<std::string, std::string> &context = {}) const;
 };
 
 } // namespace solve_core

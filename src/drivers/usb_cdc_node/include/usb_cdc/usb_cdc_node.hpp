@@ -4,7 +4,6 @@
 #include "usb_cdc/packet.hpp"
 #include "usb_cdc/usb_cdc_driver.hpp"
 #include "usb_cdc/config.hpp"
-#include "error_code_utils/error_bus.hpp"
 
 // ROS messages
 #include <engineer_interfaces/msg/gripper.hpp>
@@ -32,6 +31,7 @@
 // C++
 #include <atomic>
 #include <cstdint>
+#include <string>
 
 namespace usb_cdc {
 
@@ -61,7 +61,6 @@ public:
   //  Device control
   // -----------------------------------------------------------------------
   bool try_open_device();
-  void set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus);
 
 private:
   // -----------------------------------------------------------------------
@@ -86,7 +85,7 @@ private:
   void jointCommandCallback(const engineer_interfaces::msg::Joints::SharedPtr msg);
   void GripperCommandCallback(const engineer_interfaces::msg::Gripper::SharedPtr msg);
   void SlotCommandCallback(const engineer_interfaces::msg::Slots::SharedPtr msg);
-  void publish_error(const error_code_utils::Error &err) const;
+  void publish_error(int code, const char *name, const std::string &message) const;
 
   // Protocol
   DeviceParser parser_;
@@ -123,8 +122,6 @@ private:
 
   // Config
   UsbCdcConfig config_;
-
-  std::shared_ptr<error_code_utils::ErrorBus> error_bus_;
 };
 
 } // namespace usb_cdc
