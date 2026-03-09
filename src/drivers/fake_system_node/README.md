@@ -71,4 +71,3 @@ fake_system <- joint_commands <- arm_servo
 **依赖**
 - ROS2 Humble+
 - `engineer_interfaces`
-- `error_code_utils`

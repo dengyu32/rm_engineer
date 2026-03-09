@@ -1,6 +1,5 @@
 // USB CDC
 #include "usb_cdc/usb_cdc_node.hpp"
-#include "error_code_utils/app_error.hpp"
 #include "usb_cdc/packet.hpp"
 
 // uitlsws:
@@ -25,6 +24,30 @@
 namespace usb_cdc {
 
 using namespace std::chrono_literals;
+
+namespace {
+enum class CommCode : int {
+  UsbOpenFailed = 100,
+  UsbOpenException = 101,
+  UsbSendFailed = 102,
+  UsbPacketTooSmall = 103,
+};
+
+const char *to_string(CommCode code) {
+  switch (code) {
+  case CommCode::UsbOpenFailed:
+    return "UsbOpenFailed";
+  case CommCode::UsbOpenException:
+    return "UsbOpenException";
+  case CommCode::UsbSendFailed:
+    return "UsbSendFailed";
+  case CommCode::UsbPacketTooSmall:
+    return "UsbPacketTooSmall";
+  default:
+    return "Unknown";
+  }
+}
+} // namespace
 
 // ============================================================================
 //  ctor
@@ -94,15 +117,10 @@ void UsbCdcNode::initRosInterfaces() {
       std::bind(&UsbCdcNode::SlotCommandCallback, this, std::placeholders::_1));
 }
 
-void UsbCdcNode::set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus) {
-  error_bus_ = bus;
-}
-
-void UsbCdcNode::publish_error(const error_code_utils::Error &err) const {
-  if (!error_bus_) {
-    return;
-  }
-  error_bus_->publish(err);
+void UsbCdcNode::publish_error(int code, const char *name,
+                               const std::string &message) const {
+  RCLCPP_ERROR(logger_, "[usb_cdc][error][code=%d][name=%s] %s", code,
+               name ? name : "Unknown", message.c_str());
 }
 
 // ============================================================================
@@ -120,33 +138,27 @@ bool UsbCdcNode::try_open_device() { // catch + retry 策略
     }
     RCLCPP_WARN(this->get_logger(),
                 " [FAILED] usb driver open returned false ");
-    publish_error(error_code_utils::app::make_app_error(
-        error_code_utils::ErrorDomain::COMM,
-        error_code_utils::app::CommCode::UsbOpenFailed,
-        "usb driver open returned false"));
+    publish_error(static_cast<int>(CommCode::UsbOpenFailed),
+                  to_string(CommCode::UsbOpenFailed),
+                  "usb driver open returned false");
   } catch (const std::exception &e) {
     RCLCPP_ERROR(this->get_logger(),
                  " [FAILED] usb driver open exception: %s ",
                  e.what());
-    publish_error(error_code_utils::app::make_app_error(
-        error_code_utils::ErrorDomain::COMM,
-        error_code_utils::app::CommCode::UsbOpenException,
-        e.what()));
+    publish_error(static_cast<int>(CommCode::UsbOpenException),
+                  to_string(CommCode::UsbOpenException), e.what());
   } catch (...) {
     RCLCPP_ERROR(this->get_logger(),
                  " [FAILED] usb driver open unknown exception ");
-    publish_error(error_code_utils::app::make_app_error(
-        error_code_utils::ErrorDomain::COMM,
-        error_code_utils::app::CommCode::UsbOpenException,
-        "usb driver open unknown exception"));
+    publish_error(static_cast<int>(CommCode::UsbOpenException),
+                  to_string(CommCode::UsbOpenException),
+                  "usb driver open unknown exception");
   }
 
   RCLCPP_ERROR(this->get_logger(),
                " [FAILED] usb driver open failed ");
-  publish_error(error_code_utils::app::make_app_error(
-      error_code_utils::ErrorDomain::COMM,
-      error_code_utils::app::CommCode::UsbOpenFailed,
-      "usb driver open FAILED"));
+  publish_error(static_cast<int>(CommCode::UsbOpenFailed),
+                to_string(CommCode::UsbOpenFailed), "usb driver open FAILED");
   return false;
 }
 
@@ -160,12 +172,12 @@ void UsbCdcNode::engineer_handle_packet(const std::byte *data, size_t size) {
     RCLCPP_ERROR(this->get_logger(),
                  " [ERROR] Received packet too small, expected at least %zu, got %zu ",
                  sizeof(EngineerReceiveData), size);
-    publish_error(error_code_utils::app::make_app_error(
-        error_code_utils::ErrorDomain::COMM,
-        error_code_utils::app::CommCode::UsbPacketTooSmall,
-        "Received packet too small",
-        {{"expected_bytes", std::to_string(sizeof(EngineerReceiveData))},
-         {"actual_bytes", std::to_string(size)}}));
+    publish_error(
+        static_cast<int>(CommCode::UsbPacketTooSmall),
+        to_string(CommCode::UsbPacketTooSmall),
+        "Received packet too small expected_bytes=" +
+            std::to_string(sizeof(EngineerReceiveData)) +
+            " actual_bytes=" + std::to_string(size));
     return;
   }
   std::memcpy(&rx_data_, data, sizeof(EngineerReceiveData));
@@ -220,10 +232,8 @@ void UsbCdcNode::send_timer_callback() {
   if (!device_.send_data(buffer_, sizeof(EngineerTransmitData))) {
     RCLCPP_ERROR(this->get_logger(),
                  " [FAILED] faild to send data ");
-    publish_error(error_code_utils::app::make_app_error(
-        error_code_utils::ErrorDomain::COMM,
-        error_code_utils::app::CommCode::UsbSendFailed,
-        "FAILED to send data"));
+    publish_error(static_cast<int>(CommCode::UsbSendFailed),
+                  to_string(CommCode::UsbSendFailed), "FAILED to send data");
   }
 }
 

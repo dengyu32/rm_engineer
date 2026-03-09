@@ -33,7 +33,6 @@ find_package(rclcpp_components REQUIRED)
 find_package(engineer_bringup REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(error_code_utils REQUIRED)
 find_package(log_utils REQUIRED)
 
 # ----------------------------------------------------------------------------
@@ -57,7 +56,6 @@ ament_target_dependencies(${PROJECT_NAME}
   engineer_bringup
   engineer_interfaces
   sensor_msgs
-  error_code_utils
   log_utils
 )
 

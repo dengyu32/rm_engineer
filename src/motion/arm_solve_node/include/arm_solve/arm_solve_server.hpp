@@ -74,7 +74,6 @@ class ArmSolveServer : public rclcpp::Node {
 public:
   explicit ArmSolveServer(
       const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
-  void set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus);
 
 private:
   // Parameters
@@ -155,9 +154,7 @@ private:
     return (gh && gh->is_canceling()) || (ctx && ctx->cancel_requested.load());
   }
 
-  void publish_error(const error_code_utils::Error &err) const;
-
-  std::shared_ptr<error_code_utils::ErrorBus> error_bus_;
+  void publish_error(int code, const char *name, const std::string &message) const;
 };
 
 } // namespace arm_solve

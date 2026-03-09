@@ -9,7 +9,6 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>error_code_utils</depend>
   <depend>log_utils</depend>
   <depend>moveit_core</depend>
 

@@ -3,14 +3,12 @@
 // ROS2
 #include <rclcpp/rclcpp.hpp>
 
-// utils
-#include "error_code_utils/error_bus.hpp"
-
 // C++
 #include <array>
 #include <mutex>
 #include <vector>
 #include <atomic>
+#include <string>
 
 // ROS messages
 #include <engineer_interfaces/msg/intent.hpp>
@@ -40,7 +38,6 @@ public:
   //  Lifecycle
   // -----------------------------------------------------------------------
   explicit FakeSystemNode(const rclcpp::NodeOptions &options);
-  void set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus);
 
 private:
   // -----------------------------------------------------------------------
@@ -57,7 +54,7 @@ private:
   void intent_feedback_callback(const engineer_interfaces::msg::Intent::SharedPtr msg);
   void publish_timer_callback();
   void publish_slot_states_now();
-  void publish_error(const error_code_utils::Error &err) const;
+  void publish_error(int code, const char *name, const std::string &message) const;
 
   // Parameters / states
   FakeSystemConfig config_;
@@ -86,7 +83,5 @@ private:
   rclcpp::Subscription<engineer_interfaces::msg::Joints>::SharedPtr joint_cmd_sub_;
   rclcpp::Subscription<engineer_interfaces::msg::Gripper>::SharedPtr gripper_cmd_sub;
   rclcpp::Subscription<engineer_interfaces::msg::Slots>::SharedPtr slot_cmd_sub_;
-
-  std::shared_ptr<error_code_utils::ErrorBus> error_bus_;
 };
 } // namespace fake_system
