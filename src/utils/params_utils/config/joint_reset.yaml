@@ -1,0 +1,14 @@
+/**:
+  ros__parameters:
+    joint_count: 6
+    joint_names:
+      - "joint1"
+      - "joint2"
+      - "joint3"
+      - "joint4"
+      - "joint5"
+      - "joint6"
+    joint_states_topic: "/joint_states"
+    joint_states_custom_topic: "/joint_states_custom"
+    joint_states_verbose_topic: "/joint_states_verbose"
+    joint_cmd_topic: "/joint_commands"

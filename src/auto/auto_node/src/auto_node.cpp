@@ -7,19 +7,6 @@ namespace engineer_auto {
 
 using namespace task_step_library;
 
-AutoNodeConfig AutoNodeConfig::load(rclcpp::Node &node) {
-  AutoNodeConfig cfg;
-  auto declare_get = [&](const std::string &name, auto &value) {
-    node.declare_parameter(name, value);
-    node.get_parameter(name, value);
-  };
-
-  declare_get("intent_cmd_topic", cfg.intent_cmd_topic);
-  declare_get("intent_fb_topic", cfg.intent_fb_topic);
-  declare_get("update_period_ms", cfg.update_period_ms);
-  return cfg;
-}
-
 AutoNode::AutoNode(const rclcpp::NodeOptions &options)
     : rclcpp::Node("auto_node", options),
       config_(AutoNodeConfig::load(*this)),
@@ -36,6 +23,7 @@ AutoNode::AutoNode(const rclcpp::NodeOptions &options)
   timer_ = this->create_wall_timer(std::chrono::milliseconds(config_.update_period_ms),
                                    std::bind(&AutoNode::tick, this));
 
+  RCLCPP_INFO(logger_, "\n%s", config_.summary().c_str());
   publishFeedback(TaskId::IDLE, TaskFinishCode::Running);
   RCLCPP_INFO(logger_, "[AUTO_NODE] started");
 }

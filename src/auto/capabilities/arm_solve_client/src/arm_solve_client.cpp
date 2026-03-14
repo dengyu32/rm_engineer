@@ -5,18 +5,10 @@
 namespace engineer_auto::arm_solve_client {
 using namespace task_step_library;
 
-ArmSolveClientConfig ArmSolveClientConfig::load(rclcpp::Node &node) {
-  ArmSolveClientConfig cfg;
-  node.declare_parameter("arm_action_name", cfg.action_name);
-  node.declare_parameter("arm_server_wait_ms", cfg.server_wait_ms);
-  node.get_parameter("arm_action_name", cfg.action_name);
-  node.get_parameter("arm_server_wait_ms", cfg.server_wait_ms);
-  return cfg;
-}
-
 ArmSolveClient::ArmSolveClient(rclcpp::Node &node,
                                const ArmSolveClientConfig &config)
     : node_(node), logger_(node.get_logger()), config_(config) {
+  RCLCPP_INFO(logger_, "\n%s", config_.summary().c_str());
   action_client_ = rclcpp_action::create_client<Move>(&node_, config_.action_name);
 }
 

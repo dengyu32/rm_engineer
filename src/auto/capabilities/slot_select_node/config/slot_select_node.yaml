@@ -1,0 +1,5 @@
+/**:
+  ros__parameters:
+    slot_state_topic: "/slot_states"
+    slot0_occupied: false
+    slot1_occupied: false

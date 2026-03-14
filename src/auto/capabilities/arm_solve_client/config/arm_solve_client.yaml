@@ -1,0 +1,4 @@
+/**:
+  ros__parameters:
+    arm_action_name: "move_arm"
+    arm_server_wait_ms: 200

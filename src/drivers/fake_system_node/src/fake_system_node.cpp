@@ -95,6 +95,7 @@ FakeSystemNode::FakeSystemNode(const rclcpp::NodeOptions &options)
   // log
   log_utils::init_console_logger("core");
   LOGI("\n{}",config_.summary());
+  RCLCPP_INFO(logger_, "\n%s", config_.summary().c_str());
   RCLCPP_INFO(logger_, "FAKE_SYSTEM_NODE START!!!"); // 与节点有关的日志还用ros日志
 }
 

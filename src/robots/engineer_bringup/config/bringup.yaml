@@ -1,6 +1,5 @@
 arm_solve_server:
   ros__parameters:
-    group_name: engineer_arm
     goal_position_tolerance: 0.001
     goal_orientation_tolerance: 0.001
     planning_time: 2.0

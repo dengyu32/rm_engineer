@@ -1,0 +1,5 @@
+/**:
+  ros__parameters:
+    gripper_cmd_topic: "/gripper_commands"
+    gripper_open_position: 0.0
+    gripper_close_position: 0.03

@@ -59,6 +59,7 @@ def generate_launch_description():
     # 自定义包
     pkg_config      = get_package_share_directory("engineer_moveit_config")
     bringup_config  = get_package_share_directory("engineer_bringup")
+    params_utils_share = get_package_share_directory("params_utils")
     arm_servo_config = get_package_share_directory("arm_servo")
     top_hfsm_config = get_package_share_directory("top_hfsm")
     
@@ -72,6 +73,8 @@ def generate_launch_description():
     # initial_positions_path  = os.path.join(pkg_config, "config", "initial_positions.yaml")
     ompl_path               = os.path.join(bringup_config, "config", "ompl_planning.yaml")
     bringup_config_path     = os.path.join(bringup_config, "config", "bringup.yaml")
+    joint_reset_path        = os.path.join(params_utils_share, "config", "joint_reset.yaml")
+    moveit_reset_path       = os.path.join(params_utils_share, "config", "moveit_reset.yaml")
     
     # 一些配置参数
     # initial_positions = load_yaml(initial_positions_path)["initial_positions"]
@@ -115,7 +118,7 @@ def generate_launch_description():
         executable="arm_solve_server",
         name="arm_solve_server",
         output="screen",
-        parameters=common_params + [bringup_config_path],
+        parameters=common_params + [joint_reset_path, moveit_reset_path, bringup_config_path],
     )
     
     # top_hfsm launch 文件（多线程组件容器）

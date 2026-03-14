@@ -1,0 +1,4 @@
+/**:
+  ros__parameters:
+    vision_target_topic: "/vision/target"
+    vision_max_data_age_ms: 1000

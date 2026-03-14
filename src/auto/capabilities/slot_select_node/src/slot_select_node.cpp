@@ -4,19 +4,9 @@
 
 namespace engineer_auto::slot_select_node {
 
-SlotSelectConfig SlotSelectConfig::load(rclcpp::Node &node) {
-  SlotSelectConfig cfg;
-  node.declare_parameter("slot_state_topic", cfg.slot_state_topic);
-  node.declare_parameter("slot0_occupied", cfg.slot0_occupied);
-  node.declare_parameter("slot1_occupied", cfg.slot1_occupied);
-  node.get_parameter("slot_state_topic", cfg.slot_state_topic);
-  node.get_parameter("slot0_occupied", cfg.slot0_occupied);
-  node.get_parameter("slot1_occupied", cfg.slot1_occupied);
-  return cfg;
-}
-
 SlotSelectNode::SlotSelectNode(rclcpp::Node &node, const SlotSelectConfig &config)
     : node_(node), logger_(node.get_logger()), config_(config) {
+  RCLCPP_INFO(logger_, "\n%s", config_.summary().c_str());
   {
     std::scoped_lock lock(mutex_);
     slots_[0] = config_.slot0_occupied;

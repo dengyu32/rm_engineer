@@ -4,17 +4,9 @@
 
 namespace engineer_auto::vision_detect_client {
 
-VisionDetectClientConfig VisionDetectClientConfig::load(rclcpp::Node &node) {
-  VisionDetectClientConfig cfg;
-  node.declare_parameter("vision_target_topic", cfg.vision_topic);
-  node.declare_parameter("vision_max_data_age_ms", cfg.max_data_age_ms);
-  node.get_parameter("vision_target_topic", cfg.vision_topic);
-  node.get_parameter("vision_max_data_age_ms", cfg.max_data_age_ms);
-  return cfg;
-}
-
 VisionDetectClient::VisionDetectClient(rclcpp::Node &node)
     : node_(node), logger_(node.get_logger()), config_(VisionDetectClientConfig::load(node)) {
+  RCLCPP_INFO(logger_, "\n%s", config_.summary().c_str());
   target_sub_ = node_.create_subscription<engineer_interfaces::msg::Target>(
       config_.vision_topic, rclcpp::QoS(10),
       std::bind(&VisionDetectClient::onTarget, this, std::placeholders::_1));

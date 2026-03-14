@@ -5,6 +5,7 @@
 //< C++
 #include <atomic>
 #include <memory>
+#include <sstream>
 #include <string>
 
 //< ROS 2
@@ -17,6 +18,7 @@
 #include "step_executor/step_executor.hpp"
 #include "task_orchestrator/task_orchestrator.hpp"
 #include "task_step_library/task.hpp"
+#include "params_utils/param_utils.hpp"
 
 namespace engineer_auto {
 
@@ -28,12 +30,32 @@ namespace engineer_auto {
 //  - update_period_ms: 定时器周期，用于定期检查和执行任务
 // ============================================================================
 
-struct AutoNodeConfig {
-  std::string intent_cmd_topic{"/hfsm/intent_commands"};
-  std::string intent_fb_topic{"/hfsm/intent_feedback"};
+struct AutoNodeConfig : public params_utils::IntentResetConfig {
   int update_period_ms{20};
 
-  static AutoNodeConfig load(rclcpp::Node &node);
+  static AutoNodeConfig load(rclcpp::Node &node) {
+    AutoNodeConfig cfg;
+    params_utils::IntentResetConfig::Load(node, cfg);
+    params_utils::detail::declare_get_checked(
+        node, "update_period_ms", cfg.update_period_ms,
+        [](int v) { return v > 0; },
+        "must be > 0");
+    cfg.validate();
+    return cfg;
+  }
+
+  void validate() const { params_utils::IntentResetConfig::validate(); }
+
+  std::string summary() const {
+    std::ostringstream oss;
+    oss << "=============================================================================\n";
+    oss << " AutoNode Configuration\n\n";
+    oss << " Timing:\n";
+    oss << "   - update_period_ms     : " << update_period_ms << "\n\n";
+    oss << params_utils::IntentResetConfig::summary();
+    oss << "=============================================================================\n";
+    return oss.str();
+  }
 };
 
 // ============================================================================

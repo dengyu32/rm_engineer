@@ -1,0 +1,3 @@
+/**:
+  ros__parameters:
+    gripper_publish_period_ms: 20
