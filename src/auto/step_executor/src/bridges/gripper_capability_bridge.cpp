@@ -3,7 +3,7 @@
 namespace step_executor {
 
 GripperCapabilityBridge::GripperCapabilityBridge(rclcpp::Node &node)
-    : node_(node, engineer_auto::gripper_control_node::GripperControlConfig::load(node)) {}
+    : node_(node, engineer_auto::gripper_control_node::GripperPresetConfig::load(node)) {}
 
 BridgeResult
 GripperCapabilityBridge::runGripperStep(const task_step_library::Step &step,

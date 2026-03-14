@@ -28,19 +28,26 @@ def generate_launch_description():
     robot_description = {'robot_description': load_xacro(urdf_path)}
     robot_description_semantic = {'robot_description_semantic': load_file(srdf_path)}
 
+    params_utils_share = get_package_share_directory('params_utils')
+    intent_reset = os.path.join(params_utils_share, 'config', 'intent_reset.yaml')
+    joint_reset = os.path.join(params_utils_share, 'config', 'joint_reset.yaml')
+    moveit_reset = os.path.join(params_utils_share, 'config', 'moveit_reset.yaml')
+    teleop_config = os.path.join(
+        get_package_share_directory('teleop_node'), 'config', 'teleop_node.yaml')
+
     return LaunchDescription([
         Node(
             package='teleop_node',
             executable='teleop_node',
             name='teleop_node',
             output='screen',
-            parameters=[{
-                'joint_states_custom_topic': '/joint_states_custom',
-                'joint_states_verbose_topic': '/joint_states_verbose',
-                'joint_cmd_topic': '/joint_commands',
-                'intent_cmd_topic': '/hfsm/intent_commands',
-                'teleop_intent_id': 11,
-                'group_name': 'engineer_arm',
-            }, robot_description, robot_description_semantic],
+            parameters=[
+                intent_reset,
+                joint_reset,
+                moveit_reset,
+                teleop_config,
+                robot_description,
+                robot_description_semantic,
+            ],
         ),
     ])

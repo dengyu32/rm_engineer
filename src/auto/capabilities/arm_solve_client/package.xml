@@ -11,6 +11,7 @@
 
   <depend>rclcpp</depend>
   <depend>rclcpp_action</depend>
+  <depend>params_utils</depend>
   <depend>engineer_interfaces</depend>
   <depend>task_step_library</depend>
 

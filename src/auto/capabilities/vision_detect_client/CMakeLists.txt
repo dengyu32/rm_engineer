@@ -10,6 +10,7 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(params_utils REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
@@ -25,6 +26,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 
 ament_target_dependencies(${PROJECT_NAME}
   rclcpp
+  params_utils
   engineer_interfaces
   geometry_msgs
 )
@@ -36,9 +38,10 @@ install(TARGETS ${PROJECT_NAME}
   RUNTIME DESTINATION bin
 )
 install(DIRECTORY include/ DESTINATION include/)
+install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/)
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
-ament_export_dependencies(rclcpp engineer_interfaces geometry_msgs)
+ament_export_dependencies(rclcpp params_utils engineer_interfaces geometry_msgs)
 
 ament_package()

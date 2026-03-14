@@ -27,7 +27,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(log_utils REQUIRED)
-find_package(engineer_bringup REQUIRED)
+find_package(params_utils REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -77,7 +77,7 @@ ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   rclcpp_components
   log_utils
-  engineer_bringup
+  params_utils
   std_msgs
   std_srvs
   tf2_ros

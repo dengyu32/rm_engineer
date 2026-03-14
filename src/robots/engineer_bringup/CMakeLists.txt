@@ -31,13 +31,8 @@ install(DIRECTORY config launch
   DESTINATION share/${PROJECT_NAME}
 )
 
-# 安装并导出头文件
-install(DIRECTORY include/
-  DESTINATION include
-)
-
 ament_export_include_directories(include)
-ament_export_dependencies(rclcpp)
+ament_export_dependencies(rclcpp params_utils)
 
 # 输出包元数据
 ament_package()

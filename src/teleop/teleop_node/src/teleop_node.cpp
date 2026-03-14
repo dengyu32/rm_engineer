@@ -11,18 +11,15 @@ namespace engineer_teleop {
 //  ctor
 // ============================================================================
 
-TeleopNode::TeleopNode() : Node("teleop_node") {
-  // 读取参数
-  custom_topic_ = declare_parameter<std::string>("joint_states_custom_topic", "/joint_states_custom");
-  verbose_topic_ = declare_parameter<std::string>("joint_states_verbose_topic", "/joint_states_verbose");
-  output_topic_ = declare_parameter<std::string>("joint_cmd_topic", "/joint_commands");
-  intent_cmd_topic_ = declare_parameter<std::string>("intent_cmd_topic", "/hfsm/intent_commands");
-  group_name_ = declare_parameter<std::string>("group_name", "engineer_arm");
-  deadband_rad_ = declare_parameter<double>("command_deadband_rad", 1e-4);
-  teleop_intent_id_ = static_cast<uint8_t>(declare_parameter<int>("teleop_intent_id", 11));
-  joint_names_ = declare_parameter<std::vector<std::string>>(
-      "joint_names",
-      std::vector<std::string>{"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"});
+TeleopNode::TeleopNode() : Node("teleop_node"), config_(TeleopConfig::load(*this)) {
+  custom_topic_ = config_.joint_states_custom_topic;
+  verbose_topic_ = config_.joint_states_verbose_topic;
+  output_topic_ = config_.joint_cmd_topic;
+  intent_cmd_topic_ = config_.intent_cmd_topic;
+  group_name_ = config_.group_name;
+  deadband_rad_ = config_.deadband_rad;
+  teleop_intent_id_ = static_cast<uint8_t>(config_.teleop_intent_id);
+  joint_names_ = config_.joint_names;
 
   // 状态初始化
   current_joints_.assign(joint_names_.size(), 0.0);
@@ -45,6 +42,7 @@ TeleopNode::TeleopNode() : Node("teleop_node") {
       verbose_topic_, rclcpp::QoS(10),
       std::bind(&TeleopNode::verboseCallback, this, std::placeholders::_1));
 
+  RCLCPP_INFO(get_logger(), "\n%s", config_.summary().c_str());
   RCLCPP_INFO(get_logger(),
               "Guarding intent=%s (teleop=%u), %s + %s -> %s (group=%s)",
               intent_cmd_topic_.c_str(),
@@ -169,4 +167,3 @@ int main(int argc, char **argv) {
   rclcpp::shutdown();
   return 0;
 }
-

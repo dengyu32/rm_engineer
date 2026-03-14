@@ -11,8 +11,14 @@ import os
 # ----------------------------------------------------------------------------
 def generate_launch_description():
 
+    params_utils_share = get_package_share_directory("params_utils")
+    joint_reset = os.path.join(params_utils_share, "config", "joint_reset.yaml")
+    intent_reset = os.path.join(params_utils_share, "config", "intent_reset.yaml")
+    gripper_reset = os.path.join(params_utils_share, "config", "gripper_reset.yaml")
+
     config_path = os.path.join(
         get_package_share_directory("usb_cdc"),
+        "config",
         "usb_cdc_node.yaml",
     )
 
@@ -23,7 +29,7 @@ def generate_launch_description():
         package="usb_cdc",
         executable="usb_cdc_node",
         output="screen",
-        parameters=[config_path],
+        parameters=[joint_reset, intent_reset, gripper_reset, config_path],
     )
     
     # -------------------------------

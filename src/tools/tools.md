@@ -19,5 +19,9 @@
 ros2 run ee_path_node ee_path_node
 ros2 service call /clear_ee_path std_srvs/srv/Empty
 
+2. object_load
+
+
+
 #### 其他
 暂无

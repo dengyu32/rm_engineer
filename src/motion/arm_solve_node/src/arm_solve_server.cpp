@@ -299,7 +299,7 @@ ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions &options)
   // 订阅 verbose 关节状态，记录规划起点
   joint_states_verbose_sub_ =
       this->create_subscription<engineer_interfaces::msg::Joints>(
-          config_.joint_states_topic, rclcpp::QoS(10),
+          config_.joint_states_verbose_topic, rclcpp::QoS(10),
           std::bind(&ArmSolveServer::jointCallBack, this,
                     std::placeholders::_1));
 
