@@ -37,9 +37,7 @@ find_package(moveit_core REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
-find_package(param_utils REQUIRED)
 find_package(solve_core REQUIRED)
-find_package(error_code_utils REQUIRED)
 
 # ----------------------------------------------------------------------------
 #  构建库和可执行文件
@@ -69,9 +67,7 @@ ament_target_dependencies(${PROJECT_NAME}
   tf2
   tf2_eigen
   tf2_geometry_msgs
-  param_utils
   solve_core
-  error_code_utils
 )
 
 # 注册组件并生成可执行入口

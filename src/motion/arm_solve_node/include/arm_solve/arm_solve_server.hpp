@@ -7,7 +7,6 @@
 #include <array>
 
 // Error utils
-#include "error_code_utils/error_bus.hpp"
 
 // ROS2
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -30,6 +29,7 @@
 #include "arm_solve/config.hpp"
 #include "solve_core/solve_core.hpp"
 
+
 namespace arm_solve {
 
 // ============================================================================
@@ -45,6 +45,7 @@ struct GoalContext {
   solve_core::PlanOption option;
 
   geometry_msgs::msg::PoseStamped target_pose;
+  std::array<double, 3> target_vector{{0.0, 0.0, 0.0}};
   std::array<float, 6> target_joints{{0.f, 0.f, 0.f, 0.f, 0.f, 0.f}};
 
   // preempt
@@ -73,11 +74,11 @@ class ArmSolveServer : public rclcpp::Node {
 public:
   explicit ArmSolveServer(
       const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
-  void set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus);
 
 private:
   // Parameters
   ArmSolveConfig config_;
+  solve_core::SolveCoreConfig solve_core_config_;
   rclcpp::Time last_plan_time_;
 
   // ROS interfaces
@@ -98,9 +99,9 @@ private:
   std::mutex current_joints_mutex_;
 
   // 当前活跃 goal（用于 cancel / preempt）
-  std::mutex active_mtx_;
-  std::weak_ptr<GoalHandleMove> active_goal_handle_;
-  std::shared_ptr<GoalContext> active_ctx_;
+  std::mutex active_mtx_; // 保护 active_goal_handle_ 和 active_ctx_
+  std::weak_ptr<GoalHandleMove> active_goal_handle_;  //GoalHandleMove用在客户端向服务端发送请求
+  std::shared_ptr<GoalContext> active_ctx_;   //GoalContext用在服务端处理每个goal的上下文
 
   // -----------------------------------------------------------------------
   //  Init / utils
@@ -116,7 +117,8 @@ private:
 
   bool planTrajectory(const std::shared_ptr<GoalContext> &ctx,
                       solve_core::Trajectory &out_traj,
-                      std::string &err);
+                      std::string &err,
+                      int &err_code);
 
   // -----------------------------------------------------------------------
   //  Action callbacks
@@ -140,7 +142,8 @@ private:
 
   bool publishTrajectoryPoints(const std::shared_ptr<GoalHandleMove> gh,
                                const std::shared_ptr<GoalContext> &ctx,
-                               std::string &err);
+                               std::string &err,
+                               int &err_code);
 
   // -----------------------------------------------------------------------
   //  Helper
@@ -151,9 +154,7 @@ private:
     return (gh && gh->is_canceling()) || (ctx && ctx->cancel_requested.load());
   }
 
-  void publish_error(const error_code_utils::Error &err) const;
-
-  std::shared_ptr<error_code_utils::ErrorBus> error_bus_;
+  void publish_error(int code, const char *name, const std::string &message) const;
 };
 
 } // namespace arm_solve

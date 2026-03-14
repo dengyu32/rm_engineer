@@ -35,7 +35,7 @@ find_package(ament_cmake REQUIRED)
 
 # 安装机器人描述资源
 install(
-  DIRECTORY urdf meshes 
+  DIRECTORY urdf meshes collision_meshes dae collision_dae
   DESTINATION share/${PROJECT_NAME}
 )
 

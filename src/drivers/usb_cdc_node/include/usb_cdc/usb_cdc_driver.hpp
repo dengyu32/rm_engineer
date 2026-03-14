@@ -12,6 +12,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 
 // Libusb
@@ -45,6 +46,8 @@ public:
   bool open(uint16_t vid, uint16_t pid = 0);
   bool send_data(uint8_t *data, std::size_t size);
   void handle_events();
+  bool is_open() const;
+  void request_reconnect();
 
 private:
   struct TransmitBuffer;
@@ -127,7 +130,9 @@ public:
   // -----------------------------------------------------------------------
   //  Lifecycle
   // -----------------------------------------------------------------------
-  explicit Impl(DeviceParser &parser) : device_parser_(parser) {}
+  explicit Impl(DeviceParser &parser) : device_parser_(parser) {
+    handling_events_ = true;
+  }
 
   ~Impl() {
     handling_events_ = false;
@@ -142,6 +147,8 @@ public:
   bool open(uint16_t vid, uint16_t pid = 0);
   void process_once();
   bool sync_send(uint8_t *data, std::size_t size, unsigned tout_ms = 500);
+  bool is_open() const;
+  void request_reconnect();
 
   // -----------------------------------------------------------------------
   //  Hot-plug callbacks
@@ -172,7 +179,12 @@ public:
 
   std::atomic_bool handling_events_{false};
   std::atomic_bool disconnected_{false};
+  std::atomic_bool hotplug_arrived_{false};
+  std::atomic_bool rx_transfer_done_{false};
   bool first_rx_{true};
+  uint16_t reconnect_vid_{VID};
+  uint16_t reconnect_pid_{0};
+  mutable std::mutex io_mutex_;
 };
 
 } // namespace usb_cdc

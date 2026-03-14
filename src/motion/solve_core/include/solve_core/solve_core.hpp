@@ -1,13 +1,13 @@
 #pragma once
 
 #include <memory>
+#include <map>
 #include <optional>
 #include <string>
+#include <array>
 #include <vector>
 
-#include "error_code_utils/error_bus.hpp"
-
-#include <rclcpp/rclcpp.hpp>
+#include "solve_core/config.hpp"
 
 namespace moveit::core {
 class RobotModel;
@@ -20,6 +20,15 @@ namespace solve_core {
 // ============================================================================
 //  Basic data types (ROS-agnostic)
 // ============================================================================
+struct PlannerConfigs {
+  double goal_position_tolerance{1e-3};
+  double goal_orientation_tolerance{1e-3};
+  double planning_time{2.0};
+  int num_planning_attempts{5};
+  double max_velocity_scaling{0.6};
+  double max_acc_scaling{0.6};
+};
+
 struct Pose {
   double x{0.0};
   double y{0.0};
@@ -35,14 +44,7 @@ struct JointState {
   std::vector<double> positions;
 };
 
-struct PlannerOptions {
-  double goal_position_tolerance{1e-3};
-  double goal_orientation_tolerance{1e-3};
-  double planning_time{2.0};
-  int num_planning_attempts{5};
-  double max_velocity_scaling{0.6};
-  double max_acc_scaling{0.6};
-};
+
 
 enum class PlanOption {
   NORMAL = 0,
@@ -53,9 +55,9 @@ enum class PlanOption {
 struct SolveRequest {
   PlanOption option{PlanOption::NORMAL};
   Pose target_pose{};
+  std::array<double, 3> target_vector{{0.0, 0.0, 0.0}};
   std::vector<double> target_joints;
   JointState current_joints;
-  PlannerOptions planner;
   std::string group_name;
   std::string ee_link;
 };
@@ -73,7 +75,7 @@ struct Trajectory {
 
 struct SolveResponse {
   Trajectory trajectory;
-  std::vector<std::vector<double>> joint_path;
+  // std::vector<std::vector<double>> joint_path;
 };
 
 // ============================================================================
@@ -94,11 +96,20 @@ public:
   virtual std::optional<Trajectory> plan_to_joint_target(
       const std::vector<std::string> &joint_names,
       const std::vector<double> &joint_values,
-      const PlannerOptions &options) = 0;
+      const PlannerConfigs &options) = 0;
 
   virtual bool check_self_collision(
       const moveit::core::RobotState &state,
       const std::string &group_name,
+      std::string &err) const = 0;
+
+  // Time-parameterize an existing joint trajectory without changing path.
+  virtual bool time_parameterize_trajectory(
+      const moveit::core::RobotState &start_state,
+      const std::string &group_name,
+      Trajectory &traj,
+      double velocity_scaling,
+      double accel_scaling,
       std::string &err) const = 0;
 };
 
@@ -107,21 +118,37 @@ public:
 // ============================================================================
 class SolveCore {
 public:
-  explicit SolveCore(std::shared_ptr<MoveItAdapter> adapter);
+  enum class SolveCode : int {
+    AdapterMissing = 100,
+    RobotModelMissing = 101,
+    JointModelGroupMissing = 102,
+    IkSolverMissing = 103,
+    StartStateInvalid = 104,
+    InvalidRequest = 105,
+    TargetSizeMismatch = 108,
+    JointStateMissing = 109,
+    CollisionDetected = 111,
+    JointLookupFailed = 112,
+    UnknownOption = 113,
+  };
 
-  std::optional<SolveResponse> plan(const SolveRequest &req);
-  void set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus);
+  explicit SolveCore(std::shared_ptr<MoveItAdapter> adapter,
+                     const SolveCoreConfig &config = SolveCoreConfig{});
+
+  std::optional<SolveResponse> plan(const SolveRequest &req, std::string &err);
 
 private:
   std::shared_ptr<MoveItAdapter> adapter_;
-  std::shared_ptr<error_code_utils::ErrorBus> error_bus_;
-  rclcpp::Logger logger_{rclcpp::get_logger("solve_core")};
+  SolveCoreConfig config_;
 
-  std::optional<SolveResponse> plan_normal(const SolveRequest &req);
-  std::optional<SolveResponse> plan_cartesian(const SolveRequest &req);
-  std::optional<SolveResponse> plan_joints(const SolveRequest &req);
+  // NORMAL 模式默认使用 roll 采样模式；是否执行目标姿态采样由配置项控制。
+  std::optional<SolveResponse> plan_normal(const SolveRequest &req, std::string &err);
+  std::optional<SolveResponse> plan_cartesian(const SolveRequest &req, std::string &err);
+  std::optional<SolveResponse> plan_joints(const SolveRequest &req, std::string &err);
 
-  void publish_error(const error_code_utils::Error &err) const;
+  void publish_error(SolveCode code,
+                     const std::string &message,
+                     const std::map<std::string, std::string> &context = {}) const;
 };
 
 } // namespace solve_core

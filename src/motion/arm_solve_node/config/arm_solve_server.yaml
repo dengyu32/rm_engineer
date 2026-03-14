@@ -1,17 +1,37 @@
 arm_solve_action_server:
   ros__parameters:
     group_name: engineer_arm
-    goal_position_tolerance: 0.001
-    goal_orientation_tolerance: 0.001
-    planning_time: 2.0
-    num_planning_attempts: 5
 
     arm_action_name: move_arm
     joint_states_topic: /joint_states_verbose
     joint_cmd_topic: /joint_commands
 
+    late_init_delay_ms: 10
+    plan_min_interval_ms: 0
+
+    # SolveCore tunables
+    goal_position_tolerance: 0.001
+    goal_orientation_tolerance: 0.001
+    planning_time: 2.0
+    num_planning_attempts: 5
     max_velocity_scaling: 0.6
     max_acc_scaling: 0.6
 
-    late_init_delay_ms: 10
-    plan_min_interval_ms: 0
+    limit_enable_target_pose_sampling: true
+    limit_roll_samples: 5
+    limit_roll_range_rad: 0.35
+    limit_top_k_after_ik: 3
+    limit_orientation_weight: 1.0
+    limit_ik_distance_weight: 1.0
+    limit_joint_motion_weight: 1.0
+
+    cartesian_num_waypoints: 15
+    cartesian_use_directional_sampling: true
+    cartesian_sample_step_m: 0.005
+
+    joints_max_step_rad: 0.05
+
+    straight_cost_continuity_weight: 0.8
+    straight_cost_condition_weight: 0.1
+    straight_cost_hard_condition_threshold: 2000.0
+    straight_cost_hard_penalty: 10000.0

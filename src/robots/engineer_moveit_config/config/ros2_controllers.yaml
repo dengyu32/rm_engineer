@@ -24,16 +24,14 @@ engineer_arm_controller:
       - joint5
       - joint6
     command_interfaces:
-      - position
-      - velocity
+      []
     state_interfaces:
-      - position
+      []
 engineer_hand_controller:
   ros__parameters:
     joints:
       - left_finger_joint
     command_interfaces:
-      - position
-      - velocity
+      []
     state_interfaces:
-      - position
+      []

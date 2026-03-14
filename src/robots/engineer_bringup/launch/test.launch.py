@@ -10,7 +10,7 @@ def generate_launch_description():
     
     robot_name = "engineer"
     description_package='engineer_moveit_config'
-    description_file='engineer_v3.urdf.xacro'
+    description_file='engineer_v4.urdf.xacro'
     
         # ros2_control using FakeSystem as hardware
     ros2_controllers_path = os.path.join(
@@ -40,7 +40,7 @@ def generate_launch_description():
 
     # 加载moveit配置
     moveit_config = (MoveItConfigsBuilder(robot_name)
-    .robot_description(file_path="config/engineer_v3.urdf.xacro")
+    .robot_description(file_path="config/engineer_v4.urdf.xacro")
     .trajectory_execution(file_path="config/moveit_controllers.yaml")
     .planning_pipelines(
         pipelines=["ompl", "chomp", "pilz_industrial_motion_planner"]
@@ -53,14 +53,6 @@ def generate_launch_description():
         output="screen",
         parameters=[moveit_config.to_dict()],
         arguments=["--ros-args", "--log-level", "info"],
-    )
-    
-    arm_servo_node = Node(
-        package="arm_solve",
-        executable="arm_solve_node",
-        name="arm_solve_node",
-        output="screen",
-        parameters=[robot_description],
     )
     
     rviz_node = Node(

@@ -5,11 +5,17 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(ament_cmake REQUIRED)
-find_package(error_code_utils REQUIRED)
+find_package(log_utils REQUIRED)
 find_package(moveit_core REQUIRED)
-find_package(rclcpp REQUIRED)
 
-add_library(${PROJECT_NAME} SHARED src/solve_core.cpp)
+add_library(${PROJECT_NAME} SHARED
+  src/solve_core.cpp
+  src/calculate_tools/cost_func.cpp
+  src/calculate_tools/hybrid_ik.cpp
+  src/calculate_tools/sample.cpp
+  src/planner/straight_planner.cpp
+  src/planner/limit_planner.cpp
+)
 
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -17,9 +23,8 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 ament_target_dependencies(${PROJECT_NAME}
-  error_code_utils
+  log_utils
   moveit_core
-  rclcpp
 )
 
 install(TARGETS ${PROJECT_NAME}
@@ -35,6 +40,6 @@ install(DIRECTORY include/
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
-ament_export_dependencies(error_code_utils moveit_core rclcpp)
+ament_export_dependencies(log_utils moveit_core)
 
 ament_package()

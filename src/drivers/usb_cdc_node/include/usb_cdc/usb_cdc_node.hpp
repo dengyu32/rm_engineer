@@ -4,12 +4,12 @@
 #include "usb_cdc/packet.hpp"
 #include "usb_cdc/usb_cdc_driver.hpp"
 #include "usb_cdc/config.hpp"
-#include "error_code_utils/error_bus.hpp"
 
 // ROS messages
-#include <engineer_interfaces/msg/gripper_command.hpp>
-#include <engineer_interfaces/msg/hfsm_intent.hpp>
+#include <engineer_interfaces/msg/gripper.hpp>
+#include <engineer_interfaces/msg/intent.hpp>
 #include <engineer_interfaces/msg/joints.hpp>
+#include <engineer_interfaces/msg/slots.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
 // ROS2
@@ -29,7 +29,9 @@
 #include <tf2_ros/transform_listener.h>
 
 // C++
+#include <atomic>
 #include <cstdint>
+#include <string>
 
 namespace usb_cdc {
 
@@ -59,7 +61,6 @@ public:
   //  Device control
   // -----------------------------------------------------------------------
   bool try_open_device();
-  void set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus);
 
 private:
   // -----------------------------------------------------------------------
@@ -70,6 +71,7 @@ private:
                                             this, std::placeholders::_1,
                                             std::placeholders::_2));
   }
+  void initRosInterfaces();
 
   void engineer_handle_packet(const std::byte *data, size_t size);
 
@@ -77,12 +79,13 @@ private:
   //  Timers & callbacks
   // -----------------------------------------------------------------------
   void publish_timer_callback();
-  void jointCommandCallback(
-      const engineer_interfaces::msg::Joints::SharedPtr msg);
-  void GripperCommandCallback(
-      const engineer_interfaces::msg::GripperCommand::SharedPtr msg);
   void send_timer_callback();
-  void publish_error(const error_code_utils::Error &err) const;
+
+  void IntentCallback(const engineer_interfaces::msg::Intent::SharedPtr msg);
+  void jointCommandCallback(const engineer_interfaces::msg::Joints::SharedPtr msg);
+  void GripperCommandCallback(const engineer_interfaces::msg::Gripper::SharedPtr msg);
+  void SlotCommandCallback(const engineer_interfaces::msg::Slots::SharedPtr msg);
+  void publish_error(int code, const char *name, const std::string &message) const;
 
   // Protocol
   DeviceParser parser_;
@@ -90,19 +93,21 @@ private:
   uint8_t buffer_[256]; // USB 读缓冲区（256 字节原始数据）
 
   // ROS interfaces
-  rclcpp::Publisher<engineer_interfaces::msg::HFSMIntent>::SharedPtr
-      hfsm_intent_pub_;
+  rclcpp::Publisher<engineer_interfaces::msg::Intent>::SharedPtr intent_pub_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_states_pub_;
-  rclcpp::Publisher<engineer_interfaces::msg::Joints>::SharedPtr
-      joint_states_custom_pub_;
-  rclcpp::Publisher<engineer_interfaces::msg::Joints>::SharedPtr
-      joint_states_verbose_pub_;
-  rclcpp::Subscription<engineer_interfaces::msg::Joints>::SharedPtr
-      joint_cmd_sub_;
-  rclcpp::Subscription<engineer_interfaces::msg::GripperCommand>::SharedPtr
-      gripper_cmd_sub_;
+  rclcpp::Publisher<engineer_interfaces::msg::Joints>::SharedPtr joint_states_custom_pub_;
+  rclcpp::Publisher<engineer_interfaces::msg::Joints>::SharedPtr joint_states_verbose_pub_;
+  rclcpp::Publisher<engineer_interfaces::msg::Slots>::SharedPtr slot_states_pub_;
+
+  rclcpp::Subscription<engineer_interfaces::msg::Intent>::SharedPtr intent_sub_;
+  rclcpp::Subscription<engineer_interfaces::msg::Joints>::SharedPtr joint_cmd_sub_;
+  rclcpp::Subscription<engineer_interfaces::msg::Gripper>::SharedPtr gripper_cmd_sub_;
+  rclcpp::Subscription<engineer_interfaces::msg::Slots>::SharedPtr slot_cmd_sub_;
+
   rclcpp::TimerBase::SharedPtr send_timer_;
   rclcpp::TimerBase::SharedPtr publish_timer_;
+
+  rclcpp::Logger logger_;
 
   // Buffers
   EngineerTransmitData tx_data_{};
@@ -110,20 +115,13 @@ private:
   std::mutex tx_data_mutex_; // 保护发送缓冲
   std::mutex rx_data_mutex_; // 保护接收缓冲
 
-  // Map
-  std::unordered_map<std::string, size_t> joint_map_{
-      {"joint1", 0}, {"joint2", 1}, {"joint3", 2},
-      {"joint4", 3}, {"joint5", 4}, {"joint6", 5}};
-
   // Runtime state
   std::atomic_bool running_;
-  bool send_enabled_{false};
+  std::atomic_bool last_device_open_{false};
   std::thread thread_; // 底层读写循环线程
 
   // Config
   UsbCdcConfig config_;
-
-  std::shared_ptr<error_code_utils::ErrorBus> error_bus_;
 };
 
 } // namespace usb_cdc

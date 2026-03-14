@@ -60,8 +60,8 @@ def generate_launch_description():
     bringup_config  = get_package_share_directory("engineer_bringup")
     
     # 自定义路径
-    urdf_path        = os.path.join(pkg_config, "config", "engineer_v3.urdf.xacro")
-    srdf_path        = os.path.join(pkg_config, "config", "engineer_v3.srdf")
+    urdf_path        = os.path.join(pkg_config, "config", "engineer_v4.urdf.xacro")
+    srdf_path        = os.path.join(pkg_config, "config", "engineer_v4.srdf")
     kinematics_path  = os.path.join(pkg_config, "config", "kinematics.yaml")
     joint_limits_path       = os.path.join(pkg_config, "config", "joint_limits.yaml")
     moveit_controllers_path = os.path.join(pkg_config, "config", "moveit_controllers.yaml")
@@ -79,7 +79,6 @@ def generate_launch_description():
     ompl = load_yaml(ompl_path) if os.path.exists(ompl_path) else {}
     joint_limits = {"robot_description_planning": load_yaml(joint_limits_path)}
     moveit_controllers = load_yaml(moveit_controllers_path)
-
 
     # ---------------------------------------------------------------------------------------------
     #  普通参数列表
@@ -104,6 +103,22 @@ def generate_launch_description():
         output="both",
         parameters=[robot_description], 
     )
+    # 发布静态 TF ，获得 world 与 base_link 之间的坐标变换    
+    static_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='static_transform_publisher',
+        output='both',
+        arguments=['0', '0', '0', '0', '0', '0', 'world', 'base_link'], # x y z roll pitch yaw frame_id child_frame_id
+    )
+
+    # object_load 节点 : 发布planningscene，提供规划场景
+    node_object_load = Node(
+        package="object_load",
+        executable="object_load",
+        output="both",
+        parameters=common_params,
+    )    
     
     # move_group 节点 : MoveIt 核心规划节点，使用 URDF/SRDF/规划配置提供规划与执行服务
     node_move_group = Node(
@@ -144,6 +159,8 @@ def generate_launch_description():
     # ---------------------------------------------------------------------------------------------
     return LaunchDescription([
         node_robot_state_publisher,
+        static_tf,
+        node_object_load,
         node_move_group,
         node_rviz,
         late_init

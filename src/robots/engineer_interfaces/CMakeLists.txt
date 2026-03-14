@@ -32,13 +32,14 @@ find_package(std_msgs REQUIRED)
 
 # 声明消息与动作接口，统一生成代码
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/HFSMIntent.msg"
+  "msg/Intent.msg"
   "msg/Joint.msg"
-  "msg/JointCommand.msg"
   "msg/Joints.msg"
-  "msg/ModeCommand.msg"
+  "msg/Pose.msg"
+  "msg/Gripper.msg"
+  "msg/Slot.msg"
+  "msg/Slots.msg"
   "msg/Target.msg"
-  "msg/GripperCommand.msg"
   "action/Move.action"
   DEPENDENCIES 
     builtin_interfaces

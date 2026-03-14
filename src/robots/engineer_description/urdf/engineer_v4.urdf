@@ -1,0 +1,618 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by
+Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="engineer_v4">
+  <link
+    name="base_link">
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/dae/base_link.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/collision_dae/base_link.dae" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="first_slot_link">
+    <inertial>
+      <origin
+        xyz="-0.0299725860567126 -0.0210010541511428 0.000555965757073434"
+        rpy="0 0 0" />
+      <mass
+        value="0.457371475868407" />
+      <inertia
+        ixx="0.0016314209173607"
+        ixy="0.00026727505312052"
+        ixz="-7.66197935861787E-05"
+        iyy="0.00078447026147815"
+        iyz="2.16490673979245E-05"
+        izz="0.0016245960496577" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/dae/first_slot_link.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/collision_dae/first_slot_link.dae" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="first_slot_joint"
+    type="fixed">
+    <origin
+      xyz="-0.0472031541832538 0.0300245045193264 0.252923029552021"
+      rpy="1.5707963267949 -1.5707963267949 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="first_slot_link" />
+  </joint>
+  <link
+    name="second_slot_link">
+    <inertial>
+      <origin
+        xyz="-0.021001166224167 0.0299723666797443 -0.00055561544707089"
+        rpy="0 0 0" />
+      <mass
+        value="0.457374603004739" />
+      <inertia
+        ixx="0.000784480991192641"
+        ixy="-0.000267276658814494"
+        ixz="-2.16458688800345E-05"
+        iyy="0.00163143018140389"
+        iyz="-7.66141894052885E-05"
+        izz="0.00162460052222523" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/dae/second_slot_link.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/collision_dae/second_slot_link.dae" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="second_slot_joint"
+    type="fixed">
+    <origin
+      xyz="-0.0472031541832538 0.351024504519326 0.252923029552022"
+      rpy="-1.5707963267949 0 3.14159265358979" />
+    <parent
+      link="base_link" />
+    <child
+      link="second_slot_link" />
+  </joint>
+  <link
+    name="link1">
+    <inertial>
+      <origin
+        xyz="-0.000357188269648423 0.000760222726987003 0.0730604097875659"
+        rpy="0 0 0" />
+      <mass
+        value="1.2003246264795" />
+      <inertia
+        ixx="0.00110344971414483"
+        ixy="4.36857458704849E-07"
+        ixz="-1.06862312344359E-05"
+        iyy="0.00168216080239019"
+        iyz="8.42838995009528E-06"
+        izz="0.00125099173868682" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/dae/link1.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/collision_dae/link1.dae" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint1"
+    type="revolute">
+    <origin
+      xyz="-0.26120753672974 0.190524504519326 0.0574255541278649"
+      rpy="0 0 3.14159265358979" />
+    <parent
+      link="base_link" />
+    <child
+      link="link1" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-3.14"
+      upper="3.14"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="link2">
+    <inertial>
+      <origin
+        xyz="0.196899648904097 -6.8962282289059E-05 0.0232173591328277"
+        rpy="0 0 0" />
+      <mass
+        value="0.813392084625707" />
+      <inertia
+        ixx="0.000673036789229952"
+        ixy="9.0752917954777E-08"
+        ixz="-5.63337289441532E-05"
+        iyy="0.0076831561117122"
+        iyz="1.5848153385153E-07"
+        izz="0.00815581445851113" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/dae/link2.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/collision_dae/link2.dae" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint2"
+    type="revolute">
+    <origin
+      xyz="0 0 0.0910000000000011"
+      rpy="-1.5707963267949 -1.568 0" />
+    <parent
+      link="link1" />
+    <child
+      link="link2" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-0.9888"
+      upper="1.2000"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="link3">
+    <inertial>
+      <origin
+        xyz="-0.0183011171276036 -0.0564030679655175 0.0343124536185257"
+        rpy="0 0 0" />
+      <mass
+        value="0.799120380289198" />
+      <inertia
+        ixx="0.000564646098922074"
+        ixy="-1.38701383125454E-05"
+        ixz="-1.42774820952325E-06"
+        iyy="0.000525908835793181"
+        iyz="-5.04104927677511E-06"
+        izz="0.000668018718919332" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/dae/link3.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.866666666666667 0.866666666666667 0.890196078431372 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/collision_dae/link3.dae" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint3"
+    type="revolute">
+    <origin
+      xyz="0.389999999999999 0 0"
+      rpy="-3.14159265358979 0 -1.89" />
+    <parent
+      link="link2" />
+    <child
+      link="link3" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-2.8624"
+      upper="2.6543"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="link4">
+    <inertial>
+      <origin
+        xyz="-1.85366305129886E-05 0.00353819121598634 -0.210577010456394"
+        rpy="0 0 0" />
+      <mass
+        value="0.451620229714316" />
+      <inertia
+        ixx="0.000450940900760466"
+        ixy="-5.15815844889911E-08"
+        ixz="-2.49726005905619E-08"
+        iyy="0.000475467864605353"
+        iyz="5.42674576797712E-10"
+        izz="0.000173374319286848" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/dae/link4.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.898039215686275 0.917647058823529 0.929411764705882 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/collision_dae/link4.dae" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint4"
+    type="revolute">
+    <origin
+      xyz="0 0 0.0591999999999989"
+      rpy="1.5707963267949 0 2.82801601798317" />
+    <parent
+      link="link3" />
+    <child
+      link="link4" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-3.14"
+      upper="3.14"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="link5">
+    <inertial>
+      <origin
+        xyz="0.0236461854249562 0.000252585259627791 -3.10582093318579E-06"
+        rpy="0 0 0" />
+      <mass
+        value="0.386292385114177" />
+      <inertia
+        ixx="0.000206580198244635"
+        ixy="1.16898826944609E-07"
+        ixz="-1.22627594636964E-08"
+        iyy="0.000128593321208887"
+        iyz="-3.66505131431251E-09"
+        izz="0.000117816851749595" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/dae/link5.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/collision_dae/link5.dae" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint5"
+    type="revolute">
+    <origin
+      xyz="0 0 -0.314999999999995"
+      rpy="1.5707963267949 -1.5707963267949 0" />
+    <parent
+      link="link4" />
+    <child
+      link="link5" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-1.6828"
+      upper="1.6828"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="link6">
+    <inertial>
+      <origin
+        xyz="-2.92607973814696E-06 -2.88445725311615E-05 0.0543651305617022"
+        rpy="0 0 0" />
+      <mass
+        value="0.288814280860144" />
+      <inertia
+        ixx="0.000215298648963599"
+        ixy="-1.1564148562091E-05"
+        ixz="-2.94525426553043E-09"
+        iyy="7.55153561166776E-05"
+        iyz="-4.25732713011413E-08"
+        izz="0.000255880381587993" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/dae/link6.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.113725490196078 0.113725490196078 0.113725490196078 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/collision_dae/link6.dae" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint6"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="3.13387314293277 1.5707963267949 0" />
+    <parent
+      link="link5" />
+    <child
+      link="link6" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-3.14"
+      upper="3.14"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="right_finger_link">
+    <inertial>
+      <origin
+        xyz="0.061259614914889 -0.00106641408212199 0.0351652091113552"
+        rpy="0 0 0" />
+      <mass
+        value="0.0874237376139129" />
+      <inertia
+        ixx="3.87878846405327E-05"
+        ixy="-5.98747994572176E-08"
+        ixz="3.56630615088067E-06"
+        iyy="4.0710808114335E-05"
+        iyz="8.07405202409304E-09"
+        izz="1.30816147228006E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/dae/right_finger_link.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0 0 0 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/collision_dae/right_finger_link.dae" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="right_finger_joint"
+    type="prismatic">
+    <origin
+      xyz="0 0 0.076"
+      rpy="0 0 -1.6526" />
+    <parent
+      link="link6" />
+    <child
+      link="right_finger_link" />
+    <axis
+      xyz="-1 0 0" />
+    <limit
+      lower="-3.14"
+      upper="3.14"
+      effort="0"
+      velocity="0" />
+    <mimic joint="left_finger_joint" />
+  </joint>
+  <link
+    name="left_finger_link">
+    <inertial>
+      <origin
+        xyz="-0.0616953855224335 0.00100446362083845 0.0362236300960044"
+        rpy="0 0 0" />
+      <mass
+        value="0.0842574260316998" />
+      <inertia
+        ixx="3.87666538055204E-05"
+        ixy="-5.98747994570901E-08"
+        ixz="-3.56630615087811E-06"
+        iyy="4.05793075596116E-05"
+        iyz="-7.99767382292093E-09"
+        izz="1.29501141680779E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/dae/left_finger_link.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.8 0.956862745098039 0.72156862745098 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://engineer_description/collision_dae/left_finger_link.dae" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="left_finger_joint"
+    type="prismatic">
+    <origin
+      xyz="0 0 0.076"
+      rpy="0 0 -1.6526" />
+    <parent
+      link="link6" />
+    <child
+      link="left_finger_link" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="0.0000"
+      upper="0.0470"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link name="tcp_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <!-- 半径设为 1cm，方便观察 -->
+        <sphere radius="0.005" />
+      </geometry>
+      <material name="green_transparent">
+        <color rgba="0 1 0 0.5" />
+      </material>
+    </visual>
+  </link>
+  <joint name="tcp_joint" type="fixed">
+    <origin xyz="0 0 0.125" rpy="0 0 0" />
+    <parent link="link6" />
+    <child link="tcp_link" />
+  </joint>
+</robot>

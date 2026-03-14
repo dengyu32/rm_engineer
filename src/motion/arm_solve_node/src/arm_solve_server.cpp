@@ -1,17 +1,17 @@
 #include "arm_solve/arm_solve_server.hpp"
-#include "arm_solve/error_code.hpp"
-#include "param_utils/param_snapshot.hpp"
 
-// C++
+#include <algorithm>
+#include <chrono>
 #include <exception>
 #include <memory>
-#include <chrono>
 #include <optional>
 
 // MoveIt
+#include <moveit/collision_detection/collision_common.h>
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
-#include <moveit/collision_detection/collision_common.h>
+#include <moveit/robot_trajectory/robot_trajectory.h>
+#include <moveit/trajectory_processing/time_optimal_trajectory_generation.h>
 
 // ROS
 #include <moveit_msgs/msg/robot_trajectory.hpp>
@@ -22,14 +22,47 @@
 // ============================================================================
 namespace {
 
+enum class SolveCode : int {
+  MoveGroupNotReady = 200,
+  SolveCoreNotReady = 201,
+  PlanningThrottled = 202,
+  PlanningFailed = 203,
+  GoalCanceled = 204,
+  TrajectoryEmpty = 205,
+  TrajectoryPointMismatch = 206,
+  ExceptionThrown = 207,
+};
+
+const char *to_string(SolveCode code) {
+  switch (code) {
+  case SolveCode::MoveGroupNotReady:
+    return "MoveGroupNotReady";
+  case SolveCode::SolveCoreNotReady:
+    return "SolveCoreNotReady";
+  case SolveCode::PlanningThrottled:
+    return "PlanningThrottled";
+  case SolveCode::PlanningFailed:
+    return "PlanningFailed";
+  case SolveCode::GoalCanceled:
+    return "GoalCanceled";
+  case SolveCode::TrajectoryEmpty:
+    return "TrajectoryEmpty";
+  case SolveCode::TrajectoryPointMismatch:
+    return "TrajectoryPointMismatch";
+  case SolveCode::ExceptionThrown:
+    return "ExceptionThrown";
+  default:
+    return "Unknown";
+  }
+}
+
 class MoveItAdapterImpl : public solve_core::MoveItAdapter {
 public:
-  MoveItAdapterImpl(moveit::planning_interface::MoveGroupInterface *move_group,
-                    std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> psm,
-                    rclcpp::Logger logger)
-      : move_group_(move_group),
-        psm_(std::move(psm)),
-        logger_(logger) {}
+  MoveItAdapterImpl(
+      moveit::planning_interface::MoveGroupInterface *move_group,
+      std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> psm,
+      rclcpp::Logger logger)
+      : move_group_(move_group), psm_(std::move(psm)), logger_(logger) {}
 
   std::shared_ptr<const moveit::core::RobotModel> robot_model() const override {
     if (!move_group_) {
@@ -38,8 +71,8 @@ public:
     return move_group_->getRobotModel();
   }
 
-  const moveit::core::JointModelGroup *joint_model_group(
-      const std::string &group_name) const override {
+  const moveit::core::JointModelGroup *
+  joint_model_group(const std::string &group_name) const override {
     const auto model = robot_model();
     if (!model) {
       return nullptr;
@@ -65,26 +98,28 @@ public:
     }
   }
 
-  std::optional<solve_core::Trajectory> plan_to_joint_target(
-      const std::vector<std::string> &joint_names,
-      const std::vector<double> &joint_values,
-      const solve_core::PlannerOptions &options) override {
+  std::optional<solve_core::Trajectory>
+  plan_to_joint_target(const std::vector<std::string> &joint_names,
+                       const std::vector<double> &joint_values,
+                       const solve_core::PlannerConfigs &configs) override {
     if (!move_group_) {
       RCLCPP_ERROR(logger_, "[arm_solve_server] MoveGroup not ready");
       return std::nullopt;
     }
 
-    move_group_->setPlanningTime(options.planning_time);
-    move_group_->setNumPlanningAttempts(options.num_planning_attempts);
-    move_group_->setMaxVelocityScalingFactor(options.max_velocity_scaling);
-    move_group_->setMaxAccelerationScalingFactor(options.max_acc_scaling);
-    move_group_->setGoalPositionTolerance(options.goal_position_tolerance);
-    move_group_->setGoalOrientationTolerance(options.goal_orientation_tolerance);
+    move_group_->setPlanningTime(configs.planning_time);
+    move_group_->setNumPlanningAttempts(configs.num_planning_attempts);
+    move_group_->setMaxVelocityScalingFactor(configs.max_velocity_scaling);
+    move_group_->setMaxAccelerationScalingFactor(configs.max_acc_scaling);
+    move_group_->setGoalPositionTolerance(configs.goal_position_tolerance);
+    move_group_->setGoalOrientationTolerance(
+        configs.goal_orientation_tolerance);
 
     move_group_->setJointValueTarget(joint_names, joint_values);
 
     moveit::planning_interface::MoveGroupInterface::Plan plan_msg;
-    const bool ok = (move_group_->plan(plan_msg) == moveit::core::MoveItErrorCode::SUCCESS);
+    const bool ok =
+        (move_group_->plan(plan_msg) == moveit::core::MoveItErrorCode::SUCCESS);
     if (!ok) {
       RCLCPP_ERROR(logger_, "[arm_solve_server] Planning failed");
       return std::nullopt;
@@ -98,17 +133,17 @@ public:
       solve_core::TrajectoryPoint p;
       p.positions = pt.positions;
       p.velocities = pt.velocities;
-      p.time_from_start = static_cast<double>(pt.time_from_start.sec) +
-                          static_cast<double>(pt.time_from_start.nanosec) * 1e-9;
+      p.time_from_start =
+          static_cast<double>(pt.time_from_start.sec) +
+          static_cast<double>(pt.time_from_start.nanosec) * 1e-9;
       traj.points.push_back(std::move(p));
     }
     return traj;
   }
 
-  bool check_self_collision(
-      const moveit::core::RobotState &state,
-      const std::string &group_name,
-      std::string &err) const override {
+  bool check_self_collision(const moveit::core::RobotState &state,
+                            const std::string &group_name,
+                            std::string &err) const override {
     if (!psm_) {
       err = "Planning scene not ready";
       return false;
@@ -131,11 +166,79 @@ public:
     return true;
   }
 
+  bool time_parameterize_trajectory(
+      const moveit::core::RobotState &start_state,
+      const std::string &group_name,
+      solve_core::Trajectory &traj,
+      double velocity_scaling,
+      double accel_scaling,
+      std::string &err) const override;
+
 private:
   moveit::planning_interface::MoveGroupInterface *move_group_{nullptr};
   std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> psm_;
   rclcpp::Logger logger_;
 };
+
+bool MoveItAdapterImpl::time_parameterize_trajectory(
+    const moveit::core::RobotState &start_state,
+    const std::string &group_name,
+    solve_core::Trajectory &traj,
+    double velocity_scaling,
+    double accel_scaling,
+    std::string &err) const {
+  if (!move_group_) {
+    err = "MoveGroup not ready";
+    return false;
+  }
+  const auto model = robot_model();
+  if (!model) {
+    err = "RobotModel not ready";
+    return false;
+  }
+  const auto *jmg = model->getJointModelGroup(group_name);
+  if (!jmg) {
+    err = "JointModelGroup not found";
+    return false;
+  }
+  if (traj.points.empty()) {
+    return true;
+  }
+
+  robot_trajectory::RobotTrajectory rt(model, group_name);
+  moveit::core::RobotState state(start_state);
+
+  for (const auto &pt : traj.points) {
+    if (pt.positions.size() < jmg->getVariableCount()) {
+      err = "Trajectory point size mismatch";
+      return false;
+    }
+    state.setJointGroupPositions(jmg, pt.positions);
+    state.update();
+    rt.addSuffixWayPoint(state, 0.0);
+  }
+
+  trajectory_processing::TimeOptimalTrajectoryGeneration totg;
+  const double v_scale = std::clamp(velocity_scaling, 0.01, 1.0);
+  const double a_scale = std::clamp(accel_scaling, 0.01, 1.0);
+  if (!totg.computeTimeStamps(rt, v_scale, a_scale)) {
+    err = "Time parameterization failed";
+    return false;
+  }
+
+  traj.joint_names = jmg->getVariableNames();
+  traj.points.clear();
+  traj.points.reserve(rt.getWayPointCount());
+  for (std::size_t i = 0; i < rt.getWayPointCount(); ++i) {
+    const moveit::core::RobotState &st = rt.getWayPoint(i);
+    solve_core::TrajectoryPoint p;
+    st.copyJointGroupPositions(jmg, p.positions);
+    st.copyJointGroupVelocities(jmg, p.velocities);
+    p.time_from_start = rt.getWayPointDurationFromStart(i);
+    traj.points.push_back(std::move(p));
+  }
+  return true;
+}
 
 } // namespace
 
@@ -148,22 +251,24 @@ namespace arm_solve {
 using namespace std::chrono_literals;
 
 namespace {
-std::shared_ptr<Move::Result> make_move_result(bool success, const std::string &msg) {
+
+// _MoveResult 结构体构造函数，打包执行结果
+std::shared_ptr<Move::Result> make_move_result(bool success, int error_code,
+                                               const std::string &msg) {
   auto result = std::make_shared<Move::Result>();
   result->success = success;
-  result->error_code = 0;
+  result->error_code = error_code;
   result->error_msg = msg;
   return result;
 }
 
-void finish_move_goal(const std::shared_ptr<GoalHandleMove> &gh,
-                      bool success,
-                      bool canceled,
-                      const std::string &msg) {
+// _结束goal的反馈，区分成功、取消、失败三种情况
+void finish_move_goal(const std::shared_ptr<GoalHandleMove> &gh, bool success,
+                      bool canceled, const std::string &msg, int error_code) {
   if (!gh) {
     return;
   }
-  auto result = make_move_result(success, msg);
+  auto result = make_move_result(success, error_code, msg);
   if (success) {
     gh->succeed(result);
     return;
@@ -176,11 +281,15 @@ void finish_move_goal(const std::shared_ptr<GoalHandleMove> &gh,
 }
 } // namespace
 
-ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions& options)
-    : Node("arm_solve_action_server",
-           rclcpp::NodeOptions(options)),
+// _节点构造
+ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions &options)
+    : Node("arm_solve_action_server", rclcpp::NodeOptions(options)),
       config_(ArmSolveConfig::Load(*this)),
-      last_plan_time_(now() - rclcpp::Duration(std::chrono::milliseconds(config_.plan_min_interval_ms))) {
+      solve_core_config_(LoadSolveCoreConfig(*this)),
+      last_plan_time_(
+          now() - rclcpp::Duration(std::chrono::milliseconds(
+                      config_.plan_min_interval_ms))) { //避免第一次规划被节流
+  solve_core_config_.validate();
 
   // 等待构造完成后再创建 MoveGroup，防止节点还未 fully spinning 就调用
   init_timer_ = this->create_wall_timer(
@@ -188,120 +297,129 @@ ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions& options)
       [this]() { this->lateInit(); });
 
   // 订阅 verbose 关节状态，记录规划起点
-  joint_states_verbose_sub_ = this->create_subscription<engineer_interfaces::msg::Joints>(
-      config_.joint_states_topic, rclcpp::QoS(10),
-      std::bind(&ArmSolveServer::jointCallBack, this, std::placeholders::_1));
+  joint_states_verbose_sub_ =
+      this->create_subscription<engineer_interfaces::msg::Joints>(
+          config_.joint_states_topic, rclcpp::QoS(10),
+          std::bind(&ArmSolveServer::jointCallBack, this,
+                    std::placeholders::_1));
 
   // 规划结果拆分到关节命令话题
-  joint_cmd_pub_ =
-      this->create_publisher<engineer_interfaces::msg::Joints>(config_.joint_cmd_topic, rclcpp::QoS(10));
+  joint_cmd_pub_ = this->create_publisher<engineer_interfaces::msg::Joints>(
+      config_.joint_cmd_topic, rclcpp::QoS(10));
 
   // 创建 Move action server，绑定 goal/cancel/accept 回调
   action_server_ = rclcpp_action::create_server<Move>(
-      this,
-      config_.arm_action_name,
-      std::bind(&ArmSolveServer::handle_goal, this, std::placeholders::_1, std::placeholders::_2),
+      this, config_.arm_action_name,
+      std::bind(&ArmSolveServer::handle_goal, this, std::placeholders::_1,
+                std::placeholders::_2),
       std::bind(&ArmSolveServer::handle_cancel, this, std::placeholders::_1),
       std::bind(&ArmSolveServer::handle_accepted, this, std::placeholders::_1));
 
   RCLCPP_INFO(this->get_logger(), "[ARM_SOLVE_SERVER] started");
-  param_utils::LogSnapshot(this->get_logger(), config_.params_snapshot,
-                           "[ARM_SOLVE_SERVER][param] ");
+  RCLCPP_INFO(this->get_logger(), "\n%s", config_.summary().c_str());
+  RCLCPP_INFO(this->get_logger(), "\n%s", solve_core_config_.summary().c_str());
 }
 
-void ArmSolveServer::set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus) {
-  error_bus_ = bus;
-  if (solve_core_) {
-    solve_core_->set_error_bus(bus);
-  }
-}
-
-void ArmSolveServer::publish_error(const error_code_utils::Error &err) const {
-  if (!error_bus_) {
-    return;
-  }
-  error_bus_->publish(err);
+void ArmSolveServer::publish_error(int code, const char *name,
+                                   const std::string &message) const {
+  RCLCPP_ERROR(get_logger(),
+               "[scope=arm_solve_server][status=error][code=%d][name=%s] %s",
+               code, name ? name : "Unknown", message.c_str());
 }
 
 // ============================================================================
 //  Init / utils
 // ============================================================================
 
-void ArmSolveServer::jointCallBack(const engineer_interfaces::msg::Joints::SharedPtr msg) {
+// _接收关节状态后的回调
+void ArmSolveServer::jointCallBack(
+    const engineer_interfaces::msg::Joints::SharedPtr msg) {
   std::scoped_lock<std::mutex> lock(current_joints_mutex_);
   current_joints_ = *msg;
 }
 
+// _move_group和planningscene初始化
 void ArmSolveServer::lateInit() {
   if (init_timer_)
     init_timer_->cancel();
 
   auto node_shared = shared_from_this();
-  move_group_      = std::make_unique<moveit::planning_interface::MoveGroupInterface>(node_shared, config_.group_name);
-
-  move_group_->setPlanningTime(config_.planning_time);
-  move_group_->setNumPlanningAttempts(config_.num_planning_attempts);
-  move_group_->setGoalPositionTolerance(config_.goal_position_tolerance);
-  move_group_->setGoalOrientationTolerance(config_.goal_orientation_tolerance);
-  move_group_->setMaxVelocityScalingFactor(config_.max_velocity_scaling);
-  move_group_->setMaxAccelerationScalingFactor(config_.max_acc_scaling);
+  move_group_ =
+      std::make_unique<moveit::planning_interface::MoveGroupInterface>(
+          node_shared, config_.group_name);
 
   if (!psm_) {
-    psm_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(shared_from_this(), "robot_description");
+    psm_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(
+        shared_from_this(), "robot_description");
 
     psm_->startSceneMonitor();         // /planning_scene
     psm_->startWorldGeometryMonitor(); // collision objects / octomap 等
-    psm_->startStateMonitor();         // /joint_states（或你 remap 的话题）
+    psm_->startStateMonitor(); // /joint_states（或你 remap 的话题）
   }
 
   if (!moveit_adapter_) {
-    moveit_adapter_ = std::make_shared<MoveItAdapterImpl>(move_group_.get(), psm_, get_logger());
+    moveit_adapter_ = std::make_shared<MoveItAdapterImpl>(move_group_.get(),
+                                                          psm_, get_logger());
   }
   if (!solve_core_) {
-    solve_core_ = std::make_unique<solve_core::SolveCore>(moveit_adapter_);
-    solve_core_->set_error_bus(error_bus_);
+    solve_core_ = std::make_unique<solve_core::SolveCore>(moveit_adapter_,
+                                                          solve_core_config_);
   }
 }
 
 bool ArmSolveServer::isMoveGroupReady() const {
-  return move_group_ && move_group_->getRobotModel() && !move_group_->getPlanningFrame().empty() && solve_core_;
+  return move_group_ && move_group_->getRobotModel() &&
+         !move_group_->getPlanningFrame().empty() && solve_core_;
 }
 
 // ============================================================================
 //  Planning
 // ============================================================================
 
-bool ArmSolveServer::planTrajectory(const std::shared_ptr<GoalContext>& ctx,
+// _路径规划
+bool ArmSolveServer::planTrajectory(const std::shared_ptr<GoalContext> &ctx,
                                     solve_core::Trajectory &out_traj,
-                                    std::string &err) {
+                                    std::string &err, int &err_code) {
 
   if (!solve_core_) {
     err = "SolveCore not ready";
-    RCLCPP_ERROR(get_logger(), "[scope=arm_solve_server][status=error] %s", err.c_str());
-    publish_error(make_error(ArmSolveErrc::SolveCoreNotReady, err));
+    err_code =
+        static_cast<int>(SolveCode::SolveCoreNotReady);
+    RCLCPP_ERROR(get_logger(), "[scope=arm_solve_server][status=error] %s",
+                 err.c_str());
+    publish_error(static_cast<int>(SolveCode::SolveCoreNotReady), to_string(SolveCode::SolveCoreNotReady), err);
     return false;
   }
 
+  // _节流请求
   const auto now_ts = this->now();
-  const auto min_interval = rclcpp::Duration(std::chrono::milliseconds(config_.plan_min_interval_ms));
-  if (config_.plan_min_interval_ms > 0 && (now_ts - last_plan_time_) < min_interval) {
+  const auto min_interval =
+      rclcpp::Duration(std::chrono::milliseconds(config_.plan_min_interval_ms));
+  if (config_.plan_min_interval_ms > 0 &&
+      (now_ts - last_plan_time_) < min_interval) {
     RCLCPP_WARN(get_logger(),
-                "[scope=arm_solve_server][status=throttle] planning skipped: elapsed=%.2f ms < min=%d ms",
+                "[scope=arm_solve_server][status=throttle] planning skipped: "
+                "elapsed=%.2f ms < min=%d ms",
                 (now_ts - last_plan_time_).nanoseconds() / 1e6,
                 config_.plan_min_interval_ms);
     err = "Planning throttled";
-    publish_error(make_error(ArmSolveErrc::PlanningThrottled, err));
+    err_code =
+        static_cast<int>(SolveCode::PlanningThrottled);
+    publish_error(static_cast<int>(SolveCode::PlanningThrottled), to_string(SolveCode::PlanningThrottled), err);
     return false;
   }
   last_plan_time_ = now_ts;
 
   if (isCanceled(active_goal_handle_.lock(), ctx)) {
     err = "Goal canceled before planning";
-    RCLCPP_WARN(get_logger(), "[scope=arm_solve_server][status=cancel] %s", err.c_str());
-    publish_error(make_error(ArmSolveErrc::GoalCanceled, err));
+    err_code = static_cast<int>(SolveCode::GoalCanceled);
+    RCLCPP_WARN(get_logger(), "[scope=arm_solve_server][status=cancel] %s",
+                err.c_str());
+    publish_error(static_cast<int>(SolveCode::GoalCanceled), to_string(SolveCode::GoalCanceled), err);
     return false;
   }
 
+  // 异步获取当前关节状态的副本
   engineer_interfaces::msg::Joints current_joints_copy;
   {
     std::scoped_lock<std::mutex> lock(current_joints_mutex_);
@@ -311,37 +429,31 @@ bool ArmSolveServer::planTrajectory(const std::shared_ptr<GoalContext>& ctx,
   solve_core::SolveRequest req;
   req.option = ctx->option;
   req.target_pose = solve_core::Pose{
-      ctx->target_pose.pose.position.x,
-      ctx->target_pose.pose.position.y,
-      ctx->target_pose.pose.position.z,
-      ctx->target_pose.pose.orientation.x,
-      ctx->target_pose.pose.orientation.y,
-      ctx->target_pose.pose.orientation.z,
+      ctx->target_pose.pose.position.x,    ctx->target_pose.pose.position.y,
+      ctx->target_pose.pose.position.z,    ctx->target_pose.pose.orientation.x,
+      ctx->target_pose.pose.orientation.y, ctx->target_pose.pose.orientation.z,
       ctx->target_pose.pose.orientation.w};
-  req.target_joints.assign(ctx->target_joints.begin(), ctx->target_joints.end());
+  req.target_vector = ctx->target_vector;
+  req.target_joints.assign(ctx->target_joints.begin(),
+                           ctx->target_joints.end());
   req.current_joints.names.reserve(current_joints_copy.joints.size());
   req.current_joints.positions.reserve(current_joints_copy.joints.size());
   for (const auto &j : current_joints_copy.joints) {
     req.current_joints.names.push_back(j.name);
     req.current_joints.positions.push_back(j.position);
   }
-  req.planner.goal_position_tolerance = config_.goal_position_tolerance;
-  req.planner.goal_orientation_tolerance = config_.goal_orientation_tolerance;
-  req.planner.planning_time = config_.planning_time;
-  req.planner.num_planning_attempts = config_.num_planning_attempts;
-  req.planner.max_velocity_scaling = config_.max_velocity_scaling;
-  req.planner.max_acc_scaling = config_.max_acc_scaling;
   req.group_name = config_.group_name;
 
-  auto res = solve_core_->plan(req);
+  auto res = solve_core_->plan(req, err);
   if (!res) {
-    err = "Planning failed";
-    RCLCPP_ERROR(get_logger(), "[scope=arm_solve_server][status=error] %s", err.c_str());
-    publish_error(make_error(ArmSolveErrc::PlanningFailed, err));
+    RCLCPP_ERROR(get_logger(), "[scope=arm_solve_server][status=error] %s",
+                 err.c_str());
+    publish_error(static_cast<int>(SolveCode::PlanningFailed), to_string(SolveCode::PlanningFailed), err);
     return false;
   }
 
   out_traj = std::move(res->trajectory);
+  err_code = 0;
   return true;
 }
 
@@ -349,24 +461,34 @@ bool ArmSolveServer::planTrajectory(const std::shared_ptr<GoalContext>& ctx,
 //  Action callbacks
 // ============================================================================
 
-rclcpp_action::GoalResponse ArmSolveServer::handle_goal(const rclcpp_action::GoalUUID& uuid,
-                                                        std::shared_ptr<const Move::Goal> goal) {
+// _只要 MoveGroup 准备好，就接受 goal
+rclcpp_action::GoalResponse
+ArmSolveServer::handle_goal(const rclcpp_action::GoalUUID &uuid,
+                            std::shared_ptr<const Move::Goal> goal) {
   (void)uuid;
-  RCLCPP_INFO(get_logger(), "[scope=arm_solve_server][status=goal] Received goal: option_id=%u", goal->option_id);
+  RCLCPP_INFO(
+      get_logger(),
+      "[scope=arm_solve_server][status=goal] Received goal: option_id=%u",
+      goal->option_id);
 
   if (!isMoveGroupReady()) {
-    RCLCPP_WARN(get_logger(), "[scope=arm_solve_server][status=not_ready] MoveGroup not ready");
-    publish_error(make_error(ArmSolveErrc::MoveGroupNotReady, "MoveGroup not ready"));
+    RCLCPP_WARN(
+        get_logger(),
+        "[scope=arm_solve_server][status=not_ready] MoveGroup not ready");
+    publish_error(static_cast<int>(SolveCode::MoveGroupNotReady), to_string(SolveCode::MoveGroupNotReady), "MoveGroup not ready");
     return rclcpp_action::GoalResponse::REJECT;
   }
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
-rclcpp_action::CancelResponse ArmSolveServer::handle_cancel(const std::shared_ptr<GoalHandleMove> gh) {
-  RCLCPP_INFO(get_logger(), "[scope=arm_solve_server][status=cancel] Cancel requested");
+// _取消请求回调，标记当前 active goal 取消，并停掉 MoveIt 的规划/执行
+rclcpp_action::CancelResponse
+ArmSolveServer::handle_cancel(const std::shared_ptr<GoalHandleMove> gh) {
+  RCLCPP_INFO(get_logger(),
+              "[scope=arm_solve_server][status=cancel] Cancel requested");
   std::scoped_lock<std::mutex> lock(active_mtx_);
 
-  auto active = active_goal_handle_.lock();
+  auto active = active_goal_handle_.lock(); //将弱指针转为共享指针
   if (active && active.get() == gh.get() && active_ctx_) {
     // 只允许取消当前活跃 goal，同时停掉 MoveIt 规划/执行
     active_ctx_->cancel_requested.store(true);
@@ -376,32 +498,36 @@ rclcpp_action::CancelResponse ArmSolveServer::handle_cancel(const std::shared_pt
   return rclcpp_action::CancelResponse::ACCEPT;
 }
 
+// _接收请求
 void ArmSolveServer::handle_accepted(const std::shared_ptr<GoalHandleMove> gh) {
 
   auto goal = gh->get_goal();
-  auto ctx  = std::make_shared<GoalContext>();
+  auto ctx = std::make_shared<GoalContext>();
 
-  ctx->option                         = static_cast<solve_core::PlanOption>(goal->option_id);
-  ctx->target_pose.header.stamp       = now();
-  ctx->target_pose.header.frame_id    = move_group_->getPlanningFrame();
+  ctx->option = static_cast<solve_core::PlanOption>(goal->option_id);
+  ctx->target_pose.header.stamp = now();
+  ctx->target_pose.header.frame_id = move_group_->getPlanningFrame();
   ctx->target_pose.pose.orientation.x = goal->target_pose.qx;
   ctx->target_pose.pose.orientation.y = goal->target_pose.qy;
   ctx->target_pose.pose.orientation.z = goal->target_pose.qz;
   ctx->target_pose.pose.orientation.w = goal->target_pose.qw;
-  ctx->target_pose.pose.position.x    = goal->target_pose.x;
-  ctx->target_pose.pose.position.y    = goal->target_pose.y;
-  ctx->target_pose.pose.position.z    = goal->target_pose.z;
-  ctx->target_joints                  = goal->target_joints;
+  ctx->target_pose.pose.position.x = goal->target_pose.x;
+  ctx->target_pose.pose.position.y = goal->target_pose.y;
+  ctx->target_pose.pose.position.z = goal->target_pose.z;
+  ctx->target_vector = {static_cast<double>(goal->target_vector.x),
+                         static_cast<double>(goal->target_vector.y),
+                         static_cast<double>(goal->target_vector.z)};
+  ctx->target_joints = goal->target_joints;
 
   {
     std::scoped_lock<std::mutex> lock(active_mtx_);
     if (active_ctx_) {
-      // 新 goal 抢占旧 goal，标记取消并停掉正在执行的规划
+      // 发出抢占信号：如果已有任务在运行，标记其为取消状态
       active_ctx_->cancel_requested.store(true);
       if (move_group_)
         move_group_->stop();
     }
-    active_ctx_         = ctx;
+    active_ctx_ = ctx;
     active_goal_handle_ = gh;
   }
 
@@ -414,39 +540,47 @@ void ArmSolveServer::handle_accepted(const std::shared_ptr<GoalHandleMove> gh) {
 //  Worker
 // ============================================================================
 
-void ArmSolveServer::execute(const std::shared_ptr<GoalHandleMove> gh, const std::shared_ptr<GoalContext>& ctx) {
+void ArmSolveServer::execute(const std::shared_ptr<GoalHandleMove> gh,
+                             const std::shared_ptr<GoalContext> &ctx) {
   try {
     std::string err;
+    int err_code = 0;
     if (isCanceled(gh, ctx)) {
       err = "Goal canceled before execution";
-      RCLCPP_WARN(this->get_logger(), "[scope=arm_solve_server][status=cancel] %s", err.c_str());
-      publish_error(make_error(ArmSolveErrc::GoalCanceled, err));
-      finish_move_goal(gh, false, true, err);
+      err_code =
+          static_cast<int>(SolveCode::GoalCanceled);
+      RCLCPP_WARN(this->get_logger(),
+                  "[scope=arm_solve_server][status=cancel] %s", err.c_str());
+      publish_error(static_cast<int>(SolveCode::GoalCanceled), to_string(SolveCode::GoalCanceled), err);
+      finish_move_goal(gh, false, true, err, err_code);
       return;
     }
 
     solve_core::Trajectory traj_msg;
 
-    if (!planTrajectory(ctx, traj_msg, err)) {
+    if (!planTrajectory(ctx, traj_msg, err, err_code)) {
       const bool canceled = isCanceled(gh, ctx);
-      finish_move_goal(gh, false, canceled, err);
+      finish_move_goal(gh, false, canceled, err, err_code);
       return;
     }
 
     if (isCanceled(gh, ctx)) {
       err = "Goal canceled";
-      RCLCPP_WARN(this->get_logger(), "[scope=arm_solve_server][status=cancel] %s", err.c_str());
-      publish_error(make_error(ArmSolveErrc::GoalCanceled, err));
-      finish_move_goal(gh, false, true, err);
+      err_code =
+          static_cast<int>(SolveCode::GoalCanceled);
+      RCLCPP_WARN(this->get_logger(),
+                  "[scope=arm_solve_server][status=cancel] %s", err.c_str());
+      publish_error(static_cast<int>(SolveCode::GoalCanceled), to_string(SolveCode::GoalCanceled), err);
+      finish_move_goal(gh, false, true, err, err_code);
       return;
     }
 
     ctx->traj = std::move(traj_msg);
-    if (!publishTrajectoryPoints(gh, ctx, err)) {
+    if (!publishTrajectoryPoints(gh, ctx, err, err_code)) {
       const bool canceled = isCanceled(gh, ctx);
-      finish_move_goal(gh, false, canceled, err);
+      finish_move_goal(gh, false, canceled, err, err_code);
     } else {
-      finish_move_goal(gh, true, false, "");
+      finish_move_goal(gh, true, false, "", 0);
     }
 
     std::scoped_lock<std::mutex> lock(active_mtx_);
@@ -456,27 +590,38 @@ void ArmSolveServer::execute(const std::shared_ptr<GoalHandleMove> gh, const std
       active_ctx_.reset();
       active_goal_handle_.reset();
     }
-  } catch (const std::exception& e) {
-    RCLCPP_ERROR(this->get_logger(), "[scope=arm_solve_server][status=exception] %s", e.what());
-    publish_error(make_error(ArmSolveErrc::ExceptionThrown, e.what()));
-    finish_move_goal(gh, false, false, e.what());
+  } catch (const std::exception &e) {
+    RCLCPP_ERROR(this->get_logger(),
+                 "[scope=arm_solve_server][status=exception] %s", e.what());
+    publish_error(static_cast<int>(SolveCode::ExceptionThrown),
+                  to_string(SolveCode::ExceptionThrown), e.what());
+    finish_move_goal(
+        gh, false, false, e.what(),
+        static_cast<int>(SolveCode::ExceptionThrown));
   } catch (...) {
-    RCLCPP_ERROR(this->get_logger(), "[scope=arm_solve_server][status=exception] Unknown exception");
-    publish_error(make_error(ArmSolveErrc::ExceptionThrown, "Unknown exception"));
-    finish_move_goal(gh, false, false, "Unknown exception");
+    RCLCPP_ERROR(
+        this->get_logger(),
+        "[scope=arm_solve_server][status=exception] Unknown exception");
+    publish_error(static_cast<int>(SolveCode::ExceptionThrown), to_string(SolveCode::ExceptionThrown), "Unknown exception");
+    finish_move_goal(
+        gh, false, false, "Unknown exception",
+        static_cast<int>(SolveCode::ExceptionThrown));
   }
 }
 
-bool ArmSolveServer::publishTrajectoryPoints(const std::shared_ptr<GoalHandleMove> gh,
-                                             const std::shared_ptr<GoalContext>& ctx,
-                                             std::string &err) {
+bool ArmSolveServer::publishTrajectoryPoints(
+    const std::shared_ptr<GoalHandleMove> gh,
+    const std::shared_ptr<GoalContext> &ctx, std::string &err, int &err_code) {
 
-  const auto& traj = ctx->traj;
+  const auto &traj = ctx->traj;
 
   if (traj.joint_names.empty() || traj.points.empty()) {
     err = "Trajectory is empty";
-    RCLCPP_ERROR(get_logger(), "[scope=arm_solve_server][status=error] %s", err.c_str());
-    publish_error(make_error(ArmSolveErrc::TrajectoryEmpty, err));
+    err_code =
+        static_cast<int>(SolveCode::TrajectoryEmpty);
+    RCLCPP_ERROR(get_logger(), "[scope=arm_solve_server][status=error] %s",
+                 err.c_str());
+    publish_error(static_cast<int>(SolveCode::TrajectoryEmpty), to_string(SolveCode::TrajectoryEmpty), err);
     return false;
   }
 
@@ -484,18 +629,22 @@ bool ArmSolveServer::publishTrajectoryPoints(const std::shared_ptr<GoalHandleMov
   for (size_t i = 0; i < traj.points.size(); ++i) {
     if (isCanceled(gh, ctx)) {
       err = "Goal canceled during execution";
-      RCLCPP_WARN(get_logger(), "[scope=arm_solve_server][status=cancel] %s", err.c_str());
+      err_code =
+          static_cast<int>(SolveCode::GoalCanceled);
+      RCLCPP_WARN(get_logger(), "[scope=arm_solve_server][status=cancel] %s",
+                  err.c_str());
       return false;
     }
 
     if (traj.points[i].positions.size() < traj.joint_names.size()) {
       RCLCPP_ERROR(get_logger(),
-                   "[scope=arm_solve_server][status=error] Trajectory point %zu positions size %zu < joint_names size %zu",
-                   i,
-                   traj.points[i].positions.size(),
-                   traj.joint_names.size());
+                   "[scope=arm_solve_server][status=error] Trajectory point "
+                   "%zu positions size %zu < joint_names size %zu",
+                   i, traj.points[i].positions.size(), traj.joint_names.size());
       err = "Trajectory point positions size mismatch";
-      publish_error(make_error(ArmSolveErrc::TrajectoryPointMismatch, err));
+      err_code = static_cast<int>(
+          SolveCode::TrajectoryPointMismatch);
+      publish_error(static_cast<int>(SolveCode::TrajectoryPointMismatch), to_string(SolveCode::TrajectoryPointMismatch), err);
       return false;
     }
 
@@ -505,28 +654,37 @@ bool ArmSolveServer::publishTrajectoryPoints(const std::shared_ptr<GoalHandleMov
     for (size_t j = 0; j < traj.joint_names.size(); ++j) {
       engineer_interfaces::msg::Joint joint;
       joint.header.stamp = cmd.header.stamp;
-      joint.name         = traj.joint_names[j];
-      joint.position     = traj.points[i].positions[j];
-      joint.velocity     = (j < traj.points[i].velocities.size()) ? traj.points[i].velocities[j] : 0.0;
-      joint.mode         = "planned";
+      joint.name = traj.joint_names[j];
+      joint.position = traj.points[i].positions[j];
+      joint.velocity = (j < traj.points[i].velocities.size())
+                           ? traj.points[i].velocities[j]
+                           : 0.0;
+      // todo:
+      //  后续可将字段改为枚举值
+      //
+      joint.mode = "planned";
       cmd.joints.push_back(joint);
     }
 
     joint_cmd_pub_->publish(cmd);
 
-    auto fb      = std::make_shared<Move::Feedback>();
+    auto fb = std::make_shared<Move::Feedback>();
     fb->progress = static_cast<float>(i + 1) / traj.points.size();
     gh->publish_feedback(fb);
 
+    // todo：可以改为绝对时间戳对齐
     if (i + 1 < traj.points.size()) {
       // 依据轨迹时间戳 sleep，确保下发节奏接近规划时间
-      const double dt = traj.points[i + 1].time_from_start - traj.points[i].time_from_start;
+      const double dt =
+          traj.points[i + 1].time_from_start - traj.points[i].time_from_start;
       if (dt > 0.0) {
-        rclcpp::sleep_for(std::chrono::nanoseconds(static_cast<int64_t>(dt * 1e9)));
+        rclcpp::sleep_for(
+            std::chrono::nanoseconds(static_cast<int64_t>(dt * 1e9)));
       }
     }
   }
 
+  err_code = 0;
   return true;
 }
 

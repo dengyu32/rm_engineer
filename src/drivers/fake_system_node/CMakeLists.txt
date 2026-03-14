@@ -30,10 +30,10 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
+find_package(engineer_bringup REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(param_utils REQUIRED)
-find_package(error_code_utils REQUIRED)
+find_package(log_utils REQUIRED)
 
 # ----------------------------------------------------------------------------
 #  构建节点库
@@ -53,10 +53,10 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   rclcpp_components
+  engineer_bringup
   engineer_interfaces
   sensor_msgs
-  param_utils
-  error_code_utils
+  log_utils
 )
 
 # 注册组件并生成可执行入口

@@ -2,8 +2,19 @@
 
 #include <string>
 
-#include <log_utils/spdlog/sinks/stdout_color_sinks.h>
-#include <log_utils/spdlog/spdlog.h>
+#ifndef SPDLOG_HEADER_ONLY
+#define SPDLOG_HEADER_ONLY
+#endif
+#ifndef SPDLOG_FMT_EXTERNAL
+#define SPDLOG_FMT_EXTERNAL 0
+#endif
+#ifdef SPDLOG_USE_STD_FORMAT
+#undef SPDLOG_USE_STD_FORMAT
+#endif
+
+#include <spdlog/sinks/ansicolor_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog.h>
 
 // =============================================================================
 // log_utils public API
@@ -21,8 +32,10 @@ inline void init_console_logger(const std::string &name = "core") {
     return;
   }
 
-  auto logger = spdlog::stdout_color_mt(name);
-  logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
+  auto sink = std::make_shared<spdlog::sinks::ansicolor_stdout_sink_mt>(
+      spdlog::color_mode::always);
+  auto logger = std::make_shared<spdlog::logger>(name, sink);
+  logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] %^%v%$");
   logger->set_level(spdlog::level::info);
   spdlog::set_default_logger(logger);
 }
@@ -75,7 +88,7 @@ inline spdlog::logger &get() {
 // =============================================================================
 #define LOGT(...) log_utils::get().trace(__VA_ARGS__)
 #define LOGD(...) log_utils::get().debug(__VA_ARGS__)
-#define LOGI(...) log_utils::get().info(__VA_ARGS__)
+#define LOGI(...) log_utils::get().info(__VA_ARGS__ )
 #define LOGW(...) log_utils::get().warn(__VA_ARGS__)
 #define LOGE(...) log_utils::get().error(__VA_ARGS__)
 #define LOGC(...) log_utils::get().critical(__VA_ARGS__)

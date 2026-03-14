@@ -2,5 +2,10 @@
 /.colcon
 /.rerun
 /.vscode
+/.codex
+/build
+/log
+/install
+/src/vision/YOLOs-cpp/build
 compile_commands.json
 TODO

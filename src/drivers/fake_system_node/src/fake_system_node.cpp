@@ -1,18 +1,36 @@
 // Fake system
 #include "fake_system/fake_system_node.hpp"
-#include "fake_system/error_code.hpp"
-#include "param_utils/param_snapshot.hpp"
+
+// utils
+#include "log_utils/log.hpp"
 
 // C++
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <string>
+#include <algorithm>
 
 // ROS2
 #include <rclcpp/node_options.hpp>
 
 namespace fake_system {
 using namespace std::chrono_literals;
+
+namespace {
+enum class CommCode : int {
+  FakeJointCommandShort = 200,
+};
+
+const char *to_string(CommCode code) {
+  switch (code) {
+  case CommCode::FakeJointCommandShort:
+    return "FakeJointCommandShort";
+  default:
+    return "Unknown";
+  }
+}
+} // namespace
 
 // ============================================================================
 //  ctor
@@ -23,9 +41,76 @@ FakeSystemNode::FakeSystemNode(const rclcpp::NodeOptions &options)
       logger_(this->get_logger()),
       fake_joint_positions_(config_.initial_joint_positions),
       fake_gripper_position_(config_.initial_gripper_position) {
+  if (config_.initial_slot_status.size() == 2U) {
+    fake_slot_status_[0] = config_.initial_slot_status[0];
+    fake_slot_status_[1] = config_.initial_slot_status[1];
+  }
 
-  hfsm_intent_pub_ = this->create_publisher<engineer_interfaces::msg::HFSMIntent>(
-      config_.hfsm_intent_topic, rclcpp::QoS(10));
+  // 声明获取动态参数
+  this->declare_parameter<int>("fake_intent_id", 0);
+  int init_id = this->get_parameter("fake_intent_id").as_int();
+  init_id = std::clamp(init_id, 0, 255);
+  fake_intent_id_ = static_cast<uint8_t>(init_id);
+
+  // 参数动态回调
+  // dynamic param callback
+  param_callback_handle_ = this->add_on_set_parameters_callback(
+      [this](const std::vector<rclcpp::Parameter> &params) {
+        rcl_interfaces::msg::SetParametersResult result;
+        result.successful = true;
+        result.reason = "";
+
+        for (const auto &p : params) {
+          if (p.get_name() != "fake_intent_id") {
+            continue;
+          }
+
+          if (p.get_type() != rclcpp::ParameterType::PARAMETER_INTEGER) {
+            result.successful = false;
+            result.reason = "fake_intent_id must be integer";
+            return result;
+          }
+
+          const int v = p.as_int();
+          if (v < 0 || v > 255) {
+            result.successful = false;
+            result.reason = "fake_intent_id out of range [0,255]";
+            return result;
+          }
+
+          fake_intent_id_.store(static_cast<uint8_t>(v), std::memory_order_relaxed);
+          RCLCPP_INFO(logger_, "[fake_system] fake_intent_id set to %d", v);
+        }
+        return result;
+      });
+
+
+  // ros init
+  initRosInterfaces();
+
+  publish_timer_ = this->create_wall_timer(
+      std::chrono::milliseconds(config_.publish_period_ms),
+      std::bind(&FakeSystemNode::publish_timer_callback, this));
+
+  // log
+  log_utils::init_console_logger("core");
+  LOGI("\n{}",config_.summary());
+  RCLCPP_INFO(logger_, "FAKE_SYSTEM_NODE START!!!"); // 与节点有关的日志还用ros日志
+}
+
+void FakeSystemNode::publish_error(int code, const char *name,
+                                   const std::string &message) const {
+  RCLCPP_ERROR(logger_, "[fake_system][error][code=%d][name=%s] %s", code,
+               name ? name : "Unknown", message.c_str());
+}
+
+// ============================================================================
+//  ROS interfaces
+// ============================================================================
+void FakeSystemNode::initRosInterfaces() {
+  // Publisher
+  intent_cmd_pub_ = this->create_publisher<engineer_interfaces::msg::Intent>(
+      config_.intent_cmd_topic, rclcpp::QoS(10));
   joint_states_pub_ = this->create_publisher<sensor_msgs::msg::JointState>(
       config_.joint_states_topic, rclcpp::QoS(10));
   joint_states_custom_pub_ =
@@ -34,34 +119,22 @@ FakeSystemNode::FakeSystemNode(const rclcpp::NodeOptions &options)
   joint_states_verbose_pub_ =
       this->create_publisher<engineer_interfaces::msg::Joints>(
           config_.joint_states_verbose_topic, rclcpp::QoS(10));
+  slot_states_pub_ = this->create_publisher<engineer_interfaces::msg::Slots>(
+      config_.slot_state_topic, rclcpp::QoS(10));
+
+  // Subscriber
+  intent_fb_sub_ = this->create_subscription<engineer_interfaces::msg::Intent>(
+      config_.intent_fb_topic, rclcpp::QoS(10),
+      [this](engineer_interfaces::msg::Intent::SharedPtr msg) { this->intent_feedback_callback(msg); });
   joint_cmd_sub_ = this->create_subscription<engineer_interfaces::msg::Joints>(
       config_.joint_cmd_topic, rclcpp::QoS(10),
       [this](engineer_interfaces::msg::Joints::SharedPtr msg) { this->execute(msg); });
-  gripper_cmd_sub = this->create_subscription<engineer_interfaces::msg::GripperCommand>(
+  gripper_cmd_sub = this->create_subscription<engineer_interfaces::msg::Gripper>(
       config_.gripper_cmd_topic, rclcpp::QoS(10),
-      [this](engineer_interfaces::msg::GripperCommand::SharedPtr msg) { this->execute(msg); });
-  publish_timer_ = this->create_wall_timer(
-      std::chrono::milliseconds(config_.publish_period_ms),
-      std::bind(&FakeSystemNode::publish_timer_callback, this));
-
-  // 确保内部缓存大小合法
-  if (fake_joint_positions_.empty()) {
-    fake_joint_positions_.assign(6, 0.0);
-  }
-
-  param_utils::LogSnapshot(this->get_logger(), config_.params_snapshot, "[FAKE_SYSTEM][param] ");
-  RCLCPP_INFO(logger_, "FAKE_SYSTEM started");
-}
-
-void FakeSystemNode::set_error_bus(const std::shared_ptr<error_code_utils::ErrorBus> &bus) {
-  error_bus_ = bus;
-}
-
-void FakeSystemNode::publish_error(const error_code_utils::Error &err) const {
-  if (!error_bus_) {
-    return;
-  }
-  error_bus_->publish(err);
+      [this](engineer_interfaces::msg::Gripper::SharedPtr msg) { this->execute(msg); });
+  slot_cmd_sub_ = this->create_subscription<engineer_interfaces::msg::Slots>(
+      config_.slot_cmd_topic, rclcpp::QoS(10),
+      [this](engineer_interfaces::msg::Slots::SharedPtr msg) { this->execute(msg); });
 }
 
 // ============================================================================
@@ -77,28 +150,64 @@ void FakeSystemNode::execute(engineer_interfaces::msg::Joints::SharedPtr msg) {
   for (size_t i = count; i < expected; ++i) {
     fake_joint_positions_[i] = 0.0;
   }
+
   if (msg->joints.size() < expected) {
     static auto last_warn = std::chrono::steady_clock::time_point{};
     const auto now_tp = std::chrono::steady_clock::now();
     if (last_warn.time_since_epoch().count() == 0 ||
-        now_tp - last_warn >= std::chrono::milliseconds(2000)) {
+        now_tp - last_warn >= std::chrono::milliseconds(2000)) {  // 限制频率 2秒最多告警一次
       last_warn = now_tp;
-      RCLCPP_WARN(logger_,
-                  "[scope=fake_system_node] joint_commands size=%zu < %zu, fill defaults",
-                  msg->joints.size(), expected);
-      publish_error(make_error(FakeSystemErrc::JointCommandShort,
-                               "joint_commands size smaller than expected",
-                               {{"expected", std::to_string(expected)},
-                                {"actual", std::to_string(msg->joints.size())}}));
+      LOGW("[fake_system] joint_commands size={} < {}, fill defaults",msg->joints.size(), expected);      
+      publish_error(static_cast<int>(CommCode::FakeJointCommandShort),
+                    to_string(CommCode::FakeJointCommandShort),
+                    "joint_commands size smaller than expected expected=" +
+                        std::to_string(expected) +
+                        " actual=" + std::to_string(msg->joints.size()));
     }
   }
 }
 
-void FakeSystemNode::execute(engineer_interfaces::msg::GripperCommand::SharedPtr msg) {
+void FakeSystemNode::execute(engineer_interfaces::msg::Gripper::SharedPtr msg) {
   std::scoped_lock<std::mutex> lock(fake_mutex_);
-  fake_gripper_position_ = (msg->gripper_command == 1) ? 0.03 : 0.0;
+  fake_gripper_position_ = msg->position;
 }
 
+void FakeSystemNode::execute(engineer_interfaces::msg::Slots::SharedPtr msg) {
+  if (!msg) {
+    return;
+  }
+
+  bool changed = false;
+  {
+    std::scoped_lock<std::mutex> lock(fake_mutex_);
+    const std::size_t count = std::min<std::size_t>(fake_slot_status_.size(), msg->slots.size());
+    for (std::size_t i = 0; i < count; ++i) {
+      const bool desired = msg->slots[i].command;
+      if (desired != fake_slot_status_[i]) {
+        fake_slot_status_[i] = desired;
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    publish_slot_states_now();
+  }
+}
+
+void FakeSystemNode::intent_feedback_callback(const engineer_interfaces::msg::Intent::SharedPtr msg) {
+  if (msg->intent_finish == 0) {
+    return; // 0=Running，不清零
+  }
+  const uint8_t current_intent_id = fake_intent_id_.load(std::memory_order_acquire);
+
+  if (current_intent_id != 0) {
+    LOGI("[fake_system] intent feedback: id={}, finish={}, reset fake_intent_id({}) -> 0",
+         msg->intent_id, msg->intent_finish, current_intent_id);
+    fake_intent_id_.store(0, std::memory_order_release); // 非 Running 反馈即重置为 IDLE
+  }
+}
+ 
 // ============================================================================
 //  Timers
 // ============================================================================
@@ -114,48 +223,70 @@ void FakeSystemNode::publish_timer_callback() {
   const size_t joint_count = joint_positions_copy.size();
 
   // 发布 JointState
-  sensor_msgs::msg::JointState joint_states_msg;
-  joint_states_msg.header.stamp = this->now();
-  joint_states_msg.header.frame_id = "base_link";
-  joint_states_msg.name.reserve(joint_count + 1);
-  joint_states_msg.position.reserve(joint_count + 1);
+  sensor_msgs::msg::JointState joint_states;
+  joint_states.header.stamp = this->now();
+  joint_states.header.frame_id = "base_link";
+  joint_states.name = config_.joint_names;
+  joint_states.name.reserve(joint_count + 1);
+  joint_states.position.reserve(joint_count + 1);
 
   for (size_t i = 0; i < joint_count; ++i) {
-    joint_states_msg.name.push_back("joint" + std::to_string(i + 1));
-    joint_states_msg.position.push_back(joint_positions_copy[i]);
+    joint_states.position.push_back(joint_positions_copy[i]);
   }
-  joint_states_msg.name.push_back("left_finger_joint");
-  joint_states_msg.position.push_back(gripper_copy);
+  joint_states.name.push_back("left_finger_joint");
+  joint_states.position.push_back(gripper_copy);
 
-  joint_states_msg.velocity.resize(joint_states_msg.name.size(), 0.0);
-  joint_states_msg.effort.resize(joint_states_msg.name.size(), 0.0);
-  joint_states_pub_->publish(joint_states_msg);
+  joint_states.velocity.resize(joint_states.name.size(), 0.0);
+  joint_states.effort.resize(joint_states.name.size(), 0.0);
+  joint_states_pub_->publish(joint_states);
 
   // 发布 JointStateVerbose
-  engineer_interfaces::msg::Joints joint_states_verbose_msg;
-  joint_states_verbose_msg.header.stamp = this->now();
-  joint_states_verbose_msg.header.frame_id = "base_link";
-  joint_states_verbose_msg.joints.resize(joint_count);
+  engineer_interfaces::msg::Joints joint_states_verbose;
+  joint_states_verbose.header.stamp = this->now();
+  joint_states_verbose.header.frame_id = "base_link";
+  joint_states_verbose.joints.resize(joint_count);
   for (size_t i = 0; i < joint_count; ++i) {
-    joint_states_verbose_msg.joints[i].name = "joint" + std::to_string(i + 1);
-    joint_states_verbose_msg.joints[i].position = joint_positions_copy[i];
-    joint_states_verbose_msg.joints[i].velocity = 0;
-    joint_states_verbose_msg.joints[i].effort = 0;
-    joint_states_verbose_msg.joints[i].mode = "fake";
+    joint_states_verbose.joints[i].name = config_.joint_names[i];
+    joint_states_verbose.joints[i].position = joint_positions_copy[i];
+    joint_states_verbose.joints[i].velocity = 0;
+    joint_states_verbose.joints[i].effort = 0;
+    joint_states_verbose.joints[i].mode = "fake";
   }
-  joint_states_verbose_pub_->publish(joint_states_verbose_msg);
+  joint_states_verbose_pub_->publish(joint_states_verbose);
 
-  // JointStateCustom（与 verbose 相同格式，供下游兼容）
-  auto joint_states_custom_msg = joint_states_verbose_msg;
-  joint_states_custom_pub_->publish(joint_states_custom_msg);
+  // fake system 不需要发布 joint_states_custom (重要)
 
-  // 发布 Intent（可选）
-  if (config_.publish_intent) {
-    engineer_interfaces::msg::HFSMIntent hfsm_intent_msg;
-    hfsm_intent_msg.stamp = this->now();
-    hfsm_intent_msg.intent_id = 0; // 发送 IDLE
-    hfsm_intent_pub_->publish(hfsm_intent_msg);
+  // 发布 Intent
+  engineer_interfaces::msg::Intent intent_msg;
+  intent_msg.stamp = this->now();
+  intent_msg.intent_id = fake_intent_id_.load(std::memory_order_relaxed);
+  intent_cmd_pub_->publish(intent_msg);
+
+  publish_slot_states_now();
+}
+
+void FakeSystemNode::publish_slot_states_now() {
+  if (!slot_states_pub_) {
+    return;
   }
+
+  std::array<bool, 2> slot_copy{{false, false}};
+  {
+    std::scoped_lock<std::mutex> lock(fake_mutex_);
+    slot_copy = fake_slot_status_;
+  }
+
+  engineer_interfaces::msg::Slots slots_msg;
+  slots_msg.header.stamp = this->now();
+  slots_msg.header.frame_id = "fake_system";
+  slots_msg.slots.resize(slot_copy.size());
+  for (std::size_t i = 0; i < slot_copy.size(); ++i) {
+    slots_msg.slots[i].header.stamp = slots_msg.header.stamp;
+    slots_msg.slots[i].header.frame_id = "slot_" + std::to_string(i);
+    slots_msg.slots[i].status = slot_copy[i];
+    slots_msg.slots[i].command = slot_copy[i];
+  }
+  slot_states_pub_->publish(slots_msg);
 }
 } // namespace fake_system
 
