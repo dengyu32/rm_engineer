@@ -1,5 +1,6 @@
 #include "arm_solve/arm_solve_server.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <memory>
@@ -9,6 +10,8 @@
 #include <moveit/collision_detection/collision_common.h>
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
+#include <moveit/robot_trajectory/robot_trajectory.h>
+#include <moveit/trajectory_processing/time_optimal_trajectory_generation.h>
 
 // ROS
 #include <moveit_msgs/msg/robot_trajectory.hpp>
@@ -163,11 +166,79 @@ public:
     return true;
   }
 
+  bool time_parameterize_trajectory(
+      const moveit::core::RobotState &start_state,
+      const std::string &group_name,
+      solve_core::Trajectory &traj,
+      double velocity_scaling,
+      double accel_scaling,
+      std::string &err) const override;
+
 private:
   moveit::planning_interface::MoveGroupInterface *move_group_{nullptr};
   std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> psm_;
   rclcpp::Logger logger_;
 };
+
+bool MoveItAdapterImpl::time_parameterize_trajectory(
+    const moveit::core::RobotState &start_state,
+    const std::string &group_name,
+    solve_core::Trajectory &traj,
+    double velocity_scaling,
+    double accel_scaling,
+    std::string &err) const {
+  if (!move_group_) {
+    err = "MoveGroup not ready";
+    return false;
+  }
+  const auto model = robot_model();
+  if (!model) {
+    err = "RobotModel not ready";
+    return false;
+  }
+  const auto *jmg = model->getJointModelGroup(group_name);
+  if (!jmg) {
+    err = "JointModelGroup not found";
+    return false;
+  }
+  if (traj.points.empty()) {
+    return true;
+  }
+
+  robot_trajectory::RobotTrajectory rt(model, group_name);
+  moveit::core::RobotState state(start_state);
+
+  for (const auto &pt : traj.points) {
+    if (pt.positions.size() < jmg->getVariableCount()) {
+      err = "Trajectory point size mismatch";
+      return false;
+    }
+    state.setJointGroupPositions(jmg, pt.positions);
+    state.update();
+    rt.addSuffixWayPoint(state, 0.0);
+  }
+
+  trajectory_processing::TimeOptimalTrajectoryGeneration totg;
+  const double v_scale = std::clamp(velocity_scaling, 0.01, 1.0);
+  const double a_scale = std::clamp(accel_scaling, 0.01, 1.0);
+  if (!totg.computeTimeStamps(rt, v_scale, a_scale)) {
+    err = "Time parameterization failed";
+    return false;
+  }
+
+  traj.joint_names = jmg->getVariableNames();
+  traj.points.clear();
+  traj.points.reserve(rt.getWayPointCount());
+  for (std::size_t i = 0; i < rt.getWayPointCount(); ++i) {
+    const moveit::core::RobotState &st = rt.getWayPoint(i);
+    solve_core::TrajectoryPoint p;
+    st.copyJointGroupPositions(jmg, p.positions);
+    st.copyJointGroupVelocities(jmg, p.velocities);
+    p.time_from_start = rt.getWayPointDurationFromStart(i);
+    traj.points.push_back(std::move(p));
+  }
+  return true;
+}
 
 } // namespace
 
@@ -213,7 +284,8 @@ void finish_move_goal(const std::shared_ptr<GoalHandleMove> &gh, bool success,
 // _节点构造
 ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions &options)
     : Node("arm_solve_action_server", rclcpp::NodeOptions(options)),
-      config_(ArmSolveConfig::Load(*this)), solve_core_config_(),
+      config_(ArmSolveConfig::Load(*this)),
+      solve_core_config_(LoadSolveCoreConfig(*this)),
       last_plan_time_(
           now() - rclcpp::Duration(std::chrono::milliseconds(
                       config_.plan_min_interval_ms))) { //避免第一次规划被节流
@@ -347,6 +419,7 @@ bool ArmSolveServer::planTrajectory(const std::shared_ptr<GoalContext> &ctx,
     return false;
   }
 
+  // 异步获取当前关节状态的副本
   engineer_interfaces::msg::Joints current_joints_copy;
   {
     std::scoped_lock<std::mutex> lock(current_joints_mutex_);
@@ -360,7 +433,7 @@ bool ArmSolveServer::planTrajectory(const std::shared_ptr<GoalContext> &ctx,
       ctx->target_pose.pose.position.z,    ctx->target_pose.pose.orientation.x,
       ctx->target_pose.pose.orientation.y, ctx->target_pose.pose.orientation.z,
       ctx->target_pose.pose.orientation.w};
-  req.target_direction = ctx->target_direction;
+  req.target_vector = ctx->target_vector;
   req.target_joints.assign(ctx->target_joints.begin(),
                            ctx->target_joints.end());
   req.current_joints.names.reserve(current_joints_copy.joints.size());
@@ -441,9 +514,9 @@ void ArmSolveServer::handle_accepted(const std::shared_ptr<GoalHandleMove> gh) {
   ctx->target_pose.pose.position.x = goal->target_pose.x;
   ctx->target_pose.pose.position.y = goal->target_pose.y;
   ctx->target_pose.pose.position.z = goal->target_pose.z;
-  ctx->target_direction = {static_cast<double>(goal->target_vector.x),
-                           static_cast<double>(goal->target_vector.y),
-                           static_cast<double>(goal->target_vector.z)};
+  ctx->target_vector = {static_cast<double>(goal->target_vector.x),
+                         static_cast<double>(goal->target_vector.y),
+                         static_cast<double>(goal->target_vector.z)};
   ctx->target_joints = goal->target_joints;
 
   {

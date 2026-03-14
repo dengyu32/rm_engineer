@@ -6,9 +6,8 @@
 
 #include <moveit/robot_model/robot_model.h>
 
-#include "solve_core/config.hpp"
 #include "solve_core/solve_core.hpp"
-
+#include "solve_core/calculate_tools/hybrid_ik.hpp"
 namespace solve_core {
 
 /*

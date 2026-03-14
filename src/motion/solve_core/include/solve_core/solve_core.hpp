@@ -55,7 +55,7 @@ enum class PlanOption {
 struct SolveRequest {
   PlanOption option{PlanOption::NORMAL};
   Pose target_pose{};
-  std::array<double, 3> target_direction{{0.0, 0.0, 0.0}};
+  std::array<double, 3> target_vector{{0.0, 0.0, 0.0}};
   std::vector<double> target_joints;
   JointState current_joints;
   std::string group_name;
@@ -101,6 +101,15 @@ public:
   virtual bool check_self_collision(
       const moveit::core::RobotState &state,
       const std::string &group_name,
+      std::string &err) const = 0;
+
+  // Time-parameterize an existing joint trajectory without changing path.
+  virtual bool time_parameterize_trajectory(
+      const moveit::core::RobotState &start_state,
+      const std::string &group_name,
+      Trajectory &traj,
+      double velocity_scaling,
+      double accel_scaling,
       std::string &err) const = 0;
 };
 

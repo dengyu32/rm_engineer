@@ -67,9 +67,10 @@ TaskPlan make_test_solve() {
   const auto target1 =
       make_target(0.26484, -0.36076, 0.55316, 0.64923, 0.17886, 0.18983, 0.71447);
   geometry_msgs::msg::Vector3 target1_vec;
-  target1_vec.x = target1.x;
-  target1_vec.y = target1.y;
-  target1_vec.z = target1.z;
+  // Use direction from target0 (current pose after first step) to target1
+  target1_vec.x = target1.x - target0.x;
+  target1_vec.y = target1.y - target0.y;
+  target1_vec.z = target1.z - target0.z;
   return TaskBuilder(TaskId::TEST_SOLVE)
       .pose("move_normal_pose0", target0)
       .gripper("gripper_close", CLOSE)
@@ -85,9 +86,10 @@ TaskPlan make_test_cartesian() {
   const auto target1 =
       make_target(0.54028, 0.19212, 0.27802, -0.17604, 0.69171, -0.39348, 0.57941);
   geometry_msgs::msg::Vector3 target1_vec;
-  target1_vec.x = target1.x;
-  target1_vec.y = target1.y;
-  target1_vec.z = target1.z;
+  // Use direction from target0 (current pose after first step) to target1
+  target1_vec.x = target1.x - target0.x;
+  target1_vec.y = target1.y - target0.y;
+  target1_vec.z = target1.z - target0.z;
   return TaskBuilder(TaskId::TEST_CARTESIAN)
       .pose("approach_normal", target0)
       .gripper("gripper_close", CLOSE)

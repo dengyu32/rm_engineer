@@ -45,7 +45,7 @@ struct GoalContext {
   solve_core::PlanOption option;
 
   geometry_msgs::msg::PoseStamped target_pose;
-  std::array<double, 3> target_direction{{0.0, 0.0, 0.0}};
+  std::array<double, 3> target_vector{{0.0, 0.0, 0.0}};
   std::array<float, 6> target_joints{{0.f, 0.f, 0.f, 0.f, 0.f, 0.f}};
 
   // preempt

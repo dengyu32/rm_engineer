@@ -5,8 +5,9 @@
 #include <Eigen/Geometry>
 #include <string>
 #include <vector>
+#include <sstream>
 
-#include "solve_core/config.hpp"
+#include "log_utils/log.hpp"
 
 /*
   预期做混合IK（如果后面能上IKFast的话）
@@ -24,6 +25,27 @@
 */
 
 namespace solve_core {
+
+struct IKOptions {
+  int max_attempts{50};    // 总尝试次数
+  int max_solutions{10};   // 最多收集多少个解
+  double timeout{0.05};    // setFromIK timeout (seconds)
+  double noise_sigma{0.2}; // 高斯噪声标准差
+  double dedup_eps{1e-3};  // 去重阈值（L∞）
+
+  void log() const {
+    std::ostringstream oss;
+    oss << "=========\n";
+    oss << " HybridIK Options\n\n";
+    oss << "   - max_attempts  : " << max_attempts << "\n";
+    oss << "   - max_solutions : " << max_solutions << "\n";
+    oss << "   - timeout       : " << timeout << "\n";
+    oss << "   - noise_sigma   : " << noise_sigma << "\n";
+    oss << "   - dedup_eps     : " << dedup_eps << "\n";
+    oss << "=========\n";
+    LOGI("{}", oss.str());
+  }
+};
 
 class HybridIK {
 public:

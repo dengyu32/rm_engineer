@@ -1,10 +1,12 @@
 #include "solve_core/planner/straight_planner.hpp"
 #include "solve_core/calculate_tools/cost_func.hpp"
 #include "solve_core/calculate_tools/hybrid_ik.hpp"
+#include "solve_core/calculate_tools/wrap.hpp"
 #include "solve_core/solve_core.hpp"
 #include "log_utils/log.hpp"
 #include <limits>
 #include <cmath>
+#include <algorithm>
 #include <unordered_set>
 
 namespace solve_core {
@@ -21,6 +23,20 @@ static std::string vec_key_rounded(const std::vector<double>& v, double eps = 1e
     k.push_back(',');
   }
   return k;
+}
+
+// === 辅助：计算 q 相对某参考向量的 wrap 距离（L2） ===
+static double wrap_distance_l2(const std::vector<double>& q,
+                               const std::vector<double>& q_ref) {
+  const size_t n = std::min(q.size(), q_ref.size());
+  if (n == 0) return std::numeric_limits<double>::infinity();
+  double sum = 0.0;
+  for (size_t i = 0; i < n; ++i) {
+    const double qi = ikc::wrapToNearby(q[i], q_ref[i]);
+    const double d = qi - q_ref[i];
+    sum += d * d;
+  }
+  return std::sqrt(sum);
 }
 
 } // namespace
@@ -58,25 +74,44 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
   }
 
   const auto* jmg = robot_model_->getJointModelGroup(group_name_);
-  const auto* link = robot_model_->getLinkModel(ee_link_);
-  if (!jmg || !link) {
+  const auto* ee_link = robot_model_->getLinkModel(ee_link_);
+  if (!jmg || !ee_link) {
     LOGE("[solve_core][straight_planner] Invalid model handles: jmg={}, link={}",
-         jmg != nullptr, link != nullptr);
+         jmg != nullptr, ee_link != nullptr);
     return std::nullopt;
   }
 
   HybridIK ik(robot_model_, group_name_, ee_link_);
   IKOptions ik_opt;
+  ik_opt.log();
 
   // 起始末端位姿（用于生成直线离散路点）
-  Eigen::Isometry3d T0 = start_state.getGlobalLinkTransform(link);
+  Eigen::Isometry3d T0 = start_state.getGlobalLinkTransform(ee_link);
   Eigen::Vector3d line_delta = Eigen::Vector3d::Zero();
   if (opt.use_directional_sampling) {
-    Eigen::Vector3d direction(opt.direction_x, opt.direction_y, opt.direction_z);
-    const double norm = direction.norm();
+    Eigen::Vector3d vector(opt.direction_x, opt.direction_y, opt.direction_z);
+    const double norm = vector.norm();  // 计算方向向量的模长
     if (opt.sample_step_m > 0.0 && norm > 1e-9) {
-      direction /= norm;
-      line_delta = direction * (opt.sample_step_m * static_cast<double>(opt.num_waypoints));
+      vector /= norm;
+      line_delta = vector * (opt.sample_step_m * static_cast<double>(opt.num_waypoints)); // 计算总的位移增量
+
+      // Debug: log T0, direction, and first waypoint pose (T1)
+      const Eigen::Quaterniond q0(T0.linear());
+      const Eigen::Vector3d t0 = T0.translation();
+      const double r1 = 1.0 / static_cast<double>(opt.num_waypoints);
+      Eigen::Isometry3d T1 = Eigen::Isometry3d::Identity();
+      T1.translation() = t0 + line_delta * r1;
+      T1.linear() = T0.linear();
+      const Eigen::Quaterniond q1(T1.linear());
+      LOGI("[solve_core][straight_planner] T0: pos=({:.6f}, {:.6f}, {:.6f}) quat=({:.6f}, {:.6f}, {:.6f}, {:.6f})",
+           t0.x(), t0.y(), t0.z(), q0.x(), q0.y(), q0.z(), q0.w());
+      LOGI("[solve_core][straight_planner] dir(unit)=({:.6f}, {:.6f}, {:.6f}) sample_step={:.6f} num_waypoints={} line_delta=({:.6f}, {:.6f}, {:.6f})",
+           vector.x(), vector.y(), vector.z(),
+           opt.sample_step_m, opt.num_waypoints,
+           line_delta.x(), line_delta.y(), line_delta.z());
+      LOGI("[solve_core][straight_planner] T1: pos=({:.6f}, {:.6f}, {:.6f}) quat=({:.6f}, {:.6f}, {:.6f}, {:.6f})",
+           T1.translation().x(), T1.translation().y(), T1.translation().z(),
+           q1.x(), q1.y(), q1.z(), q1.w());
     } else {
       LOGE("[solve_core][straight_planner] Invalid directional sampling params");
       return std::nullopt;
@@ -93,7 +128,7 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
   // 用于生成候选解的随机种子：对第一个路点我们用 start_state 作为 seed，
   // 对后续路点我们用上层候选解作为 seed（见下面循环）。
   // 注意：为了控制复杂度，我们限制每层候选解数量（cap_candidates）
-  const int cap_candidates = 12; // 每路点候选解上限（可调）
+  const int cap_candidates = 10; // 每路点候选解上限（可调）
 
   // 1) 逐路点生成候选解集（使用“从前一层候选解作为 seed”策略）
   // prev_seeds 初始为只有 start_state
@@ -115,7 +150,6 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
 
     // 收集该路点所有候选解（从每个 prev_solution 作为 seed 去调用 ik.solveAll）
     std::vector<std::vector<double>> candidates;
-    candidates.reserve(cap_candidates);
 
     // 去重哈希表：存已见过的解的 key
     std::unordered_set<std::string> seen_keys;
@@ -134,24 +168,41 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
         continue;
       }
 
-      // 将 sols 收集到 candidates，去重并且限制总数 cap_candidates
+      // 将 sols 收集到 candidates，先去重，稍后排序再截断
       for (auto &q : sols) {
-        if ((int)candidates.size() >= cap_candidates) break;
-
         // 简单去重：基于四舍五入后的字符串 key
         std::string key = vec_key_rounded(q, 1e-4);
         if (seen_keys.insert(key).second) {
           candidates.push_back(std::move(q));
         }
       }
-
-      if ((int)candidates.size() >= cap_candidates) break;
     }
 
     // 如果该路点没有候选解则整个规划失败
+    // option2: 回退
     if (candidates.empty()) {
       LOGE("[solve_core][straight_planner] No IK candidates at waypoint {}", i);
+
       return std::nullopt;
+    }
+
+    // 按与上一层解的 wrap 距离排序，再截断到 cap_candidates
+    std::vector<std::pair<double, std::vector<double>>> scored;
+    scored.reserve(candidates.size());
+    for (auto &q : candidates) {
+      double best = std::numeric_limits<double>::infinity();
+      for (const auto &prev_q : prev_solutions) {
+        best = std::min(best, wrap_distance_l2(q, prev_q));
+      }
+      scored.emplace_back(best, std::move(q));
+    }
+    std::sort(scored.begin(), scored.end(),
+              [](const auto &a, const auto &b) { return a.first < b.first; });
+    candidates.clear();
+    const size_t keep = std::min(scored.size(), static_cast<size_t>(cap_candidates));
+    candidates.reserve(keep);
+    for (size_t idx = 0; idx < keep; ++idx) {
+      candidates.push_back(std::move(scored[idx].second));
     }
 
     // 保存该路点候选解，并作为下一层 prev_solutions 的来源
@@ -166,7 +217,7 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
   std::vector<std::vector<double>> dp_costs(N);
   std::vector<std::vector<int>> prev_idx(N);
 
-  CostFunc cost_func(start_state, jmg, link, cost_opt);
+  CostFunc cost_func(start_state, jmg, ee_link, cost_opt);
 
   // 初始化第一层 dp（从 start_state 到第一层每个候选的代价）
   dp_costs[0].assign(sols_per_waypoint[0].size(), std::numeric_limits<double>::infinity());
@@ -249,14 +300,20 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
   for (auto it = best_path_rev.rbegin(); it != best_path_rev.rend(); ++it)
     q_path.push_back(*it);
 
+  // 关节角度线性插值：已移除，直接使用路径点
+  std::vector<std::vector<double>> q_path_interp = q_path;
+
+  // Wrap the final joint sequence for continuity (in-place).
+  ikc::unwrapTrajectory(q_path_interp);
+
   // 可选输出
   if (joint_path_out)
-    *joint_path_out = q_path;
+    *joint_path_out = q_path_interp;
 
   Trajectory traj;
   traj.joint_names = jmg->getVariableNames();
-  traj.points.reserve(q_path.size());
-  for (const auto& q : q_path) {
+  traj.points.reserve(q_path_interp.size());
+  for (const auto& q : q_path_interp) {
     TrajectoryPoint pt;
     pt.positions = q;
     traj.points.push_back(std::move(pt));

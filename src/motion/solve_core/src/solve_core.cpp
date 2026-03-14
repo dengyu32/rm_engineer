@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "log_utils/log.hpp"
+#include "solve_core/calculate_tools/cost_func.hpp"
 #include "solve_core/calculate_tools/wrap.hpp"
 #include "solve_core/planner/limit_planner.hpp"
 #include "solve_core/planner/straight_planner.hpp"
@@ -185,7 +186,7 @@ void parameterize_time_from_start(Trajectory &traj, double velocity_scaling) {
   }
 
   constexpr double kNominalJointSpeedRadPerSec = 1.0;
-  constexpr double kMinDtSec = 0.02;
+  constexpr double kMinDtSec = 0.01;
   const double scale = std::clamp(velocity_scaling, 0.05, 1.0);
 
   traj.points[0].time_from_start = 0.0;
@@ -370,7 +371,7 @@ SolveCore::plan_cartesian(const SolveRequest &req, std::string &err) {
       req.ee_link;
 
   Eigen::Vector3d direction;
-  if (!parse_direction_vector(req.target_direction, direction, err)) {
+  if (!parse_direction_vector(req.target_vector, direction, err)) {
     LOGE("[solve_core] {}", err);
     publish_error(SolveCode::InvalidRequest, err);
     return std::nullopt;
@@ -379,24 +380,66 @@ SolveCore::plan_cartesian(const SolveRequest &req, std::string &err) {
   StraightPlanner planner(robot_model, group_name, ee_link);
   StraightPlannerOptions opt;
   opt.num_waypoints = config_.cartesian_num_waypoints;
-  opt.use_directional_sampling = true;
+  opt.use_directional_sampling = config_.cartesian_use_directional_sampling;
   opt.sample_step_m = config_.cartesian_sample_step_m;
   opt.direction_x = direction.x();
   opt.direction_y = direction.y();
   opt.direction_z = direction.z();
 
+  // todo：暂时修的bug，后续可以改成直接在config里设置代价计算函数的参数
+  CostOptions cost_opt;
   auto traj = planner.plan(
       start_state,
       pose_to_isometry(req.target_pose),
       opt,
-      config_.straight_cost_options);
+      cost_opt);
 
   if (!traj)
     return std::nullopt;
 
+  // 直线规划结果进行自碰撞检测
+  const auto *jmg = adapter_->joint_model_group(group_name);
+  if (!jmg) {
+    LOGE("[solve_core] JointModelGroup not found");
+    publish_error(SolveCode::JointModelGroupMissing, "JointModelGroup not found",
+                  {{"group_name", group_name}});
+    return std::nullopt;
+  }
+
+  moveit::core::RobotState rs(start_state);
+  for (std::size_t i = 0; i < traj->points.size(); ++i) {
+    const auto &pt = traj->points[i];
+    if (pt.positions.size() < jmg->getVariableCount()) {
+      LOGE("[solve_core] Trajectory point size mismatch for collision check");
+      publish_error(SolveCode::InvalidRequest,
+                    "Trajectory point positions size mismatch",
+                    {{"group_name", group_name}});
+      return std::nullopt;
+    }
+    rs.setJointGroupPositions(jmg, pt.positions);
+    rs.update();
+    std::string collision_err;
+    if (!adapter_->check_self_collision(rs, group_name, collision_err)) {
+      if (collision_err.empty())
+        collision_err = "Self collision detected";
+      LOGE("[solve_core] {}", collision_err);
+      publish_error(SolveCode::CollisionDetected, collision_err,
+                    {{"group_name", group_name}, {"waypoint_index", std::to_string(i)}});
+      return std::nullopt;
+    }
+  }
+
   SolveResponse resp;
   resp.trajectory = std::move(*traj);
-  parameterize_time_from_start(resp.trajectory, config_.max_velocity_scaling);
+  std::string time_err;
+  if (!adapter_->time_parameterize_trajectory(start_state, group_name,
+                                              resp.trajectory,
+                                              config_.max_velocity_scaling,
+                                              config_.max_acc_scaling,
+                                              time_err)) {
+    LOGE("[solve_core] Time parameterization failed: {}", time_err);
+    parameterize_time_from_start(resp.trajectory, config_.max_velocity_scaling);
+  }
   return resp;
 }
 

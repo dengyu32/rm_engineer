@@ -75,6 +75,7 @@ LimitPlanner::plan(const moveit::core::JointModelGroup *jmg_,
     start_state.copyJointGroupPositions(jmg_, current_joints);
 
     IKOptions ik_opt;
+    ik_opt.log();
     auto candidates = generate_roll_samples(isometry_to_pose(target_pose), opt);
     evaluate_candidates_with_ik(candidates,
                                 model,

@@ -22,8 +22,8 @@ def load_xacro(path: str, mappings: Optional[dict] = None) -> str:
 
 def generate_launch_description():
     moveit_config_pkg = get_package_share_directory('engineer_moveit_config')
-    urdf_path = os.path.join(moveit_config_pkg, 'config', 'engineer_v3.urdf.xacro')
-    srdf_path = os.path.join(moveit_config_pkg, 'config', 'engineer_v3.srdf')
+    urdf_path = os.path.join(moveit_config_pkg, 'config', 'engineer_v4.urdf.xacro')
+    srdf_path = os.path.join(moveit_config_pkg, 'config', 'engineer_v4.srdf')
 
     robot_description = {'robot_description': load_xacro(urdf_path)}
     robot_description_semantic = {'robot_description_semantic': load_file(srdf_path)}

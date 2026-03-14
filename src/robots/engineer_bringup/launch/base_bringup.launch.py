@@ -60,8 +60,8 @@ def generate_launch_description():
     bringup_config  = get_package_share_directory("engineer_bringup")
     
     # 自定义路径
-    urdf_path        = os.path.join(pkg_config, "config", "engineer_v3.urdf.xacro")
-    srdf_path        = os.path.join(pkg_config, "config", "engineer_v3.srdf")
+    urdf_path        = os.path.join(pkg_config, "config", "engineer_v4.urdf.xacro")
+    srdf_path        = os.path.join(pkg_config, "config", "engineer_v4.srdf")
     kinematics_path  = os.path.join(pkg_config, "config", "kinematics.yaml")
     joint_limits_path       = os.path.join(pkg_config, "config", "joint_limits.yaml")
     moveit_controllers_path = os.path.join(pkg_config, "config", "moveit_controllers.yaml")
@@ -128,15 +128,15 @@ def generate_launch_description():
         parameters=common_params + [bringup_config_path]
     )
     
-    # # rviz2 节点 : 可视化节点，读取 robot_description 系列参数与 RViz 配置展示模型与规划结果
-    # node_rviz = Node(
-    #     package="rviz2",
-    #     executable="rviz2",
-    #     name="rviz2",
-    #     output="screen",
-    #     parameters=common_params,
-    #     arguments=["-d", rviz_config_path]
-    # )
+    # rviz2 节点 : 可视化节点，读取 robot_description 系列参数与 RViz 配置展示模型与规划结果
+    node_rviz = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="screen",
+        parameters=common_params,
+        arguments=["-d", rviz_config_path]
+    )
     
     # arm_solve_server 节点 : 提供 IK/轨迹求解服务，读取 MoveIt 参数与 bringup.yaml 的业务配置
     node_arm_solve = Node(
@@ -162,7 +162,7 @@ def generate_launch_description():
         static_tf,
         node_object_load,
         node_move_group,
-        # node_rviz,
+        node_rviz,
         late_init
     ])
     
