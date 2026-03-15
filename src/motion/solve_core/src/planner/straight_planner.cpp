@@ -25,15 +25,14 @@ static std::string vec_key_rounded(const std::vector<double>& v, double eps = 1e
   return k;
 }
 
-// === 辅助：计算 q 相对某参考向量的 wrap 距离（L2） ===
-static double wrap_distance_l2(const std::vector<double>& q,
-                               const std::vector<double>& q_ref) {
+// === 辅助：计算 q 相对某参考向量的连续性距离（L2，不做 wrap） ===
+static double distance_l2(const std::vector<double>& q,
+                          const std::vector<double>& q_ref) {
   const size_t n = std::min(q.size(), q_ref.size());
   if (n == 0) return std::numeric_limits<double>::infinity();
   double sum = 0.0;
   for (size_t i = 0; i < n; ++i) {
-    const double qi = ikc::wrapToNearby(q[i], q_ref[i]);
-    const double d = qi - q_ref[i];
+    const double d = q[i] - q_ref[i];
     sum += d * d;
   }
   return std::sqrt(sum);
@@ -94,29 +93,12 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
     if (opt.sample_step_m > 0.0 && norm > 1e-9) {
       vector /= norm;
       line_delta = vector * (opt.sample_step_m * static_cast<double>(opt.num_waypoints)); // 计算总的位移增量
-
-      // Debug: log T0, direction, and first waypoint pose (T1)
-      const Eigen::Quaterniond q0(T0.linear());
-      const Eigen::Vector3d t0 = T0.translation();
-      const double r1 = 1.0 / static_cast<double>(opt.num_waypoints);
-      Eigen::Isometry3d T1 = Eigen::Isometry3d::Identity();
-      T1.translation() = t0 + line_delta * r1;
-      T1.linear() = T0.linear();
-      const Eigen::Quaterniond q1(T1.linear());
-      LOGI("[solve_core][straight_planner] T0: pos=({:.6f}, {:.6f}, {:.6f}) quat=({:.6f}, {:.6f}, {:.6f}, {:.6f})",
-           t0.x(), t0.y(), t0.z(), q0.x(), q0.y(), q0.z(), q0.w());
-      LOGI("[solve_core][straight_planner] dir(unit)=({:.6f}, {:.6f}, {:.6f}) sample_step={:.6f} num_waypoints={} line_delta=({:.6f}, {:.6f}, {:.6f})",
-           vector.x(), vector.y(), vector.z(),
-           opt.sample_step_m, opt.num_waypoints,
-           line_delta.x(), line_delta.y(), line_delta.z());
-      LOGI("[solve_core][straight_planner] T1: pos=({:.6f}, {:.6f}, {:.6f}) quat=({:.6f}, {:.6f}, {:.6f}, {:.6f})",
-           T1.translation().x(), T1.translation().y(), T1.translation().z(),
-           q1.x(), q1.y(), q1.z(), q1.w());
     } else {
       LOGE("[solve_core][straight_planner] Invalid directional sampling params");
       return std::nullopt;
     }
   } else {
+    // todo: 目前仅支持方向采样，后续可添加纯线性插值（不考虑方向）版本
     LOGE("[solve_core][straight_planner] Directional sampling must be enabled");
     return std::nullopt;
   }
@@ -186,13 +168,13 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
       return std::nullopt;
     }
 
-    // 按与上一层解的 wrap 距离排序，再截断到 cap_candidates
+    // 按与上一层解的连续性距离排序，再截断到 cap_candidates
     std::vector<std::pair<double, std::vector<double>>> scored;
     scored.reserve(candidates.size());
     for (auto &q : candidates) {
       double best = std::numeric_limits<double>::infinity();
       for (const auto &prev_q : prev_solutions) {
-        best = std::min(best, wrap_distance_l2(q, prev_q));
+        best = std::min(best, distance_l2(q, prev_q));
       }
       scored.emplace_back(best, std::move(q));
     }
@@ -214,8 +196,8 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
   // DP 数据结构：dp_costs[i][j] = 最小代价到第 i 层第 j 个候选
   // prev_idx[i][j] = 使 dp_costs[i][j] 最小的上一层索引
   const size_t N = sols_per_waypoint.size();
-  std::vector<std::vector<double>> dp_costs(N);
-  std::vector<std::vector<int>> prev_idx(N);
+  std::vector<std::vector<double>> dp_costs(N);   //代价
+  std::vector<std::vector<int>> prev_idx(N);    //
 
   CostFunc cost_func(start_state, jmg, ee_link, cost_opt);
 
@@ -241,14 +223,14 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
     dp_costs[i].assign(cur_layer.size(), std::numeric_limits<double>::infinity());
     prev_idx[i].assign(cur_layer.size(), -1);
 
-    for (size_t j = 0; j < cur_layer.size(); ++j) {
+    for (size_t j = 0; j < cur_layer.size(); ++j) {   //遍历当前路点的所有解
       const auto& qj = cur_layer[j];
 
-      for (size_t k = 0; k < prev_layer.size(); ++k) {
+      for (size_t k = 0; k < prev_layer.size(); ++k) {  //遍历前一点的所有解
         if (!std::isfinite(dp_costs[i-1][k])) continue;
         const auto& qk = prev_layer[k];
 
-        double total = dp_costs[i-1][k] + cost_func.compute(qk, qj);
+        double total = dp_costs[i-1][k] + cost_func.compute(qk, qj);  //前一个路点第k个解的代价加上当前点与前一个点任意两点的代价为此路径的总代价
 
         if (total < dp_costs[i][j]) {
           dp_costs[i][j] = total;
@@ -303,8 +285,7 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
   // 关节角度线性插值：已移除，直接使用路径点
   std::vector<std::vector<double>> q_path_interp = q_path;
 
-  // Wrap the final joint sequence for continuity (in-place).
-  ikc::unwrapTrajectory(q_path_interp);
+  // No unwrap on joint6 here; keep raw DP-selected solutions.
 
   // 可选输出
   if (joint_path_out)

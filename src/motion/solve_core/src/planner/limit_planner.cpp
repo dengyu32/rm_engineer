@@ -121,6 +121,7 @@ LimitPlanner::plan(const moveit::core::JointModelGroup *jmg_,
     return std::nullopt;
   }
 
+
   if (joint_path_out) {
     joint_path_out->clear();
     joint_path_out->push_back(q_target);

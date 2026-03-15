@@ -28,6 +28,15 @@ inline void wrapVectorToNearby(std::vector<double>& q, const std::vector<double>
   for (size_t i = 0; i < n; ++i) q[i] = wrapToNearby(q[i], q_ref[i]);
 }
 
+// 仅对指定关节索引进行 wrap，其余保持不变
+inline void wrapVectorToNearbyIndex(std::vector<double>& q,
+                                    const std::vector<double>& q_ref,
+                                    size_t joint_index) {
+  const size_t n = std::min(q.size(), q_ref.size());
+  if (joint_index >= n) return;
+  q[joint_index] = wrapToNearby(q[joint_index], q_ref[joint_index]);
+}
+
 inline void clampDelta(std::vector<double>& q_new,
                        const std::vector<double>& q_ref,
                        const std::vector<double>& dq_max_abs) { // dq_max_abs 是每个关节允许的单步最大变化量（绝对值）
@@ -44,6 +53,15 @@ inline bool unwrapTrajectory(std::vector<std::vector<double>>& q_points) {
   if (q_points.empty()) return true;
   for (size_t k = 1; k < q_points.size(); ++k) {
     wrapVectorToNearby(q_points[k], q_points[k - 1]);
+  }
+  return true;
+}
+
+inline bool unwrapTrajectoryIndex(std::vector<std::vector<double>>& q_points,
+                                  size_t joint_index) {
+  if (q_points.empty()) return true;
+  for (size_t k = 1; k < q_points.size(); ++k) {
+    wrapVectorToNearbyIndex(q_points[k], q_points[k - 1], joint_index);
   }
   return true;
 }
@@ -69,4 +87,3 @@ inline bool validateMaxStep(const std::vector<std::vector<double>>& q_points,
 }
 
 } // namespace ikc
-

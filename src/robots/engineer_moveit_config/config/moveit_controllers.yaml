@@ -9,6 +9,7 @@ moveit_simple_controller_manager:
 
   engineer_arm_controller:
     type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
     joints:
       - joint1
       - joint2
@@ -18,5 +19,6 @@ moveit_simple_controller_manager:
       - joint6
   engineer_hand_controller:
     type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
     joints:
       - left_finger_joint
