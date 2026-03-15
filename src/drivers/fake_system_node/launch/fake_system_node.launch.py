@@ -9,6 +9,11 @@ def generate_launch_description():
     # -------------------------------------------------------------------
     #  fake_system_node 节点 : 提供简化的系统模拟，便于在无真实硬件时跑通上层流程
     # -------------------------------------------------------------------
+    params_utils_share = get_package_share_directory("params_utils")
+    joint_reset = os.path.join(params_utils_share, "config", "joint_reset.yaml")
+    intent_reset = os.path.join(params_utils_share, "config", "intent_reset.yaml")
+    gripper_reset = os.path.join(params_utils_share, "config", "gripper_reset.yaml")
+
     config_path = os.path.join(
         get_package_share_directory("fake_system"),
         "config",
@@ -20,7 +25,7 @@ def generate_launch_description():
         executable="fake_system_node",
         name="fake_system_node",
         output="screen",
-        parameters=[config_path],
+        parameters=[joint_reset, intent_reset, gripper_reset, config_path],
     )
 
     return LaunchDescription([

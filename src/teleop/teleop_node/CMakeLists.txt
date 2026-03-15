@@ -13,6 +13,7 @@ find_package(ament_cmake REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(moveit_core REQUIRED)
 find_package(moveit_ros_planning REQUIRED)
+find_package(params_utils REQUIRED)
 find_package(rclcpp REQUIRED)
 
 # add executable and link dependencies
@@ -30,6 +31,7 @@ ament_target_dependencies(teleop_node
   rclcpp
   moveit_core
   moveit_ros_planning
+  params_utils
 )
 
 # install targets and directories
@@ -40,6 +42,9 @@ install(DIRECTORY include/
   DESTINATION include
 )
 install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
+install(DIRECTORY config
   DESTINATION share/${PROJECT_NAME}
 )
 

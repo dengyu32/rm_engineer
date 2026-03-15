@@ -35,7 +35,7 @@ arm_servo / controller
 - `gripper_cmd_topic` (`engineer_interfaces/Gripper`)
 
 **参数**
-参数由 `config/fake_system_node.yaml` 与 `BaseRobotConfig` 提供。
+参数由 `config/fake_system_node.yaml` 与 `JointResetConfig` / `IntentResetConfig` / `GripperResetConfig` 提供。
 
 常用参数：
 - `publish_period_ms`

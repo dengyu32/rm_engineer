@@ -1,0 +1,4 @@
+/**:
+  ros__parameters:
+    intent_cmd_topic: "/hfsm/intent_commands"
+    intent_fb_topic: "/hfsm/intent_feedback"

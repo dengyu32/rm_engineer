@@ -4,27 +4,15 @@
 
 namespace engineer_auto::gripper_control_node {
 
-GripperControlConfig GripperControlConfig::load(rclcpp::Node &node) {
-  GripperControlConfig cfg;
-  node.declare_parameter("gripper_cmd_topic", cfg.gripper_cmd_topic);
-  node.declare_parameter("gripper_publish_period_ms", cfg.publish_period_ms);
-  node.declare_parameter("gripper_open_position", cfg.open_position);
-  node.declare_parameter("gripper_close_position", cfg.close_position);
-  node.get_parameter("gripper_cmd_topic", cfg.gripper_cmd_topic);
-  node.get_parameter("gripper_publish_period_ms", cfg.publish_period_ms);
-  node.get_parameter("gripper_open_position", cfg.open_position);
-  node.get_parameter("gripper_close_position", cfg.close_position);
-  return cfg;
-}
-
 GripperControlNode::GripperControlNode(rclcpp::Node &node,
-                                       const GripperControlConfig &config)
+                                       const GripperPresetConfig &config)
     : node_(node), logger_(node.get_logger()), config_(config) {
-  target_position_ = config_.open_position;
+  RCLCPP_INFO(logger_, "\n%s", config_.summary().c_str());
+  target_position_ = config_.gripper_open_position;
   pub_ = node_.create_publisher<engineer_interfaces::msg::Gripper>(
       config_.gripper_cmd_topic, rclcpp::QoS(10));
   timer_ = node_.create_wall_timer(
-      std::chrono::milliseconds(config_.publish_period_ms),
+      std::chrono::milliseconds(config_.gripper_publish_period_ms),
       std::bind(&GripperControlNode::onTimer, this));
 
   RCLCPP_INFO(logger_, "[GRIPPER_CONTROL] started topic=%s",
@@ -34,8 +22,8 @@ GripperControlNode::GripperControlNode(rclcpp::Node &node,
 void GripperControlNode::setCommand(task_step_library::GripperCommand command) {
   std::scoped_lock lock(target_mutex_);
   target_position_ = command == task_step_library::GripperCommand::CLOSE
-                         ? config_.close_position
-                         : config_.open_position;
+                         ? config_.gripper_close_position
+                         : config_.gripper_open_position;
 }
 
 void GripperControlNode::cancel() { setCommand(task_step_library::GripperCommand::OPEN); }

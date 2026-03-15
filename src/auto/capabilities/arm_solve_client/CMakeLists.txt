@@ -11,6 +11,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
+find_package(params_utils REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(task_step_library REQUIRED)
 
@@ -27,6 +28,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   rclcpp_action
+  params_utils
   engineer_interfaces
   task_step_library
 )
@@ -38,9 +40,10 @@ install(TARGETS ${PROJECT_NAME}
   RUNTIME DESTINATION bin
 )
 install(DIRECTORY include/ DESTINATION include/)
+install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/)
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
-ament_export_dependencies(rclcpp rclcpp_action engineer_interfaces task_step_library)
+ament_export_dependencies(rclcpp rclcpp_action params_utils engineer_interfaces task_step_library)
 
 ament_package()

@@ -1,14 +1,18 @@
 #pragma once
 
 // C++
-#include <memory>
-#include <atomic>
-#include <mutex>
 #include <array>
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <sstream>
+#include <stdexcept>
+#include <string>
 
 // Error utils
 
 // ROS2
+#include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
 
@@ -26,11 +30,82 @@
 #include "engineer_interfaces/msg/joint.hpp"
 #include "engineer_interfaces/msg/joints.hpp"
 
-#include "arm_solve/config.hpp"
+#include "params_utils/param_utils.hpp"
 #include "solve_core/solve_core.hpp"
 
 
 namespace arm_solve {
+
+// ============================================================================
+//  ArmSolveConfig
+// ----------------------------------------------------------------------------
+//  - MoveIt / 话题 / Action 配置
+// ============================================================================
+
+struct ArmSolveConfig : public params_utils::MoveItResetConfig,
+                        public params_utils::JointResetConfig {
+  // Action 服务名（通信参数）
+  std::string arm_action_name{"move_arm"};
+
+  // 延迟初始化 MoveGroup 的等待时长（毫秒）
+  int late_init_delay_ms{10};
+  // 连续两次规划最小间隔（毫秒）
+  int plan_min_interval_ms{0};
+
+  //  API
+  static ArmSolveConfig Load(rclcpp::Node &node) {
+    ArmSolveConfig cfg;
+
+    params_utils::MoveItResetConfig::Load(node, cfg);
+    params_utils::JointResetConfig::Load(node, cfg);
+
+    using params_utils::detail::declare_get;
+    using params_utils::detail::declare_get_checked;
+
+    //  Required / validated params
+    declare_get_checked(
+        node, "late_init_delay_ms",
+        cfg.late_init_delay_ms,
+        [](int v) { return v >= 0 && v <= 5000; },
+        "must be in [0, 5000]");
+
+    declare_get_checked(
+        node, "plan_min_interval_ms",
+        cfg.plan_min_interval_ms,
+        [](int v) { return v >= 0 && v <= 5000; },
+        "must be in [0, 5000]");
+
+    //  Usually fixed (no check)
+    declare_get(node, "arm_action_name", cfg.arm_action_name);
+
+    //  Finalize
+    cfg.validate();  // keep only semantic / cross-field checks
+    return cfg;
+  }
+  void validate() const;
+  std::string summary() const;
+};
+
+inline void ArmSolveConfig::validate() const {
+  params_utils::MoveItResetConfig::validate();
+  params_utils::JointResetConfig::validate();
+  // 当前仅保留字段范围校验，组合语义由 solve_core/config.hpp 维护。
+}
+
+inline std::string ArmSolveConfig::summary() const {
+  std::ostringstream oss;
+  oss << "=========\n";
+  oss << " ArmSolveServer Configuration\n\n";
+  oss << " Service:\n";
+  oss << "   - arm_action_name        : " << arm_action_name << "\n\n";
+  oss << params_utils::MoveItResetConfig::summary();
+  oss << params_utils::JointResetConfig::summary();
+  oss << " Planning:\n";
+  oss << "   - late_init_delay_ms    : " << late_init_delay_ms << "\n";
+  oss << "   - plan_min_interval_ms  : " << plan_min_interval_ms << "\n\n";
+  oss << "=========\n";
+  return oss.str();
+}
 
 // ============================================================================
 //  GoalContext（每个 goal 独立）

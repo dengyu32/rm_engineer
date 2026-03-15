@@ -87,7 +87,7 @@ IntentFinish
 - `slot_cmd_topic` (`engineer_interfaces/Slots`)
 
 **参数**
-参数由 `config/usb_cdc_node.yaml` 与 `BaseRobotConfig` 提供。
+参数由 `config/usb_cdc_node.yaml` 与 `JointResetConfig` / `IntentResetConfig` / `GripperResetConfig` 提供。
 
 常用参数：
 - `vendor_id` / `product_id`

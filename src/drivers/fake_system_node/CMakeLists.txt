@@ -30,7 +30,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
-find_package(engineer_bringup REQUIRED)
+find_package(params_utils REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(log_utils REQUIRED)
@@ -53,7 +53,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   rclcpp_components
-  engineer_bringup
+  params_utils
   engineer_interfaces
   sensor_msgs
   log_utils
