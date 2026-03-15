@@ -63,9 +63,9 @@ TaskPlan make_auto_get() {
 
 TaskPlan make_test_solve() {
   const auto target0 =
-      make_target(0.26235, -0.34444, 0.40285, 0.64923, 0.17886, 0.18983, 0.71447);
+      make_target(-0.52816, 0.07035, 0.57682, -0.35088, -0.59813, 0.36457, 0.62146);
   const auto target1 =
-      make_target(0.26484, -0.36076, 0.55316, 0.64923, 0.17886, 0.18983, 0.71447);
+      make_target(-0.63131, -0.052031, 0.67485, -0.18348, -0.64249, 0.27727, 0.6904);
   geometry_msgs::msg::Vector3 target1_vec;
   // Use direction from target0 (current pose after first step) to target1
   target1_vec.x = target1.x - target0.x;
@@ -82,9 +82,9 @@ TaskPlan make_test_solve() {
 
 TaskPlan make_test_cartesian() {
   const auto target0 =
-      make_target(0.44595, -0.086883, 0.61032, -0.17604, 0.69171, -0.39348, 0.57941);
+      make_target(-0.63131, -0.052031, 0.67485, -0.18348, -0.64249, 0.27727, 0.6904);
   const auto target1 =
-      make_target(0.54028, 0.19212, 0.27802, -0.17604, 0.69171, -0.39348, 0.57941);
+      make_target(-0.52816, 0.07035, 0.57682, -0.35088, -0.59813, 0.36457, 0.62146);
   geometry_msgs::msg::Vector3 target1_vec;
   // Use direction from target0 (current pose after first step) to target1
   target1_vec.x = target1.x - target0.x;

@@ -285,11 +285,9 @@ void finish_move_goal(const std::shared_ptr<GoalHandleMove> &gh, bool success,
 ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions &options)
     : Node("arm_solve_action_server", rclcpp::NodeOptions(options)),
       config_(ArmSolveConfig::Load(*this)),
-      solve_core_config_(LoadSolveCoreConfig(*this)),
       last_plan_time_(
           now() - rclcpp::Duration(std::chrono::milliseconds(
                       config_.plan_min_interval_ms))) { //避免第一次规划被节流
-  solve_core_config_.validate();
 
   // 等待构造完成后再创建 MoveGroup，防止节点还未 fully spinning 就调用
   init_timer_ = this->create_wall_timer(
@@ -317,7 +315,6 @@ ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions &options)
 
   RCLCPP_INFO(this->get_logger(), "[ARM_SOLVE_SERVER] started");
   RCLCPP_INFO(this->get_logger(), "\n%s", config_.summary().c_str());
-  RCLCPP_INFO(this->get_logger(), "\n%s", solve_core_config_.summary().c_str());
 }
 
 void ArmSolveServer::publish_error(int code, const char *name,
@@ -361,11 +358,11 @@ void ArmSolveServer::lateInit() {
     moveit_adapter_ = std::make_shared<MoveItAdapterImpl>(move_group_.get(),
                                                           psm_, get_logger());
   }
+
   if (!solve_core_) {
-    solve_core_ = std::make_unique<solve_core::SolveCore>(moveit_adapter_,
-                                                          solve_core_config_);
+    solve_core_ = std::make_unique<solve_core::SolveCore>(moveit_adapter_);
   }
-}
+} 
 
 bool ArmSolveServer::isMoveGroupReady() const {
   return move_group_ && move_group_->getRobotModel() &&
