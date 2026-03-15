@@ -125,45 +125,9 @@ if [[ ! -f "$ROS_SETUP" ]]; then
 fi
 
 # ----------------------------------------------------------------------------
-# Ensure ONNX Runtime dependency for YOLOs-CPP/detect_node
+# Environment checks (ONNX Runtime / RealSense SDK)
 # ----------------------------------------------------------------------------
-ensure_onnxruntime() {
-  local ort_version="1.20.1"
-  local ort_dir="$WS_ROOT/src/vision/YOLOs-CPP/onnxruntime-linux-x64-${ort_version}"
-  local ort_header="$ort_dir/include/onnxruntime_cxx_api.h"
-  local ort_archive="onnxruntime-linux-x64-${ort_version}.tgz"
-  local ort_url="https://github.com/microsoft/onnxruntime/releases/download/v${ort_version}/${ort_archive}"
-  local ort_archive_path="$WS_ROOT/src/vision/YOLOs-CPP/${ort_archive}"
-
-  if [[ -f "$ort_header" ]]; then
-    print_color green "ONNX Runtime ready: $ort_dir"
-    return 0
-  fi
-
-  require_cmd curl tar
-  print_color yellow "ONNX Runtime missing, downloading v${ort_version} ..."
-  print_color yellow "Source: $ort_url"
-
-  rm -f "$ort_archive_path"
-  if ! curl -L --fail --retry 3 --retry-delay 2 -o "$ort_archive_path" "$ort_url"; then
-    print_color red "Failed to download ONNX Runtime from: $ort_url"
-    return 1
-  fi
-
-  rm -rf "$ort_dir"
-  if ! tar -xzf "$ort_archive_path" -C "$WS_ROOT/src/vision/YOLOs-CPP"; then
-    print_color red "Failed to extract ONNX Runtime archive: $ort_archive_path"
-    return 1
-  fi
-  rm -f "$ort_archive_path"
-
-  if [[ ! -f "$ort_header" ]]; then
-    print_color red "ONNX Runtime extraction completed but header not found: $ort_header"
-    return 1
-  fi
-
-  print_color green "ONNX Runtime prepared: $ort_dir"
-}
+source "$SCRIPTS_DIR/check_env.sh"
 
 # ----------------------------------------------------------------------------
 # rerun 会话清理：可选杀掉上一次会话
@@ -213,7 +177,7 @@ set +u
 source "$ROS_SETUP"
 set -u
 
-ensure_onnxruntime
+check_env
 
 print_color green "Building workspace ..."
 colcon_args=()
