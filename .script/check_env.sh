@@ -209,7 +209,8 @@ ensure_realsense_sdk() {
     -DBUILD_PYTHON_BINDINGS=OFF \
     -DBUILD_UNIT_TESTS=OFF \
     -DBUILD_WITH_CUDA=OFF \
-    -DBUILD_WITH_TM2=OFF
+    -DCHECK_FOR_UPDATES=OFF \
+    -DIMPORT_DEPTH_CAM_FW=OFF
 
   local jobs=1
   if command -v nproc >/dev/null 2>&1; then
@@ -225,6 +226,9 @@ ensure_realsense_sdk() {
 
   export realsense2_DIR="$rs_install/lib/cmake/realsense2"
   export CMAKE_PREFIX_PATH="$rs_install${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+  if [[ "$rs_colcon_build" == "0" ]]; then
+    touch "$rs_root/COLCON_IGNORE"
+  fi
   print_color green "RealSense SDK prepared: $(relpath_ws "$rs_install")"
 }
 
