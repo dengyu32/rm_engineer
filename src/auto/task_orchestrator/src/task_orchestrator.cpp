@@ -60,6 +60,44 @@ TaskPlan make_auto_get() {
       .joints("move_home", HOME)
       .build();
 }
+// 除了 G1 G4 其他都加负号
+TaskPlan make_fixed_grab() {
+  const std::array<float,6> fixed_joints_1{
+    -0.0563895777f,
+    0.183680534f,
+    -1.25949967f,
+    0.603695154f,
+    -0.151254654f,
+    -0.378172457f
+  };
+
+  const std::array<float,6> fixed_joints_2{
+    -0.00333404541f,
+    -0.364118576f,
+    -0.594209731f,
+    0.612900198f,
+    -0.221446991f,
+    -0.376638293f
+  };
+
+  const std::array<float,6> fixed_joints_3{
+    -0.324277222f,
+    -0.578888893f,
+    -0.0442333445f,
+    0.747139871f,
+    -0.393873215f,
+    -0.754043639f
+  };
+  
+  return TaskBuilder(TaskId::FIXED_GRAB)
+      .gripper("open_gripper", OPEN)
+      .delay("gripper_settle", 300)
+      .joints("move_fixed_joints_1", fixed_joints_1)
+      .joints("move_fixed_joints_2", fixed_joints_2)
+      .joints("move_fixed_joints_3", fixed_joints_3)
+      .joints("move_home", HOME)
+      .build();
+}
 
 TaskPlan make_test_solve() {
   const auto target0 =
@@ -112,6 +150,8 @@ TaskOrchestrator::plan(const TaskRequest &request) const {
     return make_auto_store();
   case TaskId::AUTO_GET:
     return make_auto_get();
+  case TaskId::FIXED_GRAB:
+    return make_fixed_grab();
   case TaskId::TEST_SOLVE:
     return make_test_solve();
   case TaskId::TEST_CARTESIAN:

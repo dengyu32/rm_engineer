@@ -16,8 +16,9 @@ enum class TaskId : uint8_t {
   AUTO_GRAB = 2,
   AUTO_STORE = 3,
   AUTO_GET = 4,
-  TEST_SOLVE = 5,
-  TEST_CARTESIAN = 6,
+  FIXED_GRAB = 5,
+  TEST_SOLVE = 6,
+  TEST_CARTESIAN = 7,
 };
 
 enum class TaskFinishCode : uint8_t {
@@ -55,6 +56,7 @@ inline bool is_supported_task(TaskId id) {
   case TaskId::AUTO_GRAB:
   case TaskId::AUTO_STORE:
   case TaskId::AUTO_GET:
+  case TaskId::FIXED_GRAB:
   case TaskId::TEST_SOLVE:
   case TaskId::TEST_CARTESIAN:
     return true;

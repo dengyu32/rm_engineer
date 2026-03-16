@@ -31,7 +31,13 @@ AutoNode::AutoNode(const rclcpp::NodeOptions &options)
 void AutoNode::intentCallback(engineer_interfaces::msg::Intent::ConstSharedPtr msg) {
   TaskId task_id = TaskId::IDLE;
   if (!toTaskId(msg->intent_id, task_id)) {
-    RCLCPP_WARN(logger_, "[AUTO_NODE] unsupported intent_id=%u", msg->intent_id);
+    RCLCPP_WARN_THROTTLE(
+      logger_,
+      *this->get_clock(),
+      1000,  // 毫秒，5秒最多打印一次
+      "[AUTO_NODE] unsupported intent_id=%u",
+      msg->intent_id
+    );
     return;
   }
   latest_task_id_.store(task_id, std::memory_order_relaxed);

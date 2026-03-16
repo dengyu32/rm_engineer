@@ -11,7 +11,7 @@ inline constexpr std::array<float,6> ZERO{
 };
 
 inline constexpr std::array<float,6> HOME{
-    0.f, 0.7155f, -2.234f, 0.f, 0.f, 1.5707f
+    0.f, 1.042f, -2.618f, 0.f, 0.f, 0.f
 };
 
 // TO MEASURE

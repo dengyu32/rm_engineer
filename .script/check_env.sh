@@ -143,6 +143,11 @@ ensure_realsense_sdk() {
 
   if cfg="$(find_realsense_config)"; then
     export realsense2_DIR="$(dirname "$cfg")"
+    local cfg_lib_dir
+    cfg_lib_dir="$(realpath "$(dirname "$cfg")/../..")"
+    if [[ -d "$cfg_lib_dir" ]]; then
+      export LD_LIBRARY_PATH="$cfg_lib_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
     print_color green "RealSense SDK ready: $(relpath_ws "$cfg")"
     return 0
   fi
@@ -150,6 +155,13 @@ ensure_realsense_sdk() {
   if [[ -f "$rs_config" ]]; then
     export realsense2_DIR="$rs_install/lib/cmake/realsense2"
     export CMAKE_PREFIX_PATH="$rs_install${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+    export PATH="$rs_install/bin${PATH:+:$PATH}"
+    if [[ -d "$rs_install/lib" ]]; then
+      export LD_LIBRARY_PATH="$rs_install/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
+    if [[ -d "$rs_install/lib64" ]]; then
+      export LD_LIBRARY_PATH="$rs_install/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
     if [[ "$rs_colcon_build" == "0" ]]; then
       touch "$rs_root/COLCON_IGNORE"
     fi
@@ -226,6 +238,13 @@ ensure_realsense_sdk() {
 
   export realsense2_DIR="$rs_install/lib/cmake/realsense2"
   export CMAKE_PREFIX_PATH="$rs_install${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+  export PATH="$rs_install/bin${PATH:+:$PATH}"
+  if [[ -d "$rs_install/lib" ]]; then
+    export LD_LIBRARY_PATH="$rs_install/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  fi
+  if [[ -d "$rs_install/lib64" ]]; then
+    export LD_LIBRARY_PATH="$rs_install/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  fi
   if [[ "$rs_colcon_build" == "0" ]]; then
     touch "$rs_root/COLCON_IGNORE"
   fi
