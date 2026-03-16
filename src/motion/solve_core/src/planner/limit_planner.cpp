@@ -1,10 +1,9 @@
-#include "solve_core/solve_core.hpp"
-
 #include <algorithm>
 #include <cmath>
 
 #include "log_utils/log.hpp"
 #include "solve_core/planner/limit_planner.hpp"
+#include "solve_core/moveit_adapter.hpp"
 
 #include <Eigen/Geometry>
 
@@ -40,7 +39,7 @@ LimitPlanner::plan(const moveit::core::JointModelGroup *jmg_,
                    const std::string ee_link_,
                    moveit::core::RobotState &start_state,
                    const Eigen::Isometry3d &target_pose,
-                   const LimitPlannerOptions &opt, std::string &err,
+                   const SamplingConfigs &sam_configs, std::string &err,
                    const PlannerConfigs &planner_configs,
                    std::vector<std::vector<double>> *joint_path_out
                    ) {
@@ -63,7 +62,7 @@ LimitPlanner::plan(const moveit::core::JointModelGroup *jmg_,
   std::vector<double> q_target;
 
   // 采样模式：先在姿态层做 roll 采样，再基于代价选择最优 IK 解
-  if (opt.enable_target_pose_sampling && opt.sampling_mode == SamplingMode::ROLL_SAMPLE) {
+  if (sam_configs.enable_target_pose_sampling && sam_configs.sampling_mode == SamplingMode::ROLL_SAMPLE) {
     const auto model = adapter_->robot_model();
     if (!model) {
       err = "RobotModel is null";
@@ -75,8 +74,7 @@ LimitPlanner::plan(const moveit::core::JointModelGroup *jmg_,
     start_state.copyJointGroupPositions(jmg_, current_joints);
 
     IKOptions ik_opt;
-    ik_opt.log();
-    auto candidates = generate_roll_samples(isometry_to_pose(target_pose), opt);
+    auto candidates = generate_roll_samples(isometry_to_pose(target_pose), sam_configs);
     evaluate_candidates_with_ik(candidates,
                                 model,
                                 jmg_->getName(),
@@ -84,7 +82,7 @@ LimitPlanner::plan(const moveit::core::JointModelGroup *jmg_,
                                 start_state,
                                 current_joints,
                                 ik_opt,
-                                opt);
+                                sam_configs);
 
     const auto best_it = std::find_if(candidates.begin(), candidates.end(),
                                       [](const PoseSampleCandidate &c) {

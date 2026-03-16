@@ -6,8 +6,9 @@
 
 #include <moveit/robot_model/robot_model.h>
 
-#include "solve_core/solve_core.hpp"
 #include "solve_core/calculate_tools/hybrid_ik.hpp"
+#include "solve_core/types.hpp"
+
 namespace solve_core {
 
 /*
@@ -20,13 +21,11 @@ enum class SamplingMode {
   ROLL_SAMPLE = 1,
 };
 
-struct LimitPlannerOptions {
-  SamplingMode sampling_mode{SamplingMode::NORMAL};
+struct SamplingConfigs {
+  SamplingMode sampling_mode{SamplingMode::NORMAL};  
+  bool enable_target_pose_sampling{false};  // 是否在目标姿态层做采样
 
-  // 是否在目标姿态层做采样
-  bool enable_target_pose_sampling{false};
-
-  // 采样配置：仅对 roll 轴采样
+  // 如果采样
   int roll_samples{5};  //roll轴采样数
   double roll_range_rad{0.35};  //roll轴采样范围（±rad）
 
@@ -50,13 +49,13 @@ struct PoseSampleCandidate {
 };
 
 std::vector<PoseSampleCandidate>
-generate_roll_samples(const Pose &base_pose, const LimitPlannerOptions &opt);
+generate_roll_samples(const Pose &base_pose, const SamplingConfigs &opt);
 
 double joint_distance_l2(const std::vector<double> &a, const std::vector<double> &b);
 
 double evaluate_candidate_cost(PoseSampleCandidate &candidate,
                                const std::vector<double> &current_joints,
-                               const LimitPlannerOptions &opt);
+                               const SamplingConfigs &opt);
 
 void evaluate_candidates_with_ik(std::vector<PoseSampleCandidate> &candidates,
                                  const moveit::core::RobotModelConstPtr &robot_model,
@@ -65,7 +64,7 @@ void evaluate_candidates_with_ik(std::vector<PoseSampleCandidate> &candidates,
                                  const moveit::core::RobotState &seed_state,
                                  const std::vector<double> &current_joints,
                                  const IKOptions &ik_opt,
-                                 const LimitPlannerOptions &opt);
+                                 const SamplingConfigs &opt);
 
 void select_best_candidates(std::vector<PoseSampleCandidate> &candidates, int top_k);
 }

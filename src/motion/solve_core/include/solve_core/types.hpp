@@ -1,12 +1,13 @@
-// Strongly-typed configuration for SolveCore with manual summary.
+
 #pragma once
 
 #include <sstream>
-#include <stdexcept>
 #include <string>
+#include <stdexcept>
+#include <array>
+#include <vector>
 
 namespace solve_core {
-
 struct SolveCoreConfig {
   // MoveIt planning defaults（不走外部请求）
   double goal_position_tolerance{1e-3};
@@ -107,4 +108,55 @@ inline std::string SolveCoreConfig::summary() const {
   return oss.str();
 }
 
-} // namespace solve_core
+
+
+struct Pose {
+  double x{0.0};
+  double y{0.0};
+  double z{0.0};
+  double qx{0.0};
+  double qy{0.0};
+  double qz{0.0};
+  double qw{1.0};
+};
+
+struct JointState {
+  std::vector<std::string> names;
+  std::vector<double> positions;
+};
+
+
+
+enum class PlanOption {
+  NORMAL = 0,
+  CARTESIAN = 1,
+  JOINTS = 2,
+};
+
+struct SolveRequest {
+  PlanOption option{PlanOption::NORMAL};
+  Pose target_pose{};
+  std::array<double, 3> target_vector{{0.0, 0.0, 0.0}};
+  std::vector<double> target_joints;
+  JointState current_joints;
+  std::string group_name;
+  std::string ee_link;
+};
+
+struct TrajectoryPoint {
+  std::vector<double> positions;
+  std::vector<double> velocities;
+  double time_from_start{0.0};
+};
+
+struct Trajectory {
+  std::vector<std::string> joint_names;
+  std::vector<TrajectoryPoint> points;
+};
+
+struct SolveResponse {
+  Trajectory trajectory;
+  // std::vector<std::vector<double>> joint_path;
+};
+
+}

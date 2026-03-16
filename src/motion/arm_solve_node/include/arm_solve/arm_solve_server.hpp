@@ -159,6 +159,7 @@ private:
   // ROS interfaces
   rclcpp::TimerBase::SharedPtr init_timer_;
   rclcpp::Subscription<engineer_interfaces::msg::Joints>::SharedPtr joint_states_verbose_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::TransformStamped>::SharedPtr tf_sub_;
   rclcpp::Publisher<engineer_interfaces::msg::Joints>::SharedPtr joint_cmd_pub_;
   rclcpp_action::Server<Move>::SharedPtr action_server_;
 

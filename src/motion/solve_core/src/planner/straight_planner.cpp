@@ -1,8 +1,6 @@
 #include "solve_core/planner/straight_planner.hpp"
 #include "solve_core/calculate_tools/cost_func.hpp"
 #include "solve_core/calculate_tools/hybrid_ik.hpp"
-#include "solve_core/calculate_tools/wrap.hpp"
-#include "solve_core/solve_core.hpp"
 #include "log_utils/log.hpp"
 #include <limits>
 #include <cmath>
@@ -52,7 +50,7 @@ StraightPlanner::StraightPlanner(
 std::optional<Trajectory>
 StraightPlanner::plan(moveit::core::RobotState& start_state,
                       const Eigen::Isometry3d& target_pose,
-                      const StraightPlannerOptions& opt,
+                      const StraightPlannerConfigs& strai_configs,
                       const CostOptions& cost_opt,
                       std::vector<std::vector<double>>* joint_path_out) {
   if (!robot_model_) {
@@ -67,8 +65,8 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
     LOGE("[solve_core][straight_planner] End-effector link is empty");
     return std::nullopt;
   }
-  if (opt.num_waypoints <= 0) {
-    LOGE("[solve_core][straight_planner] Invalid num_waypoints: {}", opt.num_waypoints);
+  if (strai_configs.num_waypoints <= 0) {
+    LOGE("[solve_core][straight_planner] Invalid num_waypoints: {}", strai_configs.num_waypoints);
     return std::nullopt;
   }
 
@@ -82,17 +80,16 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
 
   HybridIK ik(robot_model_, group_name_, ee_link_);
   IKOptions ik_opt;
-  ik_opt.log();
 
   // 起始末端位姿（用于生成直线离散路点）
   Eigen::Isometry3d T0 = start_state.getGlobalLinkTransform(ee_link);
   Eigen::Vector3d line_delta = Eigen::Vector3d::Zero();
-  if (opt.use_directional_sampling) {
-    Eigen::Vector3d vector(opt.direction_x, opt.direction_y, opt.direction_z);
+  if (strai_configs.use_directional_sampling) {
+    Eigen::Vector3d vector(strai_configs.direction_x, strai_configs.direction_y, strai_configs.direction_z);
     const double norm = vector.norm();  // 计算方向向量的模长
-    if (opt.sample_step_m > 0.0 && norm > 1e-9) {
+    if (strai_configs.sample_step_m > 0.0 && norm > 1e-9) {
       vector /= norm;
-      line_delta = vector * (opt.sample_step_m * static_cast<double>(opt.num_waypoints)); // 计算总的位移增量
+      line_delta = vector * (strai_configs.sample_step_m * static_cast<double>(strai_configs.num_waypoints)); // 计算总的位移增量
     } else {
       LOGE("[solve_core][straight_planner] Invalid directional sampling params");
       return std::nullopt;
@@ -105,7 +102,7 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
 
   // 每个路点的候选解集合（sols_per_waypoint[i] = vector of q vectors）
   std::vector<std::vector<std::vector<double>>> sols_per_waypoint;
-  sols_per_waypoint.reserve(opt.num_waypoints);
+  sols_per_waypoint.reserve(strai_configs.num_waypoints);
 
   // 用于生成候选解的随机种子：对第一个路点我们用 start_state 作为 seed，
   // 对后续路点我们用上层候选解作为 seed（见下面循环）。
@@ -122,8 +119,8 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
     prev_solutions.push_back(q0);
   }
 
-  for (int i = 1; i <= opt.num_waypoints; ++i) {
-    double r = double(i) / opt.num_waypoints;
+  for (int i = 1; i <= strai_configs.num_waypoints; ++i) {
+    double r = double(i) / strai_configs.num_waypoints;
     Eigen::Isometry3d Ti = Eigen::Isometry3d::Identity();   //用单位矩阵初始化路点 i = insert
     Ti.translation() =
         T0.translation() +

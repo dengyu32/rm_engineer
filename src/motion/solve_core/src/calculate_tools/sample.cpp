@@ -1,5 +1,3 @@
-#include "solve_core/calculate_tools/sample.hpp"
-
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -7,8 +5,11 @@
 #include <Eigen/Geometry>
 #include <moveit/robot_state/robot_state.h>
 
-#include "log_utils/log.hpp"
+#include "solve_core/calculate_tools/sample.hpp"
 #include "solve_core/calculate_tools/hybrid_ik.hpp"
+#include "solve_core/moveit_adapter.hpp"
+#include "solve_core/types.hpp"
+#include "log_utils/log.hpp"
 
 namespace solve_core {
 namespace {
@@ -60,7 +61,7 @@ Eigen::Isometry3d pose_to_isometry(const Pose &pose) {
 } // namespace
 
 std::vector<PoseSampleCandidate>
-generate_roll_samples(const Pose &base_pose, const LimitPlannerOptions &opt) {
+generate_roll_samples(const Pose &base_pose, const SamplingConfigs &opt) {
   std::vector<PoseSampleCandidate> out;
 
   // 无需采样
@@ -126,7 +127,7 @@ double joint_distance_l2(const std::vector<double> &a, const std::vector<double>
 //只针对单个解进行评估，计算总代价
 double evaluate_candidate_cost(PoseSampleCandidate &candidate,
                                const std::vector<double> &current_joints,
-                               const LimitPlannerOptions &opt) {
+                               const SamplingConfigs &opt) {
   if (!candidate.ik_valid || candidate.ik_solution.empty()) {
     candidate.ik_cost = std::numeric_limits<double>::infinity();
     candidate.total_cost = std::numeric_limits<double>::infinity();
@@ -149,7 +150,7 @@ void evaluate_candidates_with_ik(std::vector<PoseSampleCandidate> &candidates,
                                  const moveit::core::RobotState &seed_state,
                                  const std::vector<double> &current_joints,
                                  const IKOptions &ik_opt,
-                                 const LimitPlannerOptions &opt) {
+                                 const SamplingConfigs &opt) {
   if (candidates.empty()) {
     LOGE("[solve_core][sample] Empty candidates input");
     return;

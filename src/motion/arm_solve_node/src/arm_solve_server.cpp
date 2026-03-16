@@ -285,7 +285,7 @@ void finish_move_goal(const std::shared_ptr<GoalHandleMove> &gh, bool success,
 ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions &options)
     : Node("arm_solve_action_server", rclcpp::NodeOptions(options)),
       config_(ArmSolveConfig::Load(*this)),
-      solve_core_config_(LoadSolveCoreConfig(*this)),
+      solve_core_config_(solve_core::SolveCoreConfig{}),
       last_plan_time_(
           now() - rclcpp::Duration(std::chrono::milliseconds(
                       config_.plan_min_interval_ms))) { //避免第一次规划被节流
@@ -302,7 +302,6 @@ ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions &options)
           config_.joint_states_verbose_topic, rclcpp::QoS(10),
           std::bind(&ArmSolveServer::jointCallBack, this,
                     std::placeholders::_1));
-
   // 规划结果拆分到关节命令话题
   joint_cmd_pub_ = this->create_publisher<engineer_interfaces::msg::Joints>(
       config_.joint_cmd_topic, rclcpp::QoS(10));

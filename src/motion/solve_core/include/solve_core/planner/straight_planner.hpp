@@ -6,7 +6,7 @@
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
 
-#include "solve_core/solve_core.hpp"
+#include "solve_core/types.hpp"
 #include "solve_core/calculate_tools/cost_func.hpp"
 
 /*
@@ -14,7 +14,7 @@
 */
 namespace solve_core {
 
-struct StraightPlannerOptions {
+struct StraightPlannerConfigs {
   int num_waypoints{50};               // 直线离散路点数
   bool use_directional_sampling{true}; // 是否启用“方向+步长”模式
   double sample_step_m{0.01};           // 每步位移（米）
@@ -33,7 +33,7 @@ public:
   std::optional<Trajectory> plan(
       moveit::core::RobotState& start_state,
       const Eigen::Isometry3d& target_pose,
-      const StraightPlannerOptions& opt,
+      const StraightPlannerConfigs& configs,
       const CostOptions& cost_opt,
       std::vector<std::vector<double>>* joint_path_out = nullptr);
 
