@@ -115,6 +115,16 @@ def generate_launch_description():
         arguments=['0', '0', '0', '0', '0', '0', 'world', 'base_link'], # x y z roll pitch yaw frame_id child_frame_id
     )
 
+    # rviz2 节点 : 可视化节点，读取 robot_description 系列参数与 RViz 配置展示模型与规划结果
+    node_rviz = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="screen",
+        parameters=common_params,
+        arguments=["-d", rviz_config_path]
+    )
+
     # object_load 节点 : 发布planningscene，提供规划场景
     node_object_load = Node(
         package="object_load",
@@ -131,15 +141,6 @@ def generate_launch_description():
         parameters=common_params + [bringup_config_path]
     )
     
-    # rviz2 节点 : 可视化节点，读取 robot_description 系列参数与 RViz 配置展示模型与规划结果
-    node_rviz = Node(
-        package="rviz2",
-        executable="rviz2",
-        name="rviz2",
-        output="screen",
-        parameters=common_params,
-        arguments=["-d", rviz_config_path]
-    )
     
     # arm_solve_server 节点 : 提供 IK/轨迹求解服务，读取 MoveIt 参数与 bringup.yaml 的业务配置
     node_arm_solve = Node(

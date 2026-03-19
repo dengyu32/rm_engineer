@@ -1,13 +1,42 @@
 #!/bin/bash
+set -euo pipefail
 
-# 1. 设置工作空间的绝对路径（根据你的实际路径修改）
-WORKSPACE_PATH="$HOME/rm_engineer"
+# ----------------------------------------------------------------------------
+# source.sh : source workspace setup based on repo location
+# ----------------------------------------------------------------------------
 
-# 2. Source 当前工作空间
-if [ -f "$WORKSPACE_PATH/.colcon/install/setup.bash" ]; then
-    source "$WORKSPACE_PATH/.colcon/install/setup.bash"
-    echo "Successfully sourced workspace: $WORKSPACE_PATH"
+is_sourced() {
+    [[ "${BASH_SOURCE[0]}" != "${0}" ]]
+}
+
+SCRIPT_FILE="$(realpath "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_FILE")"
+SHLIB_DIR="$SCRIPT_DIR/shlib"
+source "$SHLIB_DIR/paths.sh"
+
+# Some ROS setup scripts rely on undefined vars; relax -u temporarily.
+set +u
+if [[ -f "$ROS_SETUP" ]]; then
+    # shellcheck source=/dev/null
+    source "$ROS_SETUP"
+    echo "Sourced ROS: $ROS_SETUP"
 else
-    echo "Error: Workspace setup.bash not found at $WORKSPACE_PATH"
+    echo "Error: ROS setup not found at $ROS_SETUP"
     exit 1
+fi
+
+if [[ -f "$WS_SETUP" ]]; then
+    # shellcheck source=/dev/null
+    source "$WS_SETUP"
+    echo "Successfully sourced workspace: $WS_ROOT"
+else
+    echo "Error: Workspace setup.bash not found at $WS_SETUP"
+    exit 1
+fi
+set -u
+
+if ! is_sourced; then
+    echo "Note: ./source.sh runs in a subshell. Opening a new shell with this environment."
+    echo "Type 'exit' to return to your previous shell."
+    exec "${SHELL:-/bin/bash}" -i
 fi
