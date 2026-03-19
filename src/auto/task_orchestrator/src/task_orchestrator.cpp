@@ -60,6 +60,7 @@ TaskPlan make_auto_get() {
       .joints("move_home", HOME)
       .build();
 }
+
 // 除了 G1 G4 其他都加负号
 TaskPlan make_fixed_grab() {
   const std::array<float,6> fixed_joints_1{
