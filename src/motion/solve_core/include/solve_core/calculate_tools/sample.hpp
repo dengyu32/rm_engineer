@@ -6,8 +6,8 @@
 
 #include <moveit/robot_model/robot_model.h>
 
+#include "solve_core/adapter.hpp"
 #include "solve_core/calculate_tools/hybrid_ik.hpp"
-#include "solve_core/types.hpp"
 
 namespace solve_core {
 
@@ -22,23 +22,24 @@ enum class SamplingMode {
 };
 
 struct SamplingConfigs {
-  SamplingMode sampling_mode{SamplingMode::NORMAL};  
-  bool enable_target_pose_sampling{false};  // 是否在目标姿态层做采样
+  SamplingMode sampling_mode{SamplingMode::NORMAL};
+  bool enable_target_pose_sampling{false}; // 是否在目标姿态层做采样
 
   // 如果采样
-  int roll_samples{5};  //roll轴采样数
-  double roll_range_rad{0.35};  //roll轴采样范围（±rad）
+  int roll_samples{5};         // roll轴采样数
+  double roll_range_rad{0.35}; // roll轴采样范围（±rad）
 
   // 候选筛选配置
-  int top_k_after_ik{3};              // IK 评估后保留的候选解数量，<=0 则不过滤
-  double orientation_weight{1.0};     //目标位姿权重
-  double ik_distance_weight{1.0};     //关节空间距离权重
-  double joint_motion_weight{1.0};    //关节运动量权重
+  int top_k_after_ik{3}; // IK 评估后保留的候选解数量，<=0 则不过滤
+  double orientation_weight{1.0};  //目标位姿权重
+  double ik_distance_weight{1.0};  //关节空间距离权重
+  double joint_motion_weight{1.0}; //关节运动量权重
 };
 
 struct PoseSampleCandidate {
   Pose pose{};
-  double roll_offset_rad{0.0};  //相对于输入姿态的 roll 偏移量（rad），用于评估和调试
+  double roll_offset_rad{
+      0.0}; //相对于输入姿态的 roll 偏移量（rad），用于评估和调试
 
   double orientation_cost{0.0};
   double ik_cost{std::numeric_limits<double>::infinity()};
@@ -51,20 +52,21 @@ struct PoseSampleCandidate {
 std::vector<PoseSampleCandidate>
 generate_roll_samples(const Pose &base_pose, const SamplingConfigs &opt);
 
-double joint_distance_l2(const std::vector<double> &a, const std::vector<double> &b);
+double joint_distance_l2(const std::vector<double> &a,
+                         const std::vector<double> &b);
 
 double evaluate_candidate_cost(PoseSampleCandidate &candidate,
                                const std::vector<double> &current_joints,
                                const SamplingConfigs &opt);
 
-void evaluate_candidates_with_ik(std::vector<PoseSampleCandidate> &candidates,
-                                 const moveit::core::RobotModelConstPtr &robot_model,
-                                 const std::string &group_name,
-                                 const std::string &ee_link,
-                                 const moveit::core::RobotState &seed_state,
-                                 const std::vector<double> &current_joints,
-                                 const IKOptions &ik_opt,
-                                 const SamplingConfigs &opt);
+void evaluate_candidates_with_ik(
+    std::vector<PoseSampleCandidate> &candidates,
+    const moveit::core::RobotModelConstPtr &robot_model,
+    const std::string &group_name, const std::string &ee_link,
+    const moveit::core::RobotState &seed_state,
+    const std::vector<double> &current_joints, const IKOptions &ik_opt,
+    const SamplingConfigs &opt);
 
-void select_best_candidates(std::vector<PoseSampleCandidate> &candidates, int top_k);
-}
+void select_best_candidates(std::vector<PoseSampleCandidate> &candidates,
+                            int top_k);
+} // namespace solve_core

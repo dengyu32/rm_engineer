@@ -5,11 +5,11 @@
 #include <Eigen/Geometry>
 #include <moveit/robot_state/robot_state.h>
 
-#include "solve_core/calculate_tools/sample.hpp"
-#include "solve_core/calculate_tools/hybrid_ik.hpp"
-#include "solve_core/moveit_adapter.hpp"
-#include "solve_core/types.hpp"
 #include "log_utils/log.hpp"
+#include "solve_core/adapter.hpp"
+#include "solve_core/calculate_tools/hybrid_ik.hpp"
+#include "solve_core/calculate_tools/sample.hpp"
+#include "solve_core/moveit_adapter.hpp"
 
 namespace solve_core {
 namespace {
@@ -33,7 +33,8 @@ Eigen::Quaterniond pose_to_quaternion(const Pose &pose) {
 }
 
 // _构造轴采样后的新目标位姿
-Pose quaternion_to_pose_like(const Pose &base_pose, const Eigen::Quaterniond &q) {
+Pose quaternion_to_pose_like(const Pose &base_pose,
+                             const Eigen::Quaterniond &q) {
   Pose out = base_pose;
   out.qx = q.x();
   out.qy = q.y();
@@ -42,7 +43,8 @@ Pose quaternion_to_pose_like(const Pose &base_pose, const Eigen::Quaterniond &q)
   return out;
 }
 
-// _将轴采样的偏移量归一化到 [0, 1] 范围，并平方以得到代价，确保在评估函数中不同轴的偏移可以直接加权求和
+// _将轴采样的偏移量归一化到 [0, 1]
+// 范围，并平方以得到代价，确保在评估函数中不同轴的偏移可以直接加权求和
 double normalized_axis_offset_cost(double offset, double range) {
   const double safe_range = clamp_positive(range, 1e-6);
   const double r = offset / safe_range;
@@ -51,7 +53,7 @@ double normalized_axis_offset_cost(double offset, double range) {
 
 // _Pose转为旋转矩阵  --单位四元数拼接一个平移向量，得到一个齐次变换矩阵
 Eigen::Isometry3d pose_to_isometry(const Pose &pose) {
-  Eigen::Isometry3d iso = Eigen::Isometry3d::Identity();    //初始化为单位矩阵
+  Eigen::Isometry3d iso = Eigen::Isometry3d::Identity(); //初始化为单位矩阵
   iso.translation() << pose.x, pose.y, pose.z;
   Eigen::Quaterniond q = pose_to_quaternion(pose);
   iso.linear() = q.toRotationMatrix();
@@ -81,10 +83,12 @@ generate_roll_samples(const Pose &base_pose, const SamplingConfigs &opt) {
   const double roll_max = std::abs(opt.roll_range_rad);
 
   const double roll_step =
-      (roll_n > 1) ? (roll_max - roll_min) / static_cast<double>(roll_n - 1) : 0.0;
+      (roll_n > 1) ? (roll_max - roll_min) / static_cast<double>(roll_n - 1)
+                   : 0.0;
 
   const Eigen::Quaterniond q_base = pose_to_quaternion(base_pose);
-  const Eigen::Vector3d zyx_base = q_base.toRotationMatrix().eulerAngles(2, 1, 0);
+  const Eigen::Vector3d zyx_base =
+      q_base.toRotationMatrix().eulerAngles(2, 1, 0);
   const double base_yaw = zyx_base[0];
   const double base_pitch = zyx_base[1];
   const double base_roll = zyx_base[2];
@@ -103,16 +107,17 @@ generate_roll_samples(const Pose &base_pose, const SamplingConfigs &opt) {
     PoseSampleCandidate c;
     c.pose = quaternion_to_pose_like(base_pose, q_sample);
     c.roll_offset_rad = roll_offset;
-    c.orientation_cost = normalized_axis_offset_cost(roll_offset, opt.roll_range_rad);
+    c.orientation_cost =
+        normalized_axis_offset_cost(roll_offset, opt.roll_range_rad);
     out.push_back(std::move(c));
   }
 
   return out;
 }
 
-
 //计算欧几里得距离，可复用cost_func中的函数
-double joint_distance_l2(const std::vector<double> &a, const std::vector<double> &b) {
+double joint_distance_l2(const std::vector<double> &a,
+                         const std::vector<double> &b) {
   if (a.size() != b.size() || a.empty()) {
     return std::numeric_limits<double>::infinity();
   }
@@ -134,7 +139,8 @@ double evaluate_candidate_cost(PoseSampleCandidate &candidate,
     return candidate.total_cost;
   }
 
-  const double motion = joint_distance_l2(current_joints, candidate.ik_solution);
+  const double motion =
+      joint_distance_l2(current_joints, candidate.ik_solution);
   candidate.ik_cost = motion;
   candidate.total_cost = opt.orientation_weight * candidate.orientation_cost +
                          opt.ik_distance_weight * candidate.ik_cost +
@@ -142,15 +148,14 @@ double evaluate_candidate_cost(PoseSampleCandidate &candidate,
   return candidate.total_cost;
 }
 
-//ik解算，在每次采样中找到最优解，比较不同采样对应的解的代价
-void evaluate_candidates_with_ik(std::vector<PoseSampleCandidate> &candidates,
-                                 const moveit::core::RobotModelConstPtr &robot_model,
-                                 const std::string &group_name,
-                                 const std::string &ee_link,
-                                 const moveit::core::RobotState &seed_state,
-                                 const std::vector<double> &current_joints,
-                                 const IKOptions &ik_opt,
-                                 const SamplingConfigs &opt) {
+// ik解算，在每次采样中找到最优解，比较不同采样对应的解的代价
+void evaluate_candidates_with_ik(
+    std::vector<PoseSampleCandidate> &candidates,
+    const moveit::core::RobotModelConstPtr &robot_model,
+    const std::string &group_name, const std::string &ee_link,
+    const moveit::core::RobotState &seed_state,
+    const std::vector<double> &current_joints, const IKOptions &ik_opt,
+    const SamplingConfigs &opt) {
   if (candidates.empty()) {
     LOGE("[solve_core][sample] Empty candidates input");
     return;
@@ -178,11 +183,12 @@ void evaluate_candidates_with_ik(std::vector<PoseSampleCandidate> &candidates,
   for (auto &c : candidates) {
     c.ik_solution.clear();
     c.ik_valid = false;
-    c.ik_cost = std::numeric_limits<double>::infinity();    //正无穷大的浮点值
+    c.ik_cost = std::numeric_limits<double>::infinity(); //正无穷大的浮点值
     c.total_cost = std::numeric_limits<double>::infinity();
 
     std::vector<std::vector<double>> all_solutions;
-    if (!hybrid_ik.solveAll(seed_state, pose_to_isometry(c.pose), ik_opt, all_solutions)) {
+    if (!hybrid_ik.solveAll(seed_state, pose_to_isometry(c.pose), ik_opt,
+                            all_solutions)) {
       continue;
     }
 
@@ -192,7 +198,8 @@ void evaluate_candidates_with_ik(std::vector<PoseSampleCandidate> &candidates,
 
     auto best_it = all_solutions.begin();
     double best_dist = joint_distance_l2(current_joints, *best_it);
-    for (auto it = std::next(all_solutions.begin()); it != all_solutions.end(); ++it) {
+    for (auto it = std::next(all_solutions.begin()); it != all_solutions.end();
+         ++it) {
       const double dist = joint_distance_l2(current_joints, *it);
       if (dist < best_dist) {
         best_dist = dist;
@@ -207,27 +214,30 @@ void evaluate_candidates_with_ik(std::vector<PoseSampleCandidate> &candidates,
   }
 
   if (valid_count == 0) {
-    LOGE("[solve_core][sample] IK evaluation finished with zero valid candidates");
+    LOGE("[solve_core][sample] IK evaluation finished with zero valid "
+         "candidates");
   }
 
   // IK 评估后按总代价筛选 Top-K（<=0 表示不过滤）
   select_best_candidates(candidates, opt.top_k_after_ik);
 }
 
-void select_best_candidates(std::vector<PoseSampleCandidate> &candidates, int top_k) {
+void select_best_candidates(std::vector<PoseSampleCandidate> &candidates,
+                            int top_k) {
   if (candidates.empty()) {
     return;
   }
 
-  std::stable_sort(candidates.begin(), candidates.end(),
-                   [](const PoseSampleCandidate &a, const PoseSampleCandidate &b) {
-                     const bool a_ok = a.ik_valid && std::isfinite(a.total_cost);
-                     const bool b_ok = b.ik_valid && std::isfinite(b.total_cost);
-                     if (a_ok != b_ok) {
-                       return a_ok;
-                     }
-                     return a.total_cost < b.total_cost;
-                   });
+  std::stable_sort(
+      candidates.begin(), candidates.end(),
+      [](const PoseSampleCandidate &a, const PoseSampleCandidate &b) {
+        const bool a_ok = a.ik_valid && std::isfinite(a.total_cost);
+        const bool b_ok = b.ik_valid && std::isfinite(b.total_cost);
+        if (a_ok != b_ok) {
+          return a_ok;
+        }
+        return a.total_cost < b.total_cost;
+      });
 
   const int keep = (top_k > 0) ? top_k : static_cast<int>(candidates.size());
   if (static_cast<int>(candidates.size()) > keep) {

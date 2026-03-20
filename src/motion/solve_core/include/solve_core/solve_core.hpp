@@ -4,10 +4,27 @@
 #include <optional>
 #include <string>
 
-#include "solve_core/types.hpp"
+#include "solve_core/adapter.hpp"
 #include "solve_core/moveit_adapter.hpp"
 
 namespace solve_core {
+
+enum class PlanOption {
+  NORMAL = 0,
+  CARTESIAN = 1,
+  JOINTS = 2,
+};
+
+struct SolveRequest {
+  PlanOption option{PlanOption::NORMAL};
+  Pose target_pose{};
+  std::array<double, 3> target_vector{{0.0, 0.0, 0.0}};
+  double target_length{0.0};
+  std::vector<double> target_joints;
+  JointState current_joints;
+  std::string group_name;
+  std::string ee_link;
+};
 
 class SolveCore {
 public:

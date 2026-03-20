@@ -38,6 +38,42 @@ static double distance_l2(const std::vector<double>& q,
 
 } // namespace
 
+bool buildStraightPlannerConfigs(const Eigen::Isometry3d &start_pose,
+                                 const Eigen::Isometry3d &target_pose,
+                                 const std::array<double, 3> &direction,
+                                 double target_length,
+                                 StraightPlannerConfigs &out,
+                                 std::string &err) {
+  constexpr double kEps = 1e-9;
+
+  Eigen::Vector3d dir(direction[0], direction[1], direction[2]);
+  const double dir_norm = dir.norm();
+  if (!std::isfinite(dir_norm) || dir_norm <= kEps) {
+    err = "Cartesian request direction vector is invalid";
+    return false;
+  }
+
+  double path_length = target_length;
+  if (!std::isfinite(path_length) || path_length <= kEps) {
+    path_length = (target_pose.translation() - start_pose.translation()).norm();
+  }
+  if (!std::isfinite(path_length) || path_length <= kEps) {
+    err = "Cartesian request path length is invalid";
+    return false;
+  }
+
+  out = StraightPlannerConfigs{};
+  if (!std::isfinite(out.sample_step_m) || out.sample_step_m <= kEps) {
+    err = "Straight planner sample_step_m is invalid";
+    return false;
+  }
+  out.path_length_m = path_length;
+  out.direction_x = dir.x();
+  out.direction_y = dir.y();
+  out.direction_z = dir.z();
+  return true;
+}
+
 StraightPlanner::StraightPlanner(
     const moveit::core::RobotModelConstPtr& model,
     const std::string& group_name,
@@ -65,8 +101,14 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
     LOGE("[solve_core][straight_planner] End-effector link is empty");
     return std::nullopt;
   }
-  if (strai_configs.num_waypoints <= 0) {
-    LOGE("[solve_core][straight_planner] Invalid num_waypoints: {}", strai_configs.num_waypoints);
+  if (strai_configs.sample_step_m <= 0.0) {
+    LOGE("[solve_core][straight_planner] Invalid sample_step_m: {}",
+         strai_configs.sample_step_m);
+    return std::nullopt;
+  }
+  if (strai_configs.path_length_m <= 0.0) {
+    LOGE("[solve_core][straight_planner] Invalid path_length_m: {}",
+         strai_configs.path_length_m);
     return std::nullopt;
   }
 
@@ -84,25 +126,24 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
   // 起始末端位姿（用于生成直线离散路点）
   Eigen::Isometry3d T0 = start_state.getGlobalLinkTransform(ee_link);
   Eigen::Vector3d line_delta = Eigen::Vector3d::Zero();
+  const int num_waypoints =
+      std::max(1, static_cast<int>(std::ceil(strai_configs.path_length_m /
+                                             strai_configs.sample_step_m)));
   if (strai_configs.use_directional_sampling) {
     Eigen::Vector3d vector(strai_configs.direction_x, strai_configs.direction_y, strai_configs.direction_z);
     const double norm = vector.norm();  // 计算方向向量的模长
-    if (strai_configs.sample_step_m > 0.0 && norm > 1e-9) {
-      vector /= norm;
-      line_delta = vector * (strai_configs.sample_step_m * static_cast<double>(strai_configs.num_waypoints)); // 计算总的位移增量
-    } else {
+    if (!std::isfinite(norm) || norm <= 1e-9) {
       LOGE("[solve_core][straight_planner] Invalid directional sampling params");
       return std::nullopt;
     }
+    line_delta = vector * strai_configs.path_length_m;
   } else {
-    // todo: 目前仅支持方向采样，后续可添加纯线性插值（不考虑方向）版本
-    LOGE("[solve_core][straight_planner] Directional sampling must be enabled");
-    return std::nullopt;
+    line_delta = target_pose.translation() - T0.translation();
   }
 
   // 每个路点的候选解集合（sols_per_waypoint[i] = vector of q vectors）
   std::vector<std::vector<std::vector<double>>> sols_per_waypoint;
-  sols_per_waypoint.reserve(strai_configs.num_waypoints);
+  sols_per_waypoint.reserve(num_waypoints);
 
   // 用于生成候选解的随机种子：对第一个路点我们用 start_state 作为 seed，
   // 对后续路点我们用上层候选解作为 seed（见下面循环）。
@@ -119,8 +160,8 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
     prev_solutions.push_back(q0);
   }
 
-  for (int i = 1; i <= strai_configs.num_waypoints; ++i) {
-    double r = double(i) / strai_configs.num_waypoints;
+  for (int i = 1; i <= num_waypoints; ++i) {
+    double r = double(i) / num_waypoints;
     Eigen::Isometry3d Ti = Eigen::Isometry3d::Identity();   //用单位矩阵初始化路点 i = insert
     Ti.translation() =
         T0.translation() +

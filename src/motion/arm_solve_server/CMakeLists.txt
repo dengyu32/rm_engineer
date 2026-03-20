@@ -3,7 +3,7 @@
 # ----------------------------------------------------------------------------
 
 cmake_minimum_required(VERSION 3.8)
-project(arm_solve)
+project(arm_solve_server)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -45,7 +45,10 @@ find_package(params_utils REQUIRED)
 # ----------------------------------------------------------------------------
 
 # 将节点实现编译为共享库
-add_library(${PROJECT_NAME} SHARED src/arm_solve_server.cpp)
+add_library(${PROJECT_NAME} SHARED
+  src/arm_solve_server.cpp
+  src/executor.cpp
+)
 
 # 配置头文件可见性
 target_include_directories(${PROJECT_NAME} PUBLIC
@@ -75,7 +78,7 @@ ament_target_dependencies(${PROJECT_NAME}
 # 注册组件并生成可执行入口
 rclcpp_components_register_node(${PROJECT_NAME}
   PLUGIN "arm_solve::ArmSolveServer"
-  EXECUTABLE arm_solve_server
+  EXECUTABLE arm_solve_server_node
 )
 
 # ----------------------------------------------------------------------------

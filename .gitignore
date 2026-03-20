@@ -9,3 +9,4 @@
 /src/vision/YOLOs-cpp/build
 compile_commands.json
 TODO
+/.clang-format

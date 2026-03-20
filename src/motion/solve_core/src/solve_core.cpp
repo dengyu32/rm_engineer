@@ -3,13 +3,13 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
-#include <sstream>
 #include <unordered_map>
 
 #include "log_utils/log.hpp"
 #include "solve_core/calculate_tools/cost_func.hpp"
 #include "solve_core/planner/limit_planner.hpp"
 #include "solve_core/planner/straight_planner.hpp"
+#include "solve_core/adapter.hpp"
 
 #include <Eigen/Geometry>
 
@@ -23,22 +23,6 @@
 namespace solve_core {
 namespace {
 
-std::string format_context(const std::map<std::string, std::string> &ctx) {
-  if (ctx.empty()) {
-    return "";
-  }
-  std::ostringstream oss;
-  bool first = true;
-  for (const auto &kv : ctx) {
-    if (!first) {
-      oss << ", ";
-    }
-    first = false;
-    oss << kv.first << "=" << kv.second;
-  }
-  return oss.str();
-}
-
 // _四元数转变换矩阵
 Eigen::Isometry3d pose_to_isometry(const Pose &pose) {
   Eigen::Isometry3d iso = Eigen::Isometry3d::Identity();
@@ -47,20 +31,6 @@ Eigen::Isometry3d pose_to_isometry(const Pose &pose) {
   q.normalize();
   iso.linear() = q.toRotationMatrix();
   return iso;
-}
-
-// _坐标轴向量归一化
-bool parse_direction_vector(const std::array<double, 3> &direction, Eigen::Vector3d &dir,
-                            std::string &err) {
-  constexpr double kEps = 1e-9;   //eps：epsilon，一个非常小的数，用于数值计算中避免除以零或判断数值是否接近零的情况
-  dir = Eigen::Vector3d(direction[0], direction[1], direction[2]);
-  const double norm = dir.norm();   //norm：向量的模长
-  if (!std::isfinite(norm) || norm <= kEps) {
-    err = "Cartesian request direction vector is invalid";
-    return false;
-  }
-  dir /= norm;
-  return true;
 }
 
 // 将关节角写进robotstate，可以缺失
@@ -89,39 +59,7 @@ bool fill_joint_state_allow_missing(const JointState &js,
   return true;
 }
 
-// 将关节角写进robotstate，必须齐全
-bool fill_joint_state_require_all(const JointState &js,
-                                  const moveit::core::JointModelGroup *jmg,
-                                  moveit::core::RobotState &state,
-                                  std::string &err) {
-  if (!jmg) {
-    err = "JointModelGroup null";
-    return false;
-  }
-  const auto &group_joint_names = jmg->getVariableNames();
-  if (js.names.empty() || js.positions.empty()) {
-    err = "Missing joint state";
-    return false;
-  }
-  if (js.names.size() != js.positions.size()) {
-    err = "Joint names/positions size mismatch";
-    return false;
-  }
-  std::unordered_map<std::string, double> pos_map;
-  pos_map.reserve(js.names.size());
-  for (std::size_t i = 0; i < js.names.size(); ++i) {
-    pos_map[js.names[i]] = js.positions[i];
-  }
-  for (const auto &jn : group_joint_names) {
-    auto it = pos_map.find(jn);
-    if (it == pos_map.end()) {
-      err = "Missing joint state";
-      return false;
-    }
-    state.setVariablePosition(it->first, it->second);
-  }
-  return true;
-}
+
 
 // 将Moveit自带的Trajectory转为自己定义的Trajectory
 Trajectory trajectory_from_robot_trajectory(const moveit::core::RobotModelConstPtr &robot_model,
@@ -265,13 +203,7 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
 
   SamplingConfigs sam_configs;
   sam_configs.sampling_mode = SamplingMode::ROLL_SAMPLE;
-  sam_configs.enable_target_pose_sampling = config_.limit_enable_target_pose_sampling;
-  sam_configs.roll_samples = config_.limit_roll_samples;
-  sam_configs.roll_range_rad = config_.limit_roll_range_rad;
-  sam_configs.top_k_after_ik = config_.limit_top_k_after_ik;
-  sam_configs.orientation_weight = config_.limit_orientation_weight;
-  sam_configs.ik_distance_weight = config_.limit_ik_distance_weight;
-  sam_configs.joint_motion_weight = config_.limit_joint_motion_weight;
+  // normal planner 的专属参数先由 planner 配置结构体默认值提供，不走 yaml。
 
   PlannerConfigs planner_cfg;
   planner_cfg.goal_position_tolerance = config_.goal_position_tolerance;
@@ -283,6 +215,35 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
 
   std::shared_ptr<LimitPlanner> planner = std::make_shared<LimitPlanner>(adapter_);
   auto out_traj = planner->plan(jmg, ee_link, start_state, target_iso, sam_configs, err, planner_cfg);
+
+  // std::optional<solve_core::Trajectory>
+  // plan_to_joint_target(const std::vector<std::string> &joint_names,
+  //                      const std::vector<double> &joint_values,
+  //                      const solve_core::PlannerConfigs &configs) override {
+
+  //   moveit::planning_interface::MoveGroupInterface::Plan plan_msg;
+  //   const bool ok =
+  //       (move_group_->plan(plan_msg) == moveit::core::MoveItErrorCode::SUCCESS);
+  //   if (!ok) {
+  //     RCLCPP_ERROR(logger_, "[arm_solve_server] Planning failed");
+  //     return std::nullopt;
+  //   }
+
+  //   solve_core::Trajectory traj;
+  //   const auto &jt   = plan_msg.trajectory_.joint_trajectory;
+  //   traj.joint_names = jt.joint_names;
+  //   traj.points.reserve(jt.points.size());
+  //   for (const auto &pt : jt.points) {
+  //     solve_core::TrajectoryPoint p;
+  //     p.positions  = pt.positions;
+  //     p.velocities = pt.velocities;
+  //     p.time_from_start =
+  //         static_cast<double>(pt.time_from_start.sec) +
+  //         static_cast<double>(pt.time_from_start.nanosec) * 1e-9;
+  //     traj.points.push_back(std::move(p));
+  //   }
+  //   return traj;
+  // }
 
   auto resp = std::make_optional<SolveResponse>();
   if (out_traj) {
@@ -297,8 +258,13 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
 // 直线规划
 std::optional<SolveResponse>
 SolveCore::plan_cartesian(const SolveRequest &req, std::string &err) {
-
   auto robot_model = adapter_->robot_model();
+  if (!robot_model) {
+    err = "RobotModel is null";
+    LOGE("[solve_core] {}", err);
+    return std::nullopt;
+  }
+
   std::string group_name =
       req.group_name.empty() ?
       adapter_->group_name() :
@@ -317,27 +283,28 @@ SolveCore::plan_cartesian(const SolveRequest &req, std::string &err) {
       req.ee_link.empty() ?
       adapter_->end_effector_link() :
       req.ee_link;
-
-  Eigen::Vector3d direction;
-  if (!parse_direction_vector(req.target_vector, direction, err)) {
+  if (ee_link.empty()) {
+    err = "End effector link is empty";
     LOGE("[solve_core] {}", err);
     return std::nullopt;
   }
 
   StraightPlanner planner(robot_model, group_name, ee_link);
   StraightPlannerConfigs strai_config;
-  strai_config.num_waypoints = config_.cartesian_num_waypoints;
-  strai_config.use_directional_sampling = config_.cartesian_use_directional_sampling;
-  strai_config.sample_step_m = config_.cartesian_sample_step_m;
-  strai_config.direction_x = direction.x();
-  strai_config.direction_y = direction.y();
-  strai_config.direction_z = direction.z();
+  const Eigen::Isometry3d target_iso = pose_to_isometry(req.target_pose);
+  const Eigen::Isometry3d start_iso = start_state.getGlobalLinkTransform(ee_link);
+  if (!buildStraightPlannerConfigs(start_iso, target_iso, req.target_vector,
+                                   req.target_length,
+                                   strai_config, err)) {
+    LOGE("[solve_core] {}", err);
+    return std::nullopt;
+  }
 
   // todo：暂时修的bug，后续可以改成直接在config里设置代价计算函数的参数
   CostOptions cost_opt;
   auto traj = planner.plan(
       start_state,
-      pose_to_isometry(req.target_pose),
+      target_iso,
       strai_config,
       cost_opt);
 
@@ -427,7 +394,9 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
     start_joint_position.emplace(jn, pos_now);
   }
 
-  double max_step_rad = config_.joints_max_step_rad;
+  JointsPlannerConfigs joints_config;
+  joints_config.validate();
+  const double max_step_rad = joints_config.max_step_rad;
   double max_delta = 0.0;
   for (std::size_t i = 0; i < dof; ++i) {
     const auto &jn = group_joint_names[i];
