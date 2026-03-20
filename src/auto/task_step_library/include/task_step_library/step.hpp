@@ -27,11 +27,29 @@ enum class TargetSource : uint8_t {
 struct ArmMoveSpec {
   engineer_interfaces::msg::Pose pose{};
   std::array<float, 6> joints{{0.f, 0.f, 0.f, 0.f, 0.f, 0.f}};
+
   geometry_msgs::msg::Vector3 vector{};
 
   PlanOption plan_option{PlanOption::NORMAL};
   TargetSource target_source{TargetSource::Fixed};
 };
+
+/*
+struct ArmMoveSpec {
+  struct NormalSpec {
+    engineer_interfaces::msg::Pose pose{};
+  } normal;
+  struct CartesianSpec {
+    geometry_msgs::msg::Vector3 direction{};
+    double distance;
+  } cartesian;
+  struct JointSpec {
+     std::array<float, 6> joints{{0.f, 0.f, 0.f, 0.f, 0.f, 0.f}};
+  } joint;
+  PlanOption plan_option{PlanOption::NORMAL};
+  TargetSource target_source{TargetSource::Fixed};
+};
+*/
 
 // GRIPPER CONTROL
 

@@ -148,8 +148,8 @@ bool StepExecutor::deriveStepFromRuntimeCtx(const Step &input, Step &resolved,
 
   if (input.type == StepType::Slot) {
     const auto strategy = input.slot.strategy;
-    const bool needs_slot_id = strategy == SlotStrategy::LockSlot ||
-                               strategy == SlotStrategy::UnlockSlot;
+    const bool needs_slot_id = (strategy == SlotStrategy::LockSlot) ||
+                               (strategy == SlotStrategy::UnlockSlot);
     if (!needs_slot_id) {
       return true;
     }

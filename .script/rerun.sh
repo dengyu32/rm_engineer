@@ -28,8 +28,8 @@ Options:
   --realsystem, realsystem        Launch: bringup + usb_cdc
   --vision-only                   Launch: vision only (detect_node launch)
   --build-only                    Only Clean + build then exit
-  --packages-only pkg1,pkg2       Only build selected packages (comma-separated)
-  --package, --pkg <name>         Add one package to the build-only list (repeatable)
+  --packages-only pkg1,pkg2       Only build selected packages + deps (comma-separated)
+  --package, --pkg <name>         Add one package to the build-only list (repeatable, includes deps)
   --kill-prior                    Kill previous rerun session (uses LATEST)
   --kill-only                     Kill previous rerun session (incl. rviz2) then exit
   -h, --help                      Show help
@@ -47,8 +47,10 @@ VISION_ONLY=0
 BUILD_ONLY=0
 KILL_PRIOR=0
 KILL_ONLY=0
-# 仅编译指定包（colcon --packages-select）
+# 仅编译指定包（会自动包含依赖）
 PACKAGES_SELECT=()
+# 解析后的包列表（包含依赖）
+PACKAGES_RESOLVED=()
 # foxglove ws port (override via env FOXGLOVE_PORT)
 FOXGLOVE_PORT="${FOXGLOVE_PORT:-8765}"
 
@@ -125,45 +127,9 @@ if [[ ! -f "$ROS_SETUP" ]]; then
 fi
 
 # ----------------------------------------------------------------------------
-# Ensure ONNX Runtime dependency for YOLOs-CPP/detect_node
+# Environment checks (ONNX Runtime / RealSense SDK)
 # ----------------------------------------------------------------------------
-ensure_onnxruntime() {
-  local ort_version="1.20.1"
-  local ort_dir="$WS_ROOT/src/vision/YOLOs-CPP/onnxruntime-linux-x64-${ort_version}"
-  local ort_header="$ort_dir/include/onnxruntime_cxx_api.h"
-  local ort_archive="onnxruntime-linux-x64-${ort_version}.tgz"
-  local ort_url="https://github.com/microsoft/onnxruntime/releases/download/v${ort_version}/${ort_archive}"
-  local ort_archive_path="$WS_ROOT/src/vision/YOLOs-CPP/${ort_archive}"
-
-  if [[ -f "$ort_header" ]]; then
-    print_color green "ONNX Runtime ready: $ort_dir"
-    return 0
-  fi
-
-  require_cmd curl tar
-  print_color yellow "ONNX Runtime missing, downloading v${ort_version} ..."
-  print_color yellow "Source: $ort_url"
-
-  rm -f "$ort_archive_path"
-  if ! curl -L --fail --retry 3 --retry-delay 2 -o "$ort_archive_path" "$ort_url"; then
-    print_color red "Failed to download ONNX Runtime from: $ort_url"
-    return 1
-  fi
-
-  rm -rf "$ort_dir"
-  if ! tar -xzf "$ort_archive_path" -C "$WS_ROOT/src/vision/YOLOs-CPP"; then
-    print_color red "Failed to extract ONNX Runtime archive: $ort_archive_path"
-    return 1
-  fi
-  rm -f "$ort_archive_path"
-
-  if [[ ! -f "$ort_header" ]]; then
-    print_color red "ONNX Runtime extraction completed but header not found: $ort_header"
-    return 1
-  fi
-
-  print_color green "ONNX Runtime prepared: $ort_dir"
-}
+source "$SCRIPTS_DIR/check_env.sh"
 
 # ----------------------------------------------------------------------------
 # rerun 会话清理：可选杀掉上一次会话
@@ -184,10 +150,44 @@ fi
 # ----------------------------------------------------------------------------
 cd "$WS_ROOT"
 
-print_color green "Cleaning previous builds, install, logs ..."
+# ----------------------------------------------------------------------------
+# packages-only: 智能解析依赖
+# ----------------------------------------------------------------------------
 if [[ ${#PACKAGES_SELECT[@]} -gt 0 ]]; then
-  print_color green "Cleaning selected package artifacts ..."
-  for _pkg in "${PACKAGES_SELECT[@]}"; do
+  # Validate package names early to avoid confusing colcon output
+  mapfile -t _all_pkgs < <(colcon list --names-only)
+  unknown_pkgs=()
+  for _p in "${PACKAGES_SELECT[@]}"; do
+    found=0
+    for _ap in "${_all_pkgs[@]}"; do
+      if [[ "$_p" == "$_ap" ]]; then
+        found=1
+        break
+      fi
+    done
+    if [[ $found -eq 0 ]]; then
+      unknown_pkgs+=("$_p")
+    fi
+  done
+  if [[ ${#unknown_pkgs[@]} -gt 0 ]]; then
+    print_color red "Unknown package(s): ${unknown_pkgs[*]}"
+    print_color yellow "Available packages (from colcon list):"
+    printf '  %s\n' "${_all_pkgs[@]}"
+    exit 1
+  fi
+
+  # Resolve dependencies (packages-up-to: selected + deps)
+  mapfile -t PACKAGES_RESOLVED < <(colcon list --names-only --packages-up-to "${PACKAGES_SELECT[@]}")
+  if [[ ${#PACKAGES_RESOLVED[@]} -eq 0 ]]; then
+    die "Failed to resolve dependencies for: ${PACKAGES_SELECT[*]}"
+  fi
+  print_color yellow "Packages-only (with deps): ${PACKAGES_RESOLVED[*]}"
+fi
+
+print_color green "Cleaning previous builds, install, logs ..."
+if [[ ${#PACKAGES_RESOLVED[@]} -gt 0 ]]; then
+  print_color green "Cleaning selected package artifacts (with deps) ..."
+  for _pkg in "${PACKAGES_RESOLVED[@]}"; do
     print_color yellow "  - $_pkg"
     rm -rf "$COLCON_BUILD/$_pkg" "$COLCON_INSTALL/$_pkg"
     rm -rf "$COLCON_LOG/latest_build/$_pkg" "$COLCON_LOG/latest_test/$_pkg"
@@ -213,34 +213,12 @@ set +u
 source "$ROS_SETUP"
 set -u
 
-ensure_onnxruntime
+check_env
 
 print_color green "Building workspace ..."
 colcon_args=()
-if [[ ${#PACKAGES_SELECT[@]} -gt 0 ]]; then
-  # Validate package names early to avoid confusing colcon output
-  mapfile -t _all_pkgs < <(colcon list --names-only)
-  unknown_pkgs=()
-  for _p in "${PACKAGES_SELECT[@]}"; do
-    found=0
-    for _ap in "${_all_pkgs[@]}"; do
-      if [[ "$_p" == "$_ap" ]]; then
-        found=1
-        break
-      fi
-    done
-    if [[ $found -eq 0 ]]; then
-      unknown_pkgs+=("$_p")
-    fi
-  done
-  if [[ ${#unknown_pkgs[@]} -gt 0 ]]; then
-    print_color red "Unknown package(s): ${unknown_pkgs[*]}"
-    print_color yellow "Available packages (from colcon list):"
-    printf '  %s\n' "${_all_pkgs[@]}"
-    exit 1
-  fi
-  print_color yellow "Packages-only: ${PACKAGES_SELECT[*]}"
-  colcon_args+=(--packages-select "${PACKAGES_SELECT[@]}")
+if [[ ${#PACKAGES_RESOLVED[@]} -gt 0 ]]; then
+  colcon_args+=(--packages-select "${PACKAGES_RESOLVED[@]}")
 fi
 colcon --log-base "$COLCON_LOG" build --symlink-install \
   --build-base "$COLCON_BUILD" \
@@ -341,4 +319,3 @@ else
   # real：额外启动 usb_cdc
   print_color green "Open usb cdc node ... (realsystem only)"
   open_term "usb cdc" "ros2 launch usb_cdc usb_cdc_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
-fi

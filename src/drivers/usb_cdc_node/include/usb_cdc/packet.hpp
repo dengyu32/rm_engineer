@@ -89,8 +89,10 @@ inline const char* switch_intent(uint8_t intent)
     case 4:
       return "AUTO_GET";
     case 5:
-      return "TEST_SOLVE";
+      return "FIXED_GRAB";
     case 6:
+      return "TEST_SOLVE";
+    case 7:
       return "TEST_CARTESIAN";
     case 11:
       return "TELEOP_SERVO";
