@@ -3,14 +3,13 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
-#include <sstream>
 #include <unordered_map>
 
 #include "log_utils/log.hpp"
 #include "solve_core/calculate_tools/cost_func.hpp"
-#include "solve_core/calculate_tools/wrap.hpp"
 #include "solve_core/planner/limit_planner.hpp"
 #include "solve_core/planner/straight_planner.hpp"
+#include "solve_core/adapter.hpp"
 
 #include <Eigen/Geometry>
 
@@ -24,51 +23,6 @@
 namespace solve_core {
 namespace {
 
-const char *to_string(SolveCore::SolveCode code) {
-  switch (code) {
-  case SolveCore::SolveCode::AdapterMissing:
-    return "AdapterMissing";
-  case SolveCore::SolveCode::RobotModelMissing:
-    return "RobotModelMissing";
-  case SolveCore::SolveCode::JointModelGroupMissing:
-    return "JointModelGroupMissing";
-  case SolveCore::SolveCode::IkSolverMissing:
-    return "IkSolverMissing";
-  case SolveCore::SolveCode::StartStateInvalid:
-    return "StartStateInvalid";
-  case SolveCore::SolveCode::InvalidRequest:
-    return "InvalidRequest";
-  case SolveCore::SolveCode::TargetSizeMismatch:
-    return "TargetSizeMismatch";
-  case SolveCore::SolveCode::JointStateMissing:
-    return "JointStateMissing";
-  case SolveCore::SolveCode::CollisionDetected:
-    return "CollisionDetected";
-  case SolveCore::SolveCode::JointLookupFailed:
-    return "JointLookupFailed";
-  case SolveCore::SolveCode::UnknownOption:
-    return "UnknownOption";
-  default:
-    return "Unknown";
-  }
-}
-
-std::string format_context(const std::map<std::string, std::string> &ctx) {
-  if (ctx.empty()) {
-    return "";
-  }
-  std::ostringstream oss;
-  bool first = true;
-  for (const auto &kv : ctx) {
-    if (!first) {
-      oss << ", ";
-    }
-    first = false;
-    oss << kv.first << "=" << kv.second;
-  }
-  return oss.str();
-}
-
 // _四元数转变换矩阵
 Eigen::Isometry3d pose_to_isometry(const Pose &pose) {
   Eigen::Isometry3d iso = Eigen::Isometry3d::Identity();
@@ -77,20 +31,6 @@ Eigen::Isometry3d pose_to_isometry(const Pose &pose) {
   q.normalize();
   iso.linear() = q.toRotationMatrix();
   return iso;
-}
-
-// _坐标轴向量归一化
-bool parse_direction_vector(const std::array<double, 3> &direction, Eigen::Vector3d &dir,
-                            std::string &err) {
-  constexpr double kEps = 1e-9;   //eps：epsilon，一个非常小的数，用于数值计算中避免除以零或判断数值是否接近零的情况
-  dir = Eigen::Vector3d(direction[0], direction[1], direction[2]);
-  const double norm = dir.norm();   //norm：向量的模长
-  if (!std::isfinite(norm) || norm <= kEps) {
-    err = "Cartesian request direction vector is invalid";
-    return false;
-  }
-  dir /= norm;
-  return true;
 }
 
 // 将关节角写进robotstate，可以缺失
@@ -119,39 +59,7 @@ bool fill_joint_state_allow_missing(const JointState &js,
   return true;
 }
 
-// 将关节角写进robotstate，必须齐全
-bool fill_joint_state_require_all(const JointState &js,
-                                  const moveit::core::JointModelGroup *jmg,
-                                  moveit::core::RobotState &state,
-                                  std::string &err) {
-  if (!jmg) {
-    err = "JointModelGroup null";
-    return false;
-  }
-  const auto &group_joint_names = jmg->getVariableNames();
-  if (js.names.empty() || js.positions.empty()) {
-    err = "Missing joint state";
-    return false;
-  }
-  if (js.names.size() != js.positions.size()) {
-    err = "Joint names/positions size mismatch";
-    return false;
-  }
-  std::unordered_map<std::string, double> pos_map;
-  pos_map.reserve(js.names.size());
-  for (std::size_t i = 0; i < js.names.size(); ++i) {
-    pos_map[js.names[i]] = js.positions[i];
-  }
-  for (const auto &jn : group_joint_names) {
-    auto it = pos_map.find(jn);
-    if (it == pos_map.end()) {
-      err = "Missing joint state";
-      return false;
-    }
-    state.setVariablePosition(it->first, it->second);
-  }
-  return true;
-}
+
 
 // 将Moveit自带的Trajectory转为自己定义的Trajectory
 Trajectory trajectory_from_robot_trajectory(const moveit::core::RobotModelConstPtr &robot_model,
@@ -224,24 +132,10 @@ SolveCore::SolveCore(std::shared_ptr<MoveItAdapter> adapter,
   LOGI("[solve_core] logger init");
 }
 
-void SolveCore::publish_error(
-    SolveCode code, const std::string &message,
-    const std::map<std::string, std::string> &context) const {
-  const auto ctx = format_context(context);
-  if (ctx.empty()) {
-    LOGE("[solve_core][error][code={}][name={}] {}", static_cast<int>(code),
-         to_string(code), message);
-    return;
-  }
-  LOGE("[solve_core][error][code={}][name={}] {} [{}]", static_cast<int>(code),
-       to_string(code), message, ctx);
-}
-
 // 规划总入口
 std::optional<SolveResponse> SolveCore::plan(const SolveRequest &req, std::string &err) {
   if (!adapter_) {
     LOGE("[solve_core] MoveIt adapter not set");
-    publish_error(SolveCode::AdapterMissing, "MoveIt adapter not set");
     return std::nullopt;
   }
 
@@ -257,7 +151,6 @@ std::optional<SolveResponse> SolveCore::plan(const SolveRequest &req, std::strin
     return plan_joints(req,err);
   default:
     LOGE("[solve_core] Unknown planning option");
-    publish_error(SolveCode::UnknownOption, "Unknown planning option");
     return std::nullopt;
   }
 }
@@ -267,7 +160,6 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
   const auto robot_model = adapter_->robot_model();
   if (!robot_model) {
     LOGE("[solve_core] RobotModel is null");
-    publish_error(SolveCode::RobotModelMissing, "RobotModel is null");
     return std::nullopt;
   }
 
@@ -277,16 +169,12 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
   const auto *jmg = adapter_->joint_model_group(group_name);
   if (!jmg) {
     LOGE("[solve_core] JointModelGroup not found");
-    publish_error(SolveCode::JointModelGroupMissing, "JointModelGroup not found",
-                  {{"group_name", group_name}});
     return std::nullopt;
   }
 
   auto solver = jmg->getSolverInstance();
   if (!solver) {
     LOGE("[solve_core] IK solver missing");
-    publish_error(SolveCode::IkSolverMissing, "IK solver missing",
-                  {{"group_name", group_name}});
     return std::nullopt;
   }
 
@@ -298,8 +186,6 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
   if (!start_state.satisfiesBounds(jmg)) {
     start_state.enforceBounds(jmg);
     LOGE("[solve_core] Start state out of bounds");
-    publish_error(SolveCode::StartStateInvalid, "Start state out of bounds",
-                  {{"group_name", group_name}});
     return std::nullopt;
   }
 
@@ -315,15 +201,9 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
 
   Eigen::Isometry3d target_iso = pose_to_isometry(req.target_pose);
 
-  LimitPlannerOptions limit_opt;
-  limit_opt.sampling_mode = SamplingMode::ROLL_SAMPLE;
-  limit_opt.enable_target_pose_sampling = config_.limit_enable_target_pose_sampling;
-  limit_opt.roll_samples = config_.limit_roll_samples;
-  limit_opt.roll_range_rad = config_.limit_roll_range_rad;
-  limit_opt.top_k_after_ik = config_.limit_top_k_after_ik;
-  limit_opt.orientation_weight = config_.limit_orientation_weight;
-  limit_opt.ik_distance_weight = config_.limit_ik_distance_weight;
-  limit_opt.joint_motion_weight = config_.limit_joint_motion_weight;
+  SamplingConfigs sam_configs;
+  sam_configs.sampling_mode = SamplingMode::ROLL_SAMPLE;
+  // normal planner 的专属参数先由 planner 配置结构体默认值提供，不走 yaml。
 
   PlannerConfigs planner_cfg;
   planner_cfg.goal_position_tolerance = config_.goal_position_tolerance;
@@ -334,7 +214,36 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
   planner_cfg.max_acc_scaling = config_.max_acc_scaling;
 
   std::shared_ptr<LimitPlanner> planner = std::make_shared<LimitPlanner>(adapter_);
-  auto out_traj = planner->plan(jmg, ee_link, start_state, target_iso, limit_opt, err, planner_cfg);
+  auto out_traj = planner->plan(jmg, ee_link, start_state, target_iso, sam_configs, err, planner_cfg);
+
+  // std::optional<solve_core::Trajectory>
+  // plan_to_joint_target(const std::vector<std::string> &joint_names,
+  //                      const std::vector<double> &joint_values,
+  //                      const solve_core::PlannerConfigs &configs) override {
+
+  //   moveit::planning_interface::MoveGroupInterface::Plan plan_msg;
+  //   const bool ok =
+  //       (move_group_->plan(plan_msg) == moveit::core::MoveItErrorCode::SUCCESS);
+  //   if (!ok) {
+  //     RCLCPP_ERROR(logger_, "[arm_solve_server] Planning failed");
+  //     return std::nullopt;
+  //   }
+
+  //   solve_core::Trajectory traj;
+  //   const auto &jt   = plan_msg.trajectory_.joint_trajectory;
+  //   traj.joint_names = jt.joint_names;
+  //   traj.points.reserve(jt.points.size());
+  //   for (const auto &pt : jt.points) {
+  //     solve_core::TrajectoryPoint p;
+  //     p.positions  = pt.positions;
+  //     p.velocities = pt.velocities;
+  //     p.time_from_start =
+  //         static_cast<double>(pt.time_from_start.sec) +
+  //         static_cast<double>(pt.time_from_start.nanosec) * 1e-9;
+  //     traj.points.push_back(std::move(p));
+  //   }
+  //   return traj;
+  // }
 
   auto resp = std::make_optional<SolveResponse>();
   if (out_traj) {
@@ -349,8 +258,13 @@ std::optional<SolveResponse> SolveCore::plan_normal(const SolveRequest &req, std
 // 直线规划
 std::optional<SolveResponse>
 SolveCore::plan_cartesian(const SolveRequest &req, std::string &err) {
-
   auto robot_model = adapter_->robot_model();
+  if (!robot_model) {
+    err = "RobotModel is null";
+    LOGE("[solve_core] {}", err);
+    return std::nullopt;
+  }
+
   std::string group_name =
       req.group_name.empty() ?
       adapter_->group_name() :
@@ -369,29 +283,29 @@ SolveCore::plan_cartesian(const SolveRequest &req, std::string &err) {
       req.ee_link.empty() ?
       adapter_->end_effector_link() :
       req.ee_link;
-
-  Eigen::Vector3d direction;
-  if (!parse_direction_vector(req.target_vector, direction, err)) {
+  if (ee_link.empty()) {
+    err = "End effector link is empty";
     LOGE("[solve_core] {}", err);
-    publish_error(SolveCode::InvalidRequest, err);
     return std::nullopt;
   }
 
   StraightPlanner planner(robot_model, group_name, ee_link);
-  StraightPlannerOptions opt;
-  opt.num_waypoints = config_.cartesian_num_waypoints;
-  opt.use_directional_sampling = config_.cartesian_use_directional_sampling;
-  opt.sample_step_m = config_.cartesian_sample_step_m;
-  opt.direction_x = direction.x();
-  opt.direction_y = direction.y();
-  opt.direction_z = direction.z();
+  StraightPlannerConfigs strai_config;
+  const Eigen::Isometry3d target_iso = pose_to_isometry(req.target_pose);
+  const Eigen::Isometry3d start_iso = start_state.getGlobalLinkTransform(ee_link);
+  if (!buildStraightPlannerConfigs(start_iso, target_iso, req.target_vector,
+                                   req.target_length,
+                                   strai_config, err)) {
+    LOGE("[solve_core] {}", err);
+    return std::nullopt;
+  }
 
   // todo：暂时修的bug，后续可以改成直接在config里设置代价计算函数的参数
   CostOptions cost_opt;
   auto traj = planner.plan(
       start_state,
-      pose_to_isometry(req.target_pose),
-      opt,
+      target_iso,
+      strai_config,
       cost_opt);
 
   if (!traj)
@@ -401,8 +315,6 @@ SolveCore::plan_cartesian(const SolveRequest &req, std::string &err) {
   const auto *jmg = adapter_->joint_model_group(group_name);
   if (!jmg) {
     LOGE("[solve_core] JointModelGroup not found");
-    publish_error(SolveCode::JointModelGroupMissing, "JointModelGroup not found",
-                  {{"group_name", group_name}});
     return std::nullopt;
   }
 
@@ -411,9 +323,6 @@ SolveCore::plan_cartesian(const SolveRequest &req, std::string &err) {
     const auto &pt = traj->points[i];
     if (pt.positions.size() < jmg->getVariableCount()) {
       LOGE("[solve_core] Trajectory point size mismatch for collision check");
-      publish_error(SolveCode::InvalidRequest,
-                    "Trajectory point positions size mismatch",
-                    {{"group_name", group_name}});
       return std::nullopt;
     }
     rs.setJointGroupPositions(jmg, pt.positions);
@@ -423,8 +332,6 @@ SolveCore::plan_cartesian(const SolveRequest &req, std::string &err) {
       if (collision_err.empty())
         collision_err = "Self collision detected";
       LOGE("[solve_core] {}", collision_err);
-      publish_error(SolveCode::CollisionDetected, collision_err,
-                    {{"group_name", group_name}, {"waypoint_index", std::to_string(i)}});
       return std::nullopt;
     }
   }
@@ -449,7 +356,6 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
   const auto robot_model = adapter_->robot_model();
   if (!robot_model) {
     LOGE("[solve_core] RobotModel is null");
-    publish_error(SolveCode::RobotModelMissing, "RobotModel is null");
     return std::nullopt;
   }
   const std::string group_name = !req.group_name.empty()
@@ -458,8 +364,6 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
   const auto *jmg = adapter_->joint_model_group(group_name);
   if (!jmg) {
     LOGE("[solve_core] JointModelGroup not found");
-    publish_error(SolveCode::JointModelGroupMissing, "JointModelGroup not found",
-                  {{"group_name", group_name}});
     return std::nullopt;
   }
 
@@ -467,8 +371,6 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
   const std::size_t dof = group_joint_names.size();
   if (req.target_joints.size() < dof) {
     LOGE("[solve_core] Target joints size mismatch");
-    publish_error(SolveCode::TargetSizeMismatch, "Target joints size mismatch",
-                  {{"group_name", group_name}});
     return std::nullopt;
   }
 
@@ -476,7 +378,6 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
   start_state.setToDefaultValues();
   if (!fill_joint_state_require_all(req.current_joints, jmg, start_state, err)) {
     LOGE("[solve_core] {}", err);
-    publish_error(SolveCode::JointStateMissing, err, {{"group_name", group_name}});
     return std::nullopt;
   }
   start_state.update();
@@ -493,19 +394,18 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
     start_joint_position.emplace(jn, pos_now);
   }
 
-  double max_step_rad = config_.joints_max_step_rad;
+  JointsPlannerConfigs joints_config;
+  joints_config.validate();
+  const double max_step_rad = joints_config.max_step_rad;
   double max_delta = 0.0;
   for (std::size_t i = 0; i < dof; ++i) {
     const auto &jn = group_joint_names[i];
     auto it = start_joint_position.find(jn);
     if (it == start_joint_position.end()) {
       LOGE("[solve_core] Joint lookup failed");
-      publish_error(SolveCode::JointLookupFailed, "Joint lookup failed",
-                    {{"group_name", group_name}});
       return std::nullopt;
     }
-    const double target_near = ikc::wrapToNearby(req.target_joints[i], it->second);
-    max_delta = std::max(max_delta, std::fabs(target_near - it->second));
+    max_delta = std::max(max_delta, std::fabs(req.target_joints[i] - it->second));
   }
   const int N = std::max(1, static_cast<int>(std::ceil(max_delta / std::max(1e-6, max_step_rad))));
 
@@ -525,12 +425,9 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
       auto it = start_joint_position.find(jn);
       if (it == start_joint_position.end()) {
         LOGE("[solve_core] Joint lookup failed");
-        publish_error(SolveCode::JointLookupFailed, "Joint lookup failed",
-                      {{"group_name", group_name}});
         return std::nullopt;
       }
-      const double target_near = ikc::wrapToNearby(req.target_joints[i], it->second);
-      q[i] = it->second + (target_near - it->second) * t;
+      q[i] = it->second + (req.target_joints[i] - it->second) * t;
     }
 
     rs.setJointGroupPositions(jmg, q);
@@ -541,8 +438,6 @@ std::optional<SolveResponse> SolveCore::plan_joints(const SolveRequest &req, std
       if (collision_err.empty())
         collision_err = "Self collision detected";
       LOGE("[solve_core] {}", collision_err);
-      publish_error(SolveCode::CollisionDetected, collision_err,
-                    {{"group_name", group_name}});
       return std::nullopt;
     }
 

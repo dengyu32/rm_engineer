@@ -144,8 +144,8 @@ def generate_launch_description():
     
     # arm_solve_server 节点 : 提供 IK/轨迹求解服务，读取 MoveIt 参数与 bringup.yaml 的业务配置
     node_arm_solve = Node(
-        package="arm_solve",
-        executable="arm_solve_server",
+        package="arm_solve_server",
+        executable="arm_solve_server_node",
         name="arm_solve_server",
         output="screen",
         parameters=common_params + [joint_reset_path, moveit_reset_path, bringup_config_path],

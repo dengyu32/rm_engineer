@@ -6,8 +6,10 @@
 #include <optional>
 #include <vector>
 
+#include "solve_core/moveit_adapter.hpp"
+
 #include "solve_core/calculate_tools/sample.hpp"
-#include "solve_core/solve_core.hpp"
+
 
 /*
     约束规划器
@@ -24,11 +26,11 @@ public:
   std::optional<Trajectory>
   plan(const moveit::core::JointModelGroup *jmg_, const std::string ee_link_,
        moveit::core::RobotState &start_state,
-       const Eigen::Isometry3d &target_pose, const LimitPlannerOptions &opt,
-       std::string &err, const PlannerConfigs &planner_configs,
+       const Eigen::Isometry3d &target_pose, const SamplingConfigs &sam_configs,
+       std::string &err, const struct PlannerConfigs &planner_configs,
        std::vector<std::vector<double>> *joint_path_out = nullptr);
 
-private:
-  std::shared_ptr<MoveItAdapter> adapter_;
+  private:
+    std::shared_ptr<MoveItAdapter> adapter_;
 };
 } // namespace solve_core

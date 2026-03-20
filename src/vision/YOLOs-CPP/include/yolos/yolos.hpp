@@ -18,20 +18,20 @@
 // ============================================================================
 
 // Core components
-#include "yolos/core/types.hpp"
-#include "yolos/core/version.hpp"
-#include "yolos/core/utils.hpp"
-#include "yolos/core/preprocessing.hpp"
-#include "yolos/core/nms.hpp"
 #include "yolos/core/drawing.hpp"
+#include "yolos/core/nms.hpp"
+#include "yolos/core/preprocessing.hpp"
 #include "yolos/core/session_base.hpp"
+#include "yolos/core/types.hpp"
+#include "yolos/core/utils.hpp"
+#include "yolos/core/version.hpp"
 
 // Task-specific implementations
-#include "yolos/tasks/detection.hpp"
-#include "yolos/tasks/segmentation.hpp"
-#include "yolos/tasks/pose.hpp"
-#include "yolos/tasks/obb.hpp"
 #include "yolos/tasks/classification.hpp"
+#include "yolos/tasks/detection.hpp"
+#include "yolos/tasks/obb.hpp"
+#include "yolos/tasks/pose.hpp"
+#include "yolos/tasks/segmentation.hpp"
 
 // ============================================================================
 // Namespace Aliases for Convenience
