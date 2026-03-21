@@ -11,6 +11,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(shared_data REQUIRED)
 find_package(task_step_library REQUIRED)
 find_package(arm_solve_client REQUIRED)
 find_package(gripper_control_node REQUIRED)
@@ -19,10 +20,12 @@ find_package(vision_detect_client REQUIRED)
 
 add_library(${PROJECT_NAME}
   src/step_executor.cpp
+  src/target_resolver.cpp
   src/bridges/arm_capability_bridge.cpp
   src/bridges/gripper_capability_bridge.cpp
   src/bridges/slot_capability_bridge.cpp
   src/bridges/composite_capability_bridge.cpp
+  src/bridges/registry_capability_bridge.cpp
   src/bridges/vision_capability_bridge.cpp
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -35,6 +38,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 ament_target_dependencies(${PROJECT_NAME}
   engineer_interfaces
   rclcpp
+  shared_data
   task_step_library
   arm_solve_client
   gripper_control_node
@@ -52,6 +56,6 @@ install(DIRECTORY include/ DESTINATION include/)
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
-ament_export_dependencies(engineer_interfaces rclcpp task_step_library arm_solve_client gripper_control_node slot_select_node vision_detect_client)
+ament_export_dependencies(engineer_interfaces rclcpp shared_data task_step_library arm_solve_client gripper_control_node slot_select_node vision_detect_client)
 
 ament_package()

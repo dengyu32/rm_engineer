@@ -31,10 +31,12 @@ TaskPlan make_auto_init() {
 TaskPlan make_auto_grab() {
   return TaskBuilder(TaskId::AUTO_GRAB)
       .vision("vision_detect")
-      .vision_mapped_pose("approach_to_grab")
+      .arm_from_source("approach_to_grab", PlanOption::NORMAL, TargetSource::SharedPose,
+                       SharedKey::VisionPose)
       .gripper("gripper_close", CLOSE)
       .delay("gripper_settle", 600)
-      .vision_mapped_vector("lift_cartesian")
+      .arm_from_source("lift_cartesian", PlanOption::CARTESIAN, TargetSource::SharedVector,
+                       SharedKey::VisionVector)
       .joints("move_home", HOME)
       .build();
 }
@@ -42,7 +44,7 @@ TaskPlan make_auto_grab() {
 TaskPlan make_auto_store() {
   return TaskBuilder(TaskId::AUTO_STORE)
       .slot("select_slot", PUT)
-      .slot_mapped_joints("move_to_place_slot")
+      .arm_from_source("move_to_place_slot", PlanOption::JOINTS, TargetSource::SlotMapped)
       .gripper("auto_store_gripper_open", OPEN)
       .delay("auto_store_release_settle", 600)
       .slot("lock_slot", LOCK)
@@ -53,7 +55,7 @@ TaskPlan make_auto_store() {
 TaskPlan make_auto_get() {
   return TaskBuilder(TaskId::AUTO_GET)
       .slot("select_slot", TAKE)
-      .slot_mapped_joints("move_to_slot")
+      .arm_from_source("move_to_slot", PlanOption::JOINTS, TargetSource::SlotMapped)
       .slot("unlock_slot", UNLOCK)
       .gripper("gripper_close", CLOSE)
       .delay("gripper_settle", 600)

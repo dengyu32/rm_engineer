@@ -1,3 +1,5 @@
 auto_node:
   ros__parameters:
     update_period_ms: 20
+    status_period_ms: 200
+    auto_status_topic: "auto_status"

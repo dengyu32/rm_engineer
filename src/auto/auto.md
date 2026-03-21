@@ -107,12 +107,12 @@ capabilities/* -> engineer_interfaces/rclcpp/...
     auto_node.cpp:90
 3. StepExecutor 遇到 StepType::Slot 时，经 CompositeCapabilityBridge 分发到 SlotCapabilityBridge。
     composite_capability_bridge.cpp:33
-4. SlotCapabilityBridge 调 slot_select_node.select(...)，把结果写进 StepResult.has_selected_slot/selected_slot。
+4. SlotCapabilityBridge 调 slot_select_node.select(...)，把结果写进 StepResult（SelectedSlot）。
     slot_capability_bridge.cpp:20
-5. StepExecutor::applyStepResult 把这个结果写入运行时上下文 RuntimeContext。
+5. StepExecutor::applyStepResult 把这个结果写入共享数据 SharedData。
     step_executor.cpp:186
     context.hpp:7
-6. 当执行后续 ArmMove(target_source=SlotMapped) 时，deriveStepFromRuntimeCtx 用 selected_slot 改写为固定关节目标（slot0/slot1 两组硬编码 joints）。
+6. 当执行后续 ArmMove(target_source=SlotMapped) 时，deriveStepFromSharedData 用 SelectedSlot 改写为固定关节目标（slot0/slot1 两组硬编码 joints）。
     step_executor.cpp:162
 7. slot_select_node 的 slot 状态来源是 /slot_states（engineer_interfaces/Slots），内部只维护 2 个槽位。
     SelectSlotToPut/SelectSlotToTake 就是基于这两个布尔值选 index。

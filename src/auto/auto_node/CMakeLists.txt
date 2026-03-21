@@ -11,8 +11,10 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(params_utils REQUIRED)
 find_package(engineer_interfaces REQUIRED)
+find_package(shared_data REQUIRED)
 find_package(task_step_library REQUIRED)
 find_package(task_orchestrator REQUIRED)
 find_package(step_executor REQUIRED)
@@ -29,8 +31,10 @@ target_include_directories(${PROJECT_NAME}_component PUBLIC
 ament_target_dependencies(${PROJECT_NAME}_component
   rclcpp
   rclcpp_components
+  std_msgs
   params_utils
   engineer_interfaces
+  shared_data
   task_step_library
   task_orchestrator
   step_executor

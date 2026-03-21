@@ -10,10 +10,8 @@ BridgeResult VisionCapabilityBridge::runVisionStep(const task_step_library::Step
 
   if (client_.detect(detection)) {
     if (out_result) {
-      out_result->has_vision_pose = true;
-      out_result->vision_pose = detection.pose;
-      out_result->has_vision_vector = true;
-      out_result->vision_vector = detection.vector;
+      out_result->set<task_step_library::SharedKey::VisionPose>(detection.pose);
+      out_result->set<task_step_library::SharedKey::VisionVector>(detection.vector);
     }
     last_error_.clear();
     return BridgeResult::Succeeded;

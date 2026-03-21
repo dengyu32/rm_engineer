@@ -65,4 +65,27 @@ inline bool is_supported_task(TaskId id) {
   }
 }
 
+inline const char *task_name(TaskId id) {
+  switch (id) {
+  case TaskId::IDLE:
+    return "IDLE";
+  case TaskId::AUTO_INIT:
+    return "AUTO_INIT";
+  case TaskId::AUTO_GRAB:
+    return "AUTO_GRAB";
+  case TaskId::AUTO_STORE:
+    return "AUTO_STORE";
+  case TaskId::AUTO_GET:
+    return "AUTO_GET";
+  case TaskId::FIXED_GRAB:
+    return "FIXED_GRAB";
+  case TaskId::TEST_SOLVE:
+    return "TEST_SOLVE";
+  case TaskId::TEST_CARTESIAN:
+    return "TEST_CARTESIAN";
+  default:
+    return "UNKNOWN";
+  }
+}
+
 } // namespace task_step_library

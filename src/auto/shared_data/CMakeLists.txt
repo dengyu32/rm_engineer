@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(task_step_library)
+project(shared_data)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,7 +11,6 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(engineer_interfaces REQUIRED)
-find_package(shared_data REQUIRED)
 
 add_library(${PROJECT_NAME} INTERFACE)
 target_include_directories(${PROJECT_NAME} INTERFACE
@@ -24,6 +23,6 @@ install(DIRECTORY include/ DESTINATION include/)
 
 ament_export_targets(export_${PROJECT_NAME})
 ament_export_include_directories(include)
-ament_export_dependencies(engineer_interfaces geometry_msgs shared_data)
+ament_export_dependencies(engineer_interfaces geometry_msgs)
 
 ament_package()

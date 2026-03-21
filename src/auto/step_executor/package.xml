@@ -11,6 +11,7 @@
 
   <depend>engineer_interfaces</depend>
   <depend>rclcpp</depend>
+  <depend>shared_data</depend>
   <depend>task_step_library</depend>
   <depend>arm_solve_client</depend>
   <depend>gripper_control_node</depend>

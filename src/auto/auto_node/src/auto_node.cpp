@@ -2,10 +2,15 @@
 
 #include <chrono>
 #include <functional>
+#include <cstdio>
 
 namespace engineer_auto {
 
 using namespace task_step_library;
+
+// ============================================================================
+//  CTOR
+// ============================================================================
 
 AutoNode::AutoNode(const rclcpp::NodeOptions &options)
     : rclcpp::Node("auto_node", options),
@@ -14,19 +19,36 @@ AutoNode::AutoNode(const rclcpp::NodeOptions &options)
       executor_(this->get_logger(), step_executor::createDefaultCapabilityBridge(*this)) {
   latest_task_id_.store(TaskId::IDLE, std::memory_order_relaxed);
 
-  intent_sub_ = this->create_subscription<engineer_interfaces::msg::Intent>(
-      config_.intent_cmd_topic, rclcpp::QoS(10),
-      std::bind(&AutoNode::intentCallback, this, std::placeholders::_1));
-  feedback_pub_ = this->create_publisher<engineer_interfaces::msg::Intent>(
-      config_.intent_fb_topic, rclcpp::QoS(10));
+  initRosInterfaces();
 
   timer_ = this->create_wall_timer(std::chrono::milliseconds(config_.update_period_ms),
                                    std::bind(&AutoNode::tick, this));
+  status_timer_ =
+      this->create_wall_timer(std::chrono::milliseconds(config_.status_period_ms),
+                              std::bind(&AutoNode::statusTick, this));
 
   RCLCPP_INFO(logger_, "\n%s", config_.summary().c_str());
   publishFeedback(TaskId::IDLE, TaskFinishCode::Running);
   RCLCPP_INFO(logger_, "[AUTO_NODE] started");
 }
+
+// ============================================================================
+//  ROS
+// ============================================================================
+
+void AutoNode::initRosInterfaces(){
+  intent_sub_ = this->create_subscription<engineer_interfaces::msg::Intent>(
+      config_.intent_cmd_topic, rclcpp::QoS(10),
+      std::bind(&AutoNode::intentCallback, this, std::placeholders::_1));
+  feedback_pub_ = this->create_publisher<engineer_interfaces::msg::Intent>(
+      config_.intent_fb_topic, rclcpp::QoS(10));
+  status_pub_ = this->create_publisher<std_msgs::msg::String>(
+      config_.auto_status_topic, rclcpp::QoS(10));
+}
+
+// ============================================================================
+//  ROS CallBack
+// ============================================================================
 
 void AutoNode::intentCallback(engineer_interfaces::msg::Intent::ConstSharedPtr msg) {
   TaskId task_id = TaskId::IDLE;
@@ -44,17 +66,39 @@ void AutoNode::intentCallback(engineer_interfaces::msg::Intent::ConstSharedPtr m
 }
 
 void AutoNode::tick() {
+  // 读取 latest_task_id_ 是原子化操作，applied_task_id_只在tick中使用，不是共享变量
+  // 1. 处理得到的 task_id_ ，executor_ 开始工作
   const TaskId latest = latest_task_id_.load(std::memory_order_relaxed);
   if (latest != applied_task_id_) {
+    std::fputs("\n", stdout);
+    std::fputs("=================== AUTO NODE TASK START ===================\n", stdout);
+    std::fflush(stdout);
+    RCLCPP_INFO(logger_,
+                " [AUTO_NODE] START task=%s (id=%u)",
+                task_step_library::task_name(latest),
+                static_cast<unsigned>(latest));
     handleIntent(latest);
     applied_task_id_ = latest;
   }
 
+  // 2. 如果task_id_没有被更新，同时executor_正在执行，驱动executor_,并更新当前status_text
   if (executor_.isRunning()) {
     static rclcpp::Clock steady_clock(RCL_STEADY_TIME);
     executor_.tick(steady_clock.now());
+    const TaskId running_task_id = executor_.activeTaskId();
+    const std::size_t step_index = executor_.currentStepIndex();
+    const std::size_t step_total = executor_.totalSteps();
+    const std::string step_label = executor_.currentStepLabel();
+    std::ostringstream oss;
+    oss << "task=" << task_step_library::task_name(running_task_id)
+        << " step=" << (step_index + 1) << "/" << step_total
+        << " label=" << step_label
+        << " status=running";
+    status_text_ = oss.str();
   }
 
+  // 3. 如果executor_结束，发布 feedback，并更新当前status_text_
+  // TO REQUEST: 这里只在这打印一次feedback是否有所不妥？
   if (executor_.isFinished()) {
     const TaskResult report = executor_.report();
     const TaskId done_task_id = executor_.activeTaskId();
@@ -65,10 +109,31 @@ void AutoNode::tick() {
     publishFeedback(done_task_id, finish_code);
     RCLCPP_INFO(logger_, "[AUTO_NODE] task done status=%u msg=%s",
                 static_cast<unsigned>(report.status), report.message.c_str());
+    std::fputs("=================== AUTO NODE TASK END =====================\n", stdout);
+    std::fflush(stdout);
+
+    std::ostringstream oss;
+    oss << "task=" << task_step_library::task_name(done_task_id)
+        << " step=" << (executor_.currentStepIndex() + 1) << "/" << executor_.totalSteps()
+        << " label=" << executor_.currentStepLabel()
+        << " status=" << (report.status == TaskStatus::Success ? "finished" : "failed");
+    if (!report.message.empty()) {
+      oss << " reason=" << report.message;
+    }
+    status_text_ = oss.str();
 
     executor_.reset();
   }
 }
+
+// TO REQUEST: 状态发布写成 定时器？还是 出现问题或者更新的时候？
+void AutoNode::statusTick() {
+  publishStatus(status_text_);
+}
+
+// ============================================================================
+//  BI Func 
+// ============================================================================
 
 void AutoNode::handleIntent(TaskId task_id) {
   if (executor_.isRunning()) {
@@ -78,6 +143,7 @@ void AutoNode::handleIntent(TaskId task_id) {
   if (task_id == TaskId::IDLE) {
     // IDLE 状态返回 Running 表明 IDLE 正常运行
     publishFeedback(TaskId::IDLE, TaskFinishCode::Running);
+    status_text_ = "task=IDLE status=idle";
     return;
   }
 
@@ -101,6 +167,15 @@ void AutoNode::publishFeedback(TaskId task_id, TaskFinishCode code) {
   msg.intent_id = static_cast<uint8_t>(task_id);
   msg.intent_finish = static_cast<uint8_t>(code);
   feedback_pub_->publish(msg);
+}
+
+void AutoNode::publishStatus(const std::string &text) {
+  if (!status_pub_) {
+    return;
+  }
+  std_msgs::msg::String msg;
+  msg.data = text;
+  status_pub_->publish(msg);
 }
 
 bool AutoNode::toTaskId(uint8_t raw, TaskId &out) {

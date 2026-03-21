@@ -97,6 +97,30 @@ EOF
     return
   fi
 
+
+  # Best-effort X11 authorization fix for rapid terminal spawning.
+  if [[ -n "${DISPLAY:-}" && "${RERUN_XHOST_FIX:-1}" == "1" ]]; then
+    if command -v xhost >/dev/null 2>&1; then
+      local _user
+      _user="${USER:-$(id -un 2>/dev/null || true)}"
+      if [[ -n "${_user:-}" ]]; then
+        xhost +SI:localuser:"$_user" >/dev/null 2>&1 || xhost +local:"$_user" >/dev/null 2>&1 || true
+      else
+        xhost +SI:localuser:"$(whoami)" >/dev/null 2>&1 || xhost +local:"$(whoami)" >/dev/null 2>&1 || true
+      fi
+    fi
+  fi
+
+
+  # Small delay between GUI terminal spawns to reduce X11 client burst.
+  local term_delay
+  term_delay="${RERUN_TERM_DELAY:-0.2}"
+  if [[ -n "${term_delay:-}" ]]; then
+    if [[ "$term_delay" =~ ^[0-9]+([.][0-9]+)?$ ]] && [[ "$term_delay" != "0" && "$term_delay" != "0.0" ]]; then
+      sleep "$term_delay"
+    fi
+  fi
+
   if ! gnome-terminal --window --title="$title" -- bash -ic "RERUN_KEEP_SHELL_ON_EXIT=1 bash '$runner_file'"; then
     print_color yellow "[open_term] gnome-terminal failed, fallback to headless: $title"
     RERUN_KEEP_SHELL_ON_EXIT=0 bash "$runner_file" >/dev/null 2>&1 &

@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>task_step_library</name>
+  <name>shared_data</name>
   <version>0.0.0</version>
-  <description>Task/Step data model library for auto execution.</description>
+  <description>Shared data types for auto execution.</description>
   <maintainer email="2281904682@qq.com">wrj</maintainer>
   <license>TODO: License declaration</license>
 
@@ -11,7 +11,6 @@
 
   <depend>engineer_interfaces</depend>
   <depend>geometry_msgs</depend>
-  <depend>shared_data</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

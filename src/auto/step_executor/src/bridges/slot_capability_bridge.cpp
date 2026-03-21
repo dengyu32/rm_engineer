@@ -26,8 +26,7 @@ BridgeResult SlotCapabilityBridge::runSlotStep(const task_step_library::Step &st
     }
     last_selected_slot_ = selected_slot;
     if (out_result) {
-      out_result->has_selected_slot = true;
-      out_result->selected_slot = selected_slot;
+      out_result->set<task_step_library::SharedKey::SelectedSlot>(selected_slot);
     }
     break;
   }

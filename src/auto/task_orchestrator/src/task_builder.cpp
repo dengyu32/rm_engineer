@@ -52,19 +52,14 @@ TaskBuilder &TaskBuilder::slot(const char *label, SlotStrategy strategy, int slo
   step.label = label;
   step.slot.strategy = strategy;
   step.slot.slot_id = slot_id;
-  plan_.steps.push_back(std::move(step));
-  return *this;
-}
-
-TaskBuilder &TaskBuilder::slot_mapped_joints(const char *label, int timeout_ms, int retries) {
-  Step step;
-  step.type = StepType::ArmMove;
-  step.label = label;
-  step.timeout_ms = timeout_ms;
-  step.max_retries = retries;
-  step.arm_move.plan_option = PlanOption::JOINTS;
-  step.arm_move.joints = std::array<float, 6>{{0.f, 0.f, 0.f, 0.f, 0.f, 0.f}};
-  step.arm_move.target_source = TargetSource::SlotMapped;
+  if (strategy == SlotStrategy::SelectSlotToPut ||
+      strategy == SlotStrategy::SelectSlotToTake) {
+    step.outputs.push_back(SharedKey::SelectedSlot);
+  } else if ((strategy == SlotStrategy::LockSlot ||
+              strategy == SlotStrategy::UnlockSlot) &&
+             slot_id < 0) {
+    step.inputs.push_back(SharedKey::SelectedSlot);
+  }
   plan_.steps.push_back(std::move(step));
   return *this;
 }
@@ -75,30 +70,29 @@ TaskBuilder &TaskBuilder::vision(const char *label, int timeout_ms, int retries)
   step.label = label;
   step.timeout_ms = timeout_ms;
   step.max_retries = retries;
+  step.outputs.push_back(SharedKey::VisionPose);
+  step.outputs.push_back(SharedKey::VisionVector);
   plan_.steps.push_back(std::move(step));
   return *this;
 }
 
-TaskBuilder &TaskBuilder::vision_mapped_pose(const char *label, int timeout_ms, int retries) {
+TaskBuilder &TaskBuilder::arm_from_source(const char *label, PlanOption option,
+                                          TargetSource source, SharedKey key,
+                                          int timeout_ms, int retries) {
   Step step;
   step.type = StepType::ArmMove;
   step.label = label;
   step.timeout_ms = timeout_ms;
   step.max_retries = retries;
-  step.arm_move.plan_option = PlanOption::NORMAL;
-  step.arm_move.target_source = TargetSource::VisionPose;
-  plan_.steps.push_back(std::move(step));
-  return *this;
-}
-
-TaskBuilder &TaskBuilder::vision_mapped_vector(const char *label, int timeout_ms, int retries) {
-  Step step;
-  step.type = StepType::ArmMove;
-  step.label = label;
-  step.timeout_ms = timeout_ms;
-  step.max_retries = retries;
-  step.arm_move.plan_option = PlanOption::CARTESIAN;
-  step.arm_move.target_source = TargetSource::VisionVector;
+  step.arm_move.plan_option = option;
+  step.arm_move.target_source = source;
+  if (source == TargetSource::SharedPose || source == TargetSource::SharedVector) {
+    step.arm_move.target_key = key;
+    step.inputs.push_back(key);
+  }
+  if (source == TargetSource::SlotMapped) {
+    step.inputs.push_back(SharedKey::SelectedSlot);
+  }
   plan_.steps.push_back(std::move(step));
   return *this;
 }

@@ -130,6 +130,9 @@ fi
 # Environment checks (ONNX Runtime / RealSense SDK)
 # ----------------------------------------------------------------------------
 source "$SCRIPTS_DIR/check_env.sh"
+if ! check_env; then
+  exit 1
+fi
 
 # ----------------------------------------------------------------------------
 # rerun 会话清理：可选杀掉上一次会话
@@ -212,8 +215,6 @@ unset COLCON_PREFIX_PATH
 set +u
 source "$ROS_SETUP"
 set -u
-
-check_env
 
 print_color green "Building workspace ..."
 colcon_args=()
@@ -319,3 +320,4 @@ else
   # real：额外启动 usb_cdc
   print_color green "Open usb cdc node ... (realsystem only)"
   open_term "usb cdc" "ros2 launch usb_cdc usb_cdc_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+fi

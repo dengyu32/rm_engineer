@@ -10,6 +10,7 @@
 
 //< ROS 2
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/string.hpp>
 
 //< Engineer Interfaces
 #include <engineer_interfaces/msg/intent.hpp>
@@ -25,19 +26,27 @@ namespace engineer_auto {
 // ============================================================================
 //  AutoNodeConfig
 // ----------------------------------------------------------------------------
-//  - intent_cmd_topic: 订阅的 Intent 命令话题
-//  - intent_fb_topic: 发布的 Intent 反馈话题
+//  私有参数（动态参数）
 //  - update_period_ms: 定时器周期，用于定期检查和执行任务
+//  - status_period_ms: 用于广播 AUTO 状态 <TODO: 接入串口，传给图传>
+//  通用参数（静态参数）
+//  - IntentResetConfig: intent_cmd_topic、intent_fb_topic
 // ============================================================================
 
 struct AutoNodeConfig : public params_utils::IntentResetConfig {
   int update_period_ms{20};
+  int status_period_ms{200};
+  std::string auto_status_topic{"auto_status"};
 
   static AutoNodeConfig load(rclcpp::Node &node) {
     AutoNodeConfig cfg;
     params_utils::IntentResetConfig::Load(node, cfg);
     params_utils::detail::declare_get_checked(
         node, "update_period_ms", cfg.update_period_ms,
+        [](int v) { return v > 0; },
+        "must be > 0");
+    params_utils::detail::declare_get_checked(
+        node, "status_period_ms", cfg.status_period_ms,
         [](int v) { return v > 0; },
         "must be > 0");
     cfg.validate();
@@ -52,6 +61,7 @@ struct AutoNodeConfig : public params_utils::IntentResetConfig {
     oss << " AutoNode Configuration\n\n";
     oss << " Timing:\n";
     oss << "   - update_period_ms     : " << update_period_ms << "\n\n";
+    oss << "   - status_period_ms     : " << status_period_ms << "\n\n";
     oss << params_utils::IntentResetConfig::summary();
     oss << "=============================================================================\n";
     return oss.str();
@@ -64,6 +74,7 @@ struct AutoNodeConfig : public params_utils::IntentResetConfig {
 //  - 订阅 Intent 命令，解析并执行对应的任务
 //  - 定期检查当前任务状态，执行任务步骤
 //  - 发布任务执行反馈
+//  - 定时发布当前状态
 // ============================================================================
 
 class AutoNode : public rclcpp::Node {
@@ -71,15 +82,21 @@ public:
   explicit AutoNode(const rclcpp::NodeOptions &options);
 
 private:
+  //< ROS 2 Init
+  void initRosInterfaces();
+
   //< ROS 2 Callback
   void intentCallback(engineer_interfaces::msg::Intent::ConstSharedPtr msg);
   
   //< Timer Callback
   void tick();
+  void statusTick();
 
+  //< Built-in Function
   void handleIntent(task_step_library::TaskId task_id);
   void publishFeedback(task_step_library::TaskId task_id,
                        task_step_library::TaskFinishCode code);
+  void publishStatus(const std::string &text);
 
   static bool toTaskId(uint8_t raw, task_step_library::TaskId &out);
 
@@ -96,7 +113,11 @@ private:
 
   rclcpp::Subscription<engineer_interfaces::msg::Intent>::SharedPtr intent_sub_;
   rclcpp::Publisher<engineer_interfaces::msg::Intent>::SharedPtr feedback_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::TimerBase::SharedPtr status_timer_;
+
+  std::string status_text_{"task=IDLE status=idle"};
 };
 
 } // namespace engineer_auto

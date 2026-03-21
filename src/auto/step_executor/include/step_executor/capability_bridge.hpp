@@ -4,7 +4,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "task_step_library/context.hpp"
+#include "shared_data/context.hpp"
 #include "task_step_library/step.hpp"
 
 namespace step_executor {
@@ -33,6 +33,9 @@ public:
   const char *lastError() const override { return ""; }
 };
 
+class RegistryCapabilityBridge;
+
+std::shared_ptr<RegistryCapabilityBridge> createDefaultRegistryBridge(rclcpp::Node &node);
 std::shared_ptr<ICapabilityBridge> createDefaultCapabilityBridge(rclcpp::Node &node);
 
 } // namespace step_executor

@@ -3,9 +3,12 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include <engineer_interfaces/msg/pose.hpp>
 #include <geometry_msgs/msg/vector3.hpp>
+
+#include "shared_data/context.hpp"
 
 namespace task_step_library {
 
@@ -19,8 +22,8 @@ enum class PlanOption : uint8_t {
 
 enum class TargetSource : uint8_t {
   Fixed = 0,
-  VisionPose = 1,
-  VisionVector = 2,
+  SharedPose = 1,
+  SharedVector = 2,
   SlotMapped = 3,
 };
 
@@ -32,6 +35,7 @@ struct ArmMoveSpec {
 
   PlanOption plan_option{PlanOption::NORMAL};
   TargetSource target_source{TargetSource::Fixed};
+  SharedKey target_key{SharedKey::VisionPose};
 };
 
 /*
@@ -93,6 +97,9 @@ struct Step {
   std::string label{};
   int timeout_ms{0};
   int max_retries{0};
+
+  std::vector<SharedKey> inputs{};
+  std::vector<SharedKey> outputs{};
 
   ArmMoveSpec arm_move{};
   GripperSpec gripper{};

@@ -34,13 +34,13 @@ public:
   TaskBuilder &slot(const char *label, task_step_library::SlotStrategy strategy,
                     int slot_id = -1);
 
-  TaskBuilder &slot_mapped_joints(const char *label, int timeout_ms = 8000, int retries = 1);
-
   TaskBuilder &vision(const char *label, int timeout_ms = 3000, int retries = 0);
 
-  TaskBuilder &vision_mapped_pose(const char *label, int timeout_ms = 8000, int retries = 1);
-
-  TaskBuilder &vision_mapped_vector(const char *label, int timeout_ms = 8000, int retries = 1);
+  TaskBuilder &arm_from_source(const char *label, task_step_library::PlanOption option,
+                               task_step_library::TargetSource source,
+                               task_step_library::SharedKey key =
+                                   task_step_library::SharedKey::VisionPose,
+                               int timeout_ms = 8000, int retries = 1);
 
   TaskBuilder &gripper(const char *label, task_step_library::GripperCommand command);
 
