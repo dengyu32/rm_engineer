@@ -25,7 +25,8 @@ bool ArmSolveClient::sameVector(const geometry_msgs::msg::Vector3 &lhs,
 
 bool ArmSolveClient::sameRequest(const ArmMoveSpec &lhs, const ArmMoveSpec &rhs) {
   return lhs.plan_option == rhs.plan_option && lhs.joints == rhs.joints &&
-         sameTarget(lhs.pose, rhs.pose) && sameVector(lhs.vector, rhs.vector);
+         sameTarget(lhs.pose, rhs.pose) && sameVector(lhs.vector, rhs.vector) &&
+         lhs.target_length == rhs.target_length;
 }
 
 bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
@@ -62,6 +63,7 @@ bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
   goal.target_pose = command.pose;
   goal.target_joints = command.joints;
   goal.target_vector = command.vector;
+  goal.target_length = command.target_length;
 
   rclcpp_action::Client<Move>::SendGoalOptions opts;
   opts.goal_response_callback = [this, ctx](std::shared_ptr<GoalHandleMove> gh) {

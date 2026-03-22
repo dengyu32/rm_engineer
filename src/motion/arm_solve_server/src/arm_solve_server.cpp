@@ -12,6 +12,9 @@ namespace arm_solve {
 using namespace std::chrono_literals;
 
 namespace {
+
+// 匿名空间
+
 std::shared_ptr<Move::Result> make_move_result(bool success,
                                                const std::string &msg) {
   auto result = std::make_shared<Move::Result>();

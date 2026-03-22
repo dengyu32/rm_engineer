@@ -21,6 +21,8 @@ inline engineer_interfaces::msg::Pose make_target(double x, double y, double z,
   return t;
 }
 
+constexpr double kCartesianTargetLengthM = 0.03;
+
 TaskPlan make_auto_init() {
   return TaskBuilder(TaskId::AUTO_INIT)
       .gripper("gripper_open", OPEN)
@@ -34,7 +36,7 @@ TaskPlan make_auto_grab() {
       .vision_mapped_pose("approach_to_grab")
       .gripper("gripper_close", CLOSE)
       .delay("gripper_settle", 600)
-      .vision_mapped_vector("lift_cartesian")
+      .vision_mapped_vector("lift_cartesian", kCartesianTargetLengthM)
       .joints("move_home", HOME)
       .build();
 }
@@ -114,7 +116,7 @@ TaskPlan make_test_solve() {
       .pose("move_normal_pose0", target0)
       .gripper("gripper_close", CLOSE)
       .delay("gripper_settle", 600)
-      .vector("move_cartesian_pose1", target1_vec)
+      .vector("move_cartesian_pose1", target1_vec, kCartesianTargetLengthM)
       .joints("move_home_joints", HOME)
       .build();
 }
@@ -133,7 +135,7 @@ TaskPlan make_test_cartesian() {
       .pose("approach_normal", target0)
       .gripper("gripper_close", CLOSE)
       .delay("gripper_settle", 200)
-      .vector("take_out_cartesian", target1_vec)
+      .vector("take_out_cartesian", target1_vec, kCartesianTargetLengthM)
       .gripper("gripper_open", OPEN)
       .build();
 }
