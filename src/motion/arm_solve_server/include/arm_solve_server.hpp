@@ -91,7 +91,7 @@ struct GoalContext {
 
   // cartesian
   std::array<double, 3> target_vector{{0.0, 0.0, 0.0}};
-  double target_length{0.0};
+  float target_length{0.0};
 
   // joint
   std::array<float, 6> target_joints{{0.f, 0.f, 0.f, 0.f, 0.f, 0.f}};

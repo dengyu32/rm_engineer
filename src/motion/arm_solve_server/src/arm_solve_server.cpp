@@ -133,9 +133,9 @@ void ArmSolveServer::handle_accepted(const std::shared_ptr<GoalHandleMove> gh) {
   ctx->target_pose.pose.position.x = goal->target_pose.x;
   ctx->target_pose.pose.position.y = goal->target_pose.y;
   ctx->target_pose.pose.position.z = goal->target_pose.z;
-  ctx->target_vector = {static_cast<double>(goal->target_vector.x),
-                        static_cast<double>(goal->target_vector.y),
-                        static_cast<double>(goal->target_vector.z)};
+  ctx->target_vector = { static_cast<double>(goal->target_vector.x), static_cast<double>(goal->target_vector.y),
+                         static_cast<double>(goal->target_vector.z) };
+  ctx->target_length = static_cast<float>(goal->target_length);
   ctx->target_joints = goal->target_joints;
 
   {

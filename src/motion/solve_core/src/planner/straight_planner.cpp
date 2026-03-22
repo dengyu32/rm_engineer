@@ -65,6 +65,7 @@ bool buildStraightPlannerConfigs(const Eigen::Isometry3d &start_pose,
   out = StraightPlannerConfigs{};
   if (!std::isfinite(out.sample_step_m) || out.sample_step_m <= kEps) {
     err = "Straight planner sample_step_m is invalid";
+    LOGE("[solve_core][plan_cartesian] {}", err);
     return false;
   }
   out.path_length_m = path_length;
@@ -83,12 +84,13 @@ StraightPlanner::StraightPlanner(
     ee_link_(ee_link) {}
 
 // === DP 版本的 plan() ===
-std::optional<Trajectory>
-StraightPlanner::plan(moveit::core::RobotState& start_state,
-                      const Eigen::Isometry3d& target_pose,
-                      const StraightPlannerConfigs& strai_configs,
-                      const CostOptions& cost_opt,
-                      std::vector<std::vector<double>>* joint_path_out) {
+std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_state,
+                                                const Eigen::Isometry3d& target_pose,
+                                                const StraightPlannerConfigs& strai_configs,
+                                                const CostOptions& cost_opt,
+                                                std::vector<std::vector<double>>* joint_path_out)
+{
+  LOGI("Start Plan Cartesian!");
   if (!robot_model_) {
     LOGE("[solve_core][straight_planner] Robot model is null");
     return std::nullopt;
@@ -185,6 +187,7 @@ StraightPlanner::plan(moveit::core::RobotState& start_state,
       std::vector<std::vector<double>> sols;
       if (!ik.solveAll(seed_state, Ti, ik_opt, sols)) {
         // 该 seed 无解则跳过（并继续尝试其它 prev seed）
+        LOGI("[solve_core][straight_planner] IK solveAll failed for waypoint with current seed,changing to next seed ...");
         continue;
       }
 
