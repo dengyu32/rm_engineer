@@ -16,7 +16,7 @@ namespace solve_core {
 
 struct StraightPlannerConfigs {
   bool use_directional_sampling{true}; // 是否启用“方向+步长”模式
-  double sample_step_m{0.002};          // 每步位移（米）
+  double sample_step_m{0.005};          // 每步位移（米）
   double path_length_m{0.0};           // 直线路径总长度（米）
   double direction_x{0.0};             // 方向向量 X
   double direction_y{0.0};             // 方向向量 Y

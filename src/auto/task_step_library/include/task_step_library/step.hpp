@@ -29,27 +29,11 @@ struct ArmMoveSpec {
   std::array<float, 6> joints{{0.f, 0.f, 0.f, 0.f, 0.f, 0.f}};
 
   geometry_msgs::msg::Vector3 vector{};
+  double target_length{0.0};
 
   PlanOption plan_option{PlanOption::NORMAL};
   TargetSource target_source{TargetSource::Fixed};
 };
-
-/*
-struct ArmMoveSpec {
-  struct NormalSpec {
-    engineer_interfaces::msg::Pose pose{};
-  } normal;
-  struct CartesianSpec {
-    geometry_msgs::msg::Vector3 direction{};
-    double distance;
-  } cartesian;
-  struct JointSpec {
-     std::array<float, 6> joints{{0.f, 0.f, 0.f, 0.f, 0.f, 0.f}};
-  } joint;
-  PlanOption plan_option{PlanOption::NORMAL};
-  TargetSource target_source{TargetSource::Fixed};
-};
-*/
 
 // GRIPPER CONTROL
 

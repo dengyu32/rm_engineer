@@ -34,6 +34,7 @@ TaskBuilder &TaskBuilder::joints(const char *label, const std::array<float, 6> &
 }
 
 TaskBuilder &TaskBuilder::vector(const char *label, const geometry_msgs::msg::Vector3 &target,
+                                 double target_length_m,
                                  int timeout_ms, int retries) {
   Step step;
   step.type = StepType::ArmMove;
@@ -42,6 +43,7 @@ TaskBuilder &TaskBuilder::vector(const char *label, const geometry_msgs::msg::Ve
   step.max_retries = retries;
   step.arm_move.plan_option = PlanOption::CARTESIAN;
   step.arm_move.vector = target;
+  step.arm_move.target_length = target_length_m;
   plan_.steps.push_back(std::move(step));
   return *this;
 }
@@ -91,7 +93,8 @@ TaskBuilder &TaskBuilder::vision_mapped_pose(const char *label, int timeout_ms, 
   return *this;
 }
 
-TaskBuilder &TaskBuilder::vision_mapped_vector(const char *label, int timeout_ms, int retries) {
+TaskBuilder &TaskBuilder::vision_mapped_vector(const char *label, double target_length_m,
+                                                int timeout_ms, int retries) {
   Step step;
   step.type = StepType::ArmMove;
   step.label = label;
@@ -99,6 +102,7 @@ TaskBuilder &TaskBuilder::vision_mapped_vector(const char *label, int timeout_ms
   step.max_retries = retries;
   step.arm_move.plan_option = PlanOption::CARTESIAN;
   step.arm_move.target_source = TargetSource::VisionVector;
+  step.arm_move.target_length = target_length_m;
   plan_.steps.push_back(std::move(step));
   return *this;
 }

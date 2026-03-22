@@ -29,6 +29,7 @@ public:
                       int timeout_ms = 8000, int retries = 1);
 
   TaskBuilder &vector(const char *label, const geometry_msgs::msg::Vector3 &target,
+                      double target_length_m,
                       int timeout_ms = 8000, int retries = 1);
 
   TaskBuilder &slot(const char *label, task_step_library::SlotStrategy strategy,
@@ -40,7 +41,8 @@ public:
 
   TaskBuilder &vision_mapped_pose(const char *label, int timeout_ms = 8000, int retries = 1);
 
-  TaskBuilder &vision_mapped_vector(const char *label, int timeout_ms = 8000, int retries = 1);
+  TaskBuilder &vision_mapped_vector(const char *label, double target_length_m,
+                                    int timeout_ms = 8000, int retries = 1);
 
   TaskBuilder &gripper(const char *label, task_step_library::GripperCommand command);
 

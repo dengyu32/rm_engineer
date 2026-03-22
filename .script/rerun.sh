@@ -319,3 +319,4 @@ else
   # real：额外启动 usb_cdc
   print_color green "Open usb cdc node ... (realsystem only)"
   open_term "usb cdc" "ros2 launch usb_cdc usb_cdc_node.launch.py" "$ROS_SETUP" "$WS_SETUP" "$RUN_DIR" "$LOG_BASE"
+fi

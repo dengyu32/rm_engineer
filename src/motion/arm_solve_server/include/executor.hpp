@@ -33,27 +33,24 @@ struct SolveExecutorConfig : public params_utils::MoveItResetConfig,
   int late_init_delay_ms{10};
   int plan_min_interval_ms{0};
 
-  void validate() const;
-  std::string summary() const;
+  void validate() const {
+    params_utils::MoveItResetConfig::validate();
+    params_utils::JointResetConfig::validate();
+  }
+
+  std::string summary() const {
+    std::ostringstream oss;
+    oss << "=========\n";
+    oss << " SolveExecutor Configuration\n\n";
+    oss << params_utils::MoveItResetConfig::summary();
+    oss << params_utils::JointResetConfig::summary();
+    oss << " Planning:\n";
+    oss << "   - late_init_delay_ms    : " << late_init_delay_ms << "\n";
+    oss << "   - plan_min_interval_ms  : " << plan_min_interval_ms << "\n\n";
+    oss << "=========\n";
+    return oss.str();
+  }
 };
-
-inline void SolveExecutorConfig::validate() const {
-  params_utils::MoveItResetConfig::validate();
-  params_utils::JointResetConfig::validate();
-}
-
-inline std::string SolveExecutorConfig::summary() const {
-  std::ostringstream oss;
-  oss << "=========\n";
-  oss << " SolveExecutor Configuration\n\n";
-  oss << params_utils::MoveItResetConfig::summary();
-  oss << params_utils::JointResetConfig::summary();
-  oss << " Planning:\n";
-  oss << "   - late_init_delay_ms    : " << late_init_delay_ms << "\n";
-  oss << "   - plan_min_interval_ms  : " << plan_min_interval_ms << "\n\n";
-  oss << "=========\n";
-  return oss.str();
-}
 
 class SolveExecutor : public solve_core::MoveItAdapter {
 public:
