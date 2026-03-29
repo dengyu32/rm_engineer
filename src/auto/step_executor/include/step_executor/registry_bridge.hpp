@@ -4,9 +4,33 @@
 #include <string>
 #include <unordered_map>
 
-#include "step_executor/types/capability_bridge.hpp"
+#include "step_executor/types/command.hpp"
+#include "step_executor/types/execute_result.hpp"
 
 namespace step_executor {
+
+// ============================================================================
+//  ICapabilityBridge
+// ----------------------------------------------------------------------------
+//  - capability 执行接口
+//  - RegistryBridge / NoopBridge 的统一基类
+// ============================================================================
+
+class ICapabilityBridge {
+public:
+  virtual ~ICapabilityBridge() = default;
+
+  virtual ExecuteResult run(const Command &cmd) = 0;
+  virtual void cancel() = 0;
+  virtual const char *lastError() const = 0;
+};
+
+// ============================================================================
+//  RegistryBridge
+// ----------------------------------------------------------------------------
+//  - kind -> capability handler 路由
+//  - 注册/调用/取消统一入口
+// ============================================================================
 
 class RegistryBridge : public ICapabilityBridge {
 public:

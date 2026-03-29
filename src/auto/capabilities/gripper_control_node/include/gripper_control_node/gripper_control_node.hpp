@@ -10,6 +10,8 @@
 
 #include "params_utils/param_utils.hpp"
 #include "gripper_control_node/gripper_types.hpp"
+#include "step_executor/types/command.hpp"
+#include "step_executor/types/execute_result.hpp"
 
 namespace engineer_auto::gripper_control_node {
 
@@ -45,6 +47,7 @@ class GripperControlNode {
 public:
   explicit GripperControlNode(rclcpp::Node &node, const GripperPresetConfig &config);
 
+  step_executor::ExecuteResult execute(const step_executor::Command &cmd);
   void setCommand(GripperCommand command);
   void cancel();
 

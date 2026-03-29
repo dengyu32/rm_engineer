@@ -1,4 +1,5 @@
 <?xml version="1.0"?>
+
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>slot_select_node</name>
@@ -13,6 +14,7 @@
   <depend>params_utils</depend>
   <depend>step_executor</depend>
   <depend>engineer_interfaces</depend>
+  <depend>task_orchestrator</depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 

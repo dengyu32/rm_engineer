@@ -1,5 +1,4 @@
 #include "step_executor/step_executor.hpp"
-#include "step_executor/types/control.hpp"
 
 #include <array>
 #include <vector>
@@ -35,12 +34,6 @@ bool hasOutputName(const Step &step, const std::string &name) {
 }
 
 } // namespace
-
-ExecuteResult NoopCapabilityBridge::run(const Command &) {
-  ExecuteResult result{};
-  result.status = ExecuteStatus::Succeeded;
-  return result;
-}
 
 StepExecutor::StepExecutor(rclcpp::Logger logger,
                            std::shared_ptr<ICapabilityBridge> bridge)
@@ -258,7 +251,7 @@ std::string StepExecutor::currentStepLabel() const {
 
 bool StepExecutor::applyBindings(const Step &step, Command &cmd, std::string &error) const {
   for (const auto &binding : step.bindings) {
-    std::any value;
+    Value value;
     if (!context_.get(binding.from, value)) {
       error = "missing binding source: " + binding.from.name;
       return false;
@@ -272,9 +265,9 @@ bool StepExecutor::applyBindings(const Step &step, Command &cmd, std::string &er
           error = "binding table missing: " + binding.from.name;
           return false;
         }
-        const int *slot_id = std::any_cast<int>(&value);
+        const int64_t *slot_id = std::get_if<int64_t>(&value);
         if (!slot_id) {
-          error = "binding type mismatch (expected int): " + binding.from.name;
+          error = "binding type mismatch (expected int64): " + binding.from.name;
           return false;
         }
         if (*slot_id < 0 ||

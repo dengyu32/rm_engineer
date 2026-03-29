@@ -1,12 +1,20 @@
+// capability layer
 #include "auto_bridge/gripper_capability_bridge.hpp"
 
-#include "gripper_control_node/gripper_types.hpp"
+// task layer
 #include "task_orchestrator/protocol.hpp"
-#include "step_executor/types/step.hpp"
 
-namespace step_executor {
+// step layer
+#include "step_executor/types/command.hpp"
+#include "step_executor/types/execute_result.hpp"
 
-namespace gripper_types = engineer_auto::gripper_control_node;
+// namespace aliases
+namespace engineer_auto::auto_bridge {
+
+using step_executor::Command;
+using step_executor::ExecuteResult;
+using step_executor::ExecuteStatus;
+using step_executor::ErrorCode;
 
 GripperCapabilityBridge::GripperCapabilityBridge(rclcpp::Node &node)
     : node_(node, engineer_auto::gripper_control_node::GripperPresetConfig::load(node)) {}
@@ -14,6 +22,7 @@ GripperCapabilityBridge::GripperCapabilityBridge(rclcpp::Node &node)
 ExecuteResult GripperCapabilityBridge::run(const Command &cmd) {
   ExecuteResult result{};
 
+  // 非GripperKind的命令的情况
   if (cmd.kind != task_orchestrator::protocol::kGripperKind) {
     result.status = ExecuteStatus::Failed;
     result.error.code = ErrorCode::ValidationError;
@@ -23,36 +32,21 @@ ExecuteResult GripperCapabilityBridge::run(const Command &cmd) {
     return result;
   }
 
-  const auto *action = paramAs<std::string>(cmd, "action");
-  if (!action) {
-    result.status = ExecuteStatus::Failed;
-    result.error.code = ErrorCode::ValidationError;
-    result.error.message = "gripper command missing action";
-    result.error.retriable = false;
-    last_error_ = result.error.message;
-    return result;
+  auto exec = node_.execute(cmd);
+
+  if (exec.status == ExecuteStatus::Failed && exec.error.message.empty()) {
+    exec.error.message = "gripper command failed";
   }
 
-  gripper_types::GripperCommand command = gripper_types::GripperCommand::OPEN;
-  if (*action == "open") {
-    command = gripper_types::GripperCommand::OPEN;
-  } else if (*action == "close") {
-    command = gripper_types::GripperCommand::CLOSE;
+  if (exec.status == ExecuteStatus::Failed) {
+    last_error_ = exec.error.message;
   } else {
-    result.status = ExecuteStatus::Failed;
-    result.error.code = ErrorCode::ValidationError;
-    result.error.message = "gripper action invalid: " + *action;
-    result.error.retriable = false;
-    last_error_ = result.error.message;
-    return result;
+    last_error_.clear();
   }
 
-  node_.setCommand(command);
-  result.status = ExecuteStatus::Succeeded;
-  last_error_.clear();
-  return result;
+  return exec;
 }
 
 void GripperCapabilityBridge::cancel() { node_.cancel(); }
 
-} // namespace step_executor
+} // namespace engineer_auto::auto_bridge

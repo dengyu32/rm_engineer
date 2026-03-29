@@ -1,11 +1,20 @@
 #pragma once
 
-#include <any>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
 
+#include "step_executor/types/value.hpp"
+
 namespace step_executor {
+
+// ============================================================================
+//  ExecuteResult
+// ----------------------------------------------------------------------------
+//  - capability 执行结果
+//  - Running / Succeeded / Failed
+//  - Failed 时携带 ErrorInfo
+// ============================================================================
 
 enum class ExecuteStatus : uint8_t {
   Running = 0,
@@ -32,7 +41,7 @@ struct ErrorInfo {
 
 struct ExecuteResult {
   ExecuteStatus status{ExecuteStatus::Succeeded};
-  std::unordered_map<std::string, std::any> outputs{};
+  std::unordered_map<std::string, Value> outputs{};
   ErrorInfo error{};
 };
 

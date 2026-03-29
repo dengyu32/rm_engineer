@@ -11,6 +11,8 @@
 
 #include "params_utils/param_utils.hpp"
 #include "slot_select_node/slot_types.hpp"
+#include "step_executor/types/command.hpp"
+#include "step_executor/types/execute_result.hpp"
 
 namespace engineer_auto::slot_select_node {
 
@@ -55,6 +57,9 @@ class SlotSelectNode {
 public:
   explicit SlotSelectNode(rclcpp::Node &node, const SlotSelectConfig &config);
 
+  step_executor::ExecuteResult executeSelect(const step_executor::Command &cmd);
+  step_executor::ExecuteResult executeLockUnlock(const step_executor::Command &cmd,
+                                                 SlotStrategy strategy);
   bool selectSlot(SlotStrategy strategy, int &selected_slot);
   bool applySlotCommand(SlotStrategy strategy, int slot_id);
   std::string lastError() const { return last_error_; }

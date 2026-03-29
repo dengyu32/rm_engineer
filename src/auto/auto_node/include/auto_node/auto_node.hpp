@@ -95,7 +95,7 @@ private:
   //< Built-in Function
   void handleIntent(task_orchestrator::TaskId task_id);
   void publishFeedback(task_orchestrator::TaskId task_id,
-                       uint8_t code);
+                       step_executor::TaskStatus status);
   void publishStatus(const std::string &text);
 
   static bool toTaskId(uint8_t raw, task_orchestrator::TaskId &out);

@@ -1,14 +1,22 @@
 #pragma once
 
-#include <any>
 #include <string>
 #include <unordered_map>
 
+#include "step_executor/types/value.hpp"
+
 namespace step_executor {
+
+// ============================================================================
+//  Command
+// ----------------------------------------------------------------------------
+//  - Step 层唯一执行对象
+//  - kind + params（不做业务解释）
+// ============================================================================
 
 struct Command {
   std::string kind{};
-  std::unordered_map<std::string, std::any> params{};
+  std::unordered_map<std::string, Value> params{};
 };
 
 template <typename T>
@@ -17,7 +25,7 @@ const T *paramAs(const Command &cmd, const std::string &name) {
   if (it == cmd.params.end()) {
     return nullptr;
   }
-  return std::any_cast<T>(&it->second);
+  return std::get_if<T>(&it->second);
 }
 
 template <typename T>

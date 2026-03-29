@@ -5,6 +5,8 @@
 #include <rclcpp_action/client.hpp>
 #include <rcutils/error_handling.h>
 
+#include "step_executor/types/command.hpp"
+
 namespace engineer_auto::arm_solve_client {
 
 // ============================================================================
@@ -41,14 +43,63 @@ ArmSolveClient::ArmSolveClient(rclcpp::Node &node,
 }
 
 // ============================================================================
+//  buildRequest -- 解析 Command 参数，生成 ArmMoveSpec
+// ============================================================================
+
+bool ArmSolveClient::buildRequest(const step_executor::Command &cmd,
+                                  ArmMoveSpec &out,
+                                  std::string &error) const {
+  if (const auto *pose =
+          step_executor::paramAs<std::array<double, 7>>(cmd, "target_pose")) {
+    out.plan_option = PlanOption::NORMAL;
+    out.pose.x = (*pose)[0];
+    out.pose.y = (*pose)[1];
+    out.pose.z = (*pose)[2];
+    out.pose.qx = (*pose)[3];
+    out.pose.qy = (*pose)[4];
+    out.pose.qz = (*pose)[5];
+    out.pose.qw = (*pose)[6];
+    error.clear();
+    return true;
+  }
+  if (const auto *joints =
+          step_executor::paramAs<std::array<float, 6>>(cmd, "target_joints")) {
+    out.plan_option = PlanOption::JOINTS;
+    out.joints = *joints;
+    error.clear();
+    return true;
+  }
+  if (const auto *vec =
+          step_executor::paramAs<std::array<double, 3>>(cmd, "target_vector")) {
+    out.plan_option = PlanOption::CARTESIAN;
+    out.vector.x = (*vec)[0];
+    out.vector.y = (*vec)[1];
+    out.vector.z = (*vec)[2];
+    error.clear();
+    return true;
+  }
+
+  error = "arm command missing target";
+  return false;
+}
+
+// ============================================================================
 //  EXECUTE -- 核心函数，该能力层提供的对外接口，表示执行并跟进 GOAL 状态
 // ----------------------------------------------------------------------------
 //  相当于轮询状态机
 // ============================================================================
 
-ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command) {
-                                      std::shared_ptr<GoalContext> ctx;
-                                      std::shared_ptr<GoalHandleMove> gh;
+ExecuteResult ArmSolveClient::execute(const step_executor::Command &cmd) {
+  ArmMoveSpec command{};
+  std::string build_error;
+  if (!buildRequest(cmd, command, build_error)) {
+    return {step_executor::ExecuteStatus::Failed,
+            step_executor::ErrorCode::ValidationError,
+            build_error};
+  }
+
+  std::shared_ptr<GoalContext> ctx;
+  std::shared_ptr<GoalHandleMove> gh;
   // 拷贝共享数据
   {
     std::scoped_lock lock(mutex_);
@@ -59,9 +110,13 @@ ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command) {
   // 未执行任务
   if (!ctx) {
     if (sendGoal(command)) {
-      return {CommandStatus::Started, std::nullopt};
+      return {step_executor::ExecuteStatus::Running,
+              step_executor::ErrorCode::Unknown,
+              std::nullopt};
     } else {
-      return {CommandStatus::StartFailed, lastError()};
+      return {step_executor::ExecuteStatus::Failed,
+              step_executor::ErrorCode::ExecutionError,
+              lastError()};
     }
   }
 
@@ -72,7 +127,9 @@ ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command) {
     switch (phase) {
       case GoalPhase::Pending:
       case GoalPhase::Running:
-        return {CommandStatus::Tracking, std::nullopt};
+        return {step_executor::ExecuteStatus::Running,
+                step_executor::ErrorCode::Unknown,
+                std::nullopt};
 
       case GoalPhase::Succeeded:
         // 清空 active_ctx_
@@ -83,7 +140,9 @@ ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command) {
             goal_handle_.reset();
           } 
         }
-        return {CommandStatus::Succeeded, std::nullopt};
+        return {step_executor::ExecuteStatus::Succeeded,
+                step_executor::ErrorCode::Unknown,
+                std::nullopt};
 
       case GoalPhase::Failed:
       case GoalPhase::Canceled:
@@ -95,10 +154,14 @@ ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command) {
             goal_handle_.reset();
           } 
         }
-        return {CommandStatus::Failed, lastError()};
+        return {step_executor::ExecuteStatus::Failed,
+                step_executor::ErrorCode::ExecutionError,
+                lastError()};
       
       default:
-        return {CommandStatus::Failed, "unknown phase state"};
+        return {step_executor::ExecuteStatus::Failed,
+                step_executor::ErrorCode::Unknown,
+                "unknown phase state"};
     }
   }
 
@@ -121,9 +184,13 @@ ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command) {
 
   // 启动新任务
   if (sendGoal(command)) {
-    return {CommandStatus::Started, std::nullopt};
+    return {step_executor::ExecuteStatus::Running,
+            step_executor::ErrorCode::Unknown,
+            std::nullopt};
   } else {
-    return {CommandStatus::StartFailed, lastError()};
+    return {step_executor::ExecuteStatus::Failed,
+            step_executor::ErrorCode::ExecutionError,
+            lastError()};
   }
 }
 
@@ -249,7 +316,7 @@ bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
 
     // 清除句柄
     // 这里只重置 goal_handle_ 而不重置 active_ctx_
-    // 是因为之后 execute() 还需要通过 active_ctx_ 来获取最终的 commandstatus 
+    // 是因为之后 execute() 还需要通过 active_ctx_ 来获取最终的执行状态
     std::scoped_lock lock(mutex_);
     if (active_ctx_ == ctx) {
       goal_handle_.reset();

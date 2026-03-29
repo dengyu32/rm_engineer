@@ -1,12 +1,20 @@
 #pragma once
 
-#include <any>
+#include <cstddef>
 #include <cstdint>
 #include <string>
-#include <typeinfo>
 #include <unordered_map>
 
+#include "step_executor/types/value.hpp"
+
 namespace step_executor {
+
+// ============================================================================
+//  Context
+// ----------------------------------------------------------------------------
+//  - 显式共享数据表（Key -> Value）
+//  - 支持 Task / Persist 两种 scope
+// ============================================================================
 
 enum class ContextScope : uint8_t {
   Task = 0,
@@ -28,7 +36,7 @@ public:
 
   bool has(const ContextKey &key) const { return findEntry(key) != nullptr; }
 
-  bool get(const ContextKey &key, std::any &out) const {
+  bool get(const ContextKey &key, Value &out) const {
     const Entry *entry = findEntry(key);
     if (!entry) {
       return false;
@@ -37,26 +45,26 @@ public:
     return true;
   }
 
-  bool set(const ContextKey &key, const std::any &value) {
+  bool set(const ContextKey &key, const Value &value) {
     auto &map = mapFor(key.scope);
-    const std::type_info &type = value.type();
+    const size_t type_index = value.index();
     auto it = map.find(key.name);
     if (it != map.end()) {
-      if (it->second.type && *(it->second.type) != type) {
+      if (it->second.type_index != type_index) {
         return false;
       }
       it->second.value = value;
-      it->second.type = &type;
+      it->second.type_index = type_index;
       return true;
     }
-    map.emplace(key.name, Entry{value, &type});
+    map.emplace(key.name, Entry{value, type_index});
     return true;
   }
 
 private:
   struct Entry {
-    std::any value;
-    const std::type_info *type{nullptr};
+    Value value;
+    size_t type_index{0};
   };
 
   const Entry *findEntry(const ContextKey &key) const {

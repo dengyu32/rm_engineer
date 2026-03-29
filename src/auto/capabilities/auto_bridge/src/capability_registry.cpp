@@ -8,7 +8,7 @@
 #include "step_executor/registry_bridge.hpp"
 #include "task_orchestrator/protocol.hpp"
 
-namespace engineer_auto {
+namespace engineer_auto::auto_bridge {
 
 std::shared_ptr<step_executor::ICapabilityBridge> createAutoCapabilityBridge(
     rclcpp::Node &node) {
@@ -24,27 +24,27 @@ std::shared_ptr<step_executor::ICapabilityBridge> createAutoCapabilityBridge(
         [bridge]() { return bridge->lastError(); });
   };
 
-  auto arm_bridge = std::make_shared<step_executor::ArmCapabilityBridge>(node);
+  auto arm_bridge = std::make_shared<ArmCapabilityBridge>(node);
   register_bridge(arm_bridge, task_orchestrator::protocol::kArmMoveKind,
-                  &step_executor::ArmCapabilityBridge::run);
+                  &ArmCapabilityBridge::run);
 
-  auto gripper_bridge = std::make_shared<step_executor::GripperCapabilityBridge>(node);
+  auto gripper_bridge = std::make_shared<GripperCapabilityBridge>(node);
   register_bridge(gripper_bridge, task_orchestrator::protocol::kGripperKind,
-                  &step_executor::GripperCapabilityBridge::run);
+                  &GripperCapabilityBridge::run);
 
-  auto slot_bridge = std::make_shared<step_executor::SlotCapabilityBridge>(node);
+  auto slot_bridge = std::make_shared<SlotCapabilityBridge>(node);
   register_bridge(slot_bridge, task_orchestrator::protocol::kSlotSelectKind,
-                  &step_executor::SlotCapabilityBridge::run);
+                  &SlotCapabilityBridge::run);
   register_bridge(slot_bridge, task_orchestrator::protocol::kSlotLockKind,
-                  &step_executor::SlotCapabilityBridge::run);
+                  &SlotCapabilityBridge::run);
   register_bridge(slot_bridge, task_orchestrator::protocol::kSlotUnlockKind,
-                  &step_executor::SlotCapabilityBridge::run);
+                  &SlotCapabilityBridge::run);
 
-  auto vision_bridge = std::make_shared<step_executor::VisionCapabilityBridge>(node);
+  auto vision_bridge = std::make_shared<VisionCapabilityBridge>(node);
   register_bridge(vision_bridge, task_orchestrator::protocol::kVisionKind,
-                  &step_executor::VisionCapabilityBridge::run);
+                  &VisionCapabilityBridge::run);
 
   return registry;
 }
 
-} // namespace engineer_auto
+} // namespace engineer_auto::auto_bridge

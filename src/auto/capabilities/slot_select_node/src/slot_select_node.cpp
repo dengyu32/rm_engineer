@@ -2,7 +2,16 @@
 
 #include <cstddef>
 
+#include "task_orchestrator/protocol.hpp"
+
 namespace engineer_auto::slot_select_node {
+
+using step_executor::Command;
+using step_executor::ErrorCode;
+using step_executor::ExecuteResult;
+using step_executor::ExecuteStatus;
+using step_executor::getParam;
+using step_executor::paramAs;
 
 SlotSelectNode::SlotSelectNode(rclcpp::Node &node, const SlotSelectConfig &config)
     : node_(node), logger_(node.get_logger()), config_(config) {
@@ -21,6 +30,79 @@ SlotSelectNode::SlotSelectNode(rclcpp::Node &node, const SlotSelectConfig &confi
 
   RCLCPP_INFO(logger_, "[SLOT_SELECT] started topic=%s init=[%d,%d]",
               config_.slot_state_topic.c_str(), slots_[0] ? 1 : 0, slots_[1] ? 1 : 0);
+}
+
+ExecuteResult SlotSelectNode::executeSelect(const Command &cmd) {
+  ExecuteResult result{};
+
+  const auto *strategy = paramAs<std::string>(cmd, "strategy");
+  if (!strategy) {
+    result.status = ExecuteStatus::Failed;
+    result.error.code = ErrorCode::ValidationError;
+    result.error.message = "slot.select missing strategy";
+    result.error.retriable = false;
+    return result;
+  }
+
+  SlotStrategy slot_strategy = SlotStrategy::SelectSlotToPut;
+  if (*strategy == "put") {
+    slot_strategy = SlotStrategy::SelectSlotToPut;
+  } else if (*strategy == "take") {
+    slot_strategy = SlotStrategy::SelectSlotToTake;
+  } else {
+    result.status = ExecuteStatus::Failed;
+    result.error.code = ErrorCode::ValidationError;
+    result.error.message = "slot.select invalid strategy: " + *strategy;
+    result.error.retriable = false;
+    return result;
+  }
+
+  int selected_slot = -1;
+  if (!selectSlot(slot_strategy, selected_slot)) {
+    std::string err = lastError();
+    if (err.empty()) {
+      err = "slot selection failed";
+    }
+    result.status = ExecuteStatus::Failed;
+    result.error.code = ErrorCode::ExecutionError;
+    result.error.message = err;
+    result.error.retriable = true;
+    return result;
+  }
+
+  result.status = ExecuteStatus::Succeeded;
+  result.outputs[task_orchestrator::protocol::kSlotId] =
+      static_cast<int64_t>(selected_slot);
+  return result;
+}
+
+ExecuteResult SlotSelectNode::executeLockUnlock(const Command &cmd,
+                                                SlotStrategy strategy) {
+  ExecuteResult result{};
+
+  int64_t slot_id = -1;
+  if (!getParam(cmd, "slot_id", slot_id)) {
+    result.status = ExecuteStatus::Failed;
+    result.error.code = ErrorCode::ValidationError;
+    result.error.message = "slot command missing slot_id";
+    result.error.retriable = false;
+    return result;
+  }
+
+  if (!applySlotCommand(strategy, static_cast<int>(slot_id))) {
+    std::string err = lastError();
+    if (err.empty()) {
+      err = "slot command failed";
+    }
+    result.status = ExecuteStatus::Failed;
+    result.error.code = ErrorCode::ExecutionError;
+    result.error.message = err;
+    result.error.retriable = true;
+    return result;
+  }
+
+  result.status = ExecuteStatus::Succeeded;
+  return result;
 }
 
 bool SlotSelectNode::selectSlot(SlotStrategy strategy, int &selected_slot) {

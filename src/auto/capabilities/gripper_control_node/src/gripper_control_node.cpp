@@ -4,6 +4,12 @@
 
 namespace engineer_auto::gripper_control_node {
 
+using step_executor::Command;
+using step_executor::ErrorCode;
+using step_executor::ExecuteResult;
+using step_executor::ExecuteStatus;
+using step_executor::paramAs;
+
 GripperControlNode::GripperControlNode(rclcpp::Node &node,
                                        const GripperPresetConfig &config)
     : node_(node), logger_(node.get_logger()), config_(config) {
@@ -17,6 +23,36 @@ GripperControlNode::GripperControlNode(rclcpp::Node &node,
 
   RCLCPP_INFO(logger_, "[GRIPPER_CONTROL] started topic=%s",
               config_.gripper_cmd_topic.c_str());
+}
+
+ExecuteResult GripperControlNode::execute(const Command &cmd) {
+  ExecuteResult result{};
+
+  const auto *action = paramAs<std::string>(cmd, "action");
+  if (!action) {
+    result.status = ExecuteStatus::Failed;
+    result.error.code = ErrorCode::ValidationError;
+    result.error.message = "gripper command missing action";
+    result.error.retriable = false;
+    return result;
+  }
+
+  GripperCommand command = GripperCommand::OPEN;
+  if (*action == "open") {
+    command = GripperCommand::OPEN;
+  } else if (*action == "close") {
+    command = GripperCommand::CLOSE;
+  } else {
+    result.status = ExecuteStatus::Failed;
+    result.error.code = ErrorCode::ValidationError;
+    result.error.message = "gripper action invalid: " + *action;
+    result.error.retriable = false;
+    return result;
+  }
+
+  setCommand(command);
+  result.status = ExecuteStatus::Succeeded;
+  return result;
 }
 
 void GripperControlNode::setCommand(GripperCommand command) {

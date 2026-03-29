@@ -6,6 +6,13 @@
 
 namespace task_orchestrator {
 
+// ============================================================================
+//  TaskId / TaskName
+// ----------------------------------------------------------------------------
+//  - 任务枚举定义（X-MACRO）
+//  - task_name / is_supported_task 统一入口
+// ============================================================================
+
 // 任务LIST宏 X-MACRO 
 #define TASK_LIST(X) \
     X(IDLE,           0) \
@@ -53,6 +60,12 @@ inline const char* task_name(TaskId id) {
 
 namespace task_orchestrator::preset {
 
+// ============================================================================
+//  Preset
+// ----------------------------------------------------------------------------
+//  - 机器人预置位姿 / 槽位关节
+// ============================================================================
+
 // Robot state presets
 inline constexpr std::array<float, 6> ZERO{{
     0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
@@ -75,6 +88,12 @@ inline constexpr std::array<float, 6> DESCEND_SLOTS[] = {
 } // namespace task_orchestrator::preset
 
 namespace task_orchestrator::protocol {
+
+// ============================================================================
+//  Protocol
+// ----------------------------------------------------------------------------
+//  - Context keys / Command kinds
+// ============================================================================
 
 // Context keys
 inline constexpr const char *kVisionPose = "VisionPose";

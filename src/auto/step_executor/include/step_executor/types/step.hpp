@@ -8,10 +8,31 @@
 #include <vector>
 
 #include "step_executor/types/command.hpp"
-#include "step_executor/types/control.hpp"
 #include "step_executor/types/context.hpp"
 
 namespace step_executor {
+
+// ============================================================================
+//  Step
+// ----------------------------------------------------------------------------
+//  - Command Step：执行 command
+//  - Control Step：执行控制逻辑
+//  - inputs/outputs/bindings 显式定义数据流
+// ============================================================================
+
+enum class ControlKind : uint8_t {
+  Delay = 0,
+  Guard = 1,
+};
+
+struct ControlStep {
+  ControlKind kind{ControlKind::Delay};
+
+  int delay_ms{0};
+
+  ContextKey guard_key{};
+  bool require_present{true};
+};
 
 enum class StepType : uint8_t {
   Command = 0,

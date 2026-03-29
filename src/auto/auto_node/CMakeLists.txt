@@ -33,6 +33,7 @@ add_library(${PROJECT_NAME}_component SHARED
 target_include_directories(${PROJECT_NAME}_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../capabilities/auto_bridge/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../step_executor/include>
   $<INSTALL_INTERFACE:include>
 )
 

@@ -6,13 +6,19 @@
 #include "slot_select_node/slot_select_node.hpp"
 #include "step_executor/types/capability_bridge.hpp"
 
-namespace step_executor {
+namespace engineer_auto::auto_bridge {
+
+// ============================================================================
+//  SlotCapabilityBridge
+// ----------------------------------------------------------------------------
+//  - 适配 slot_select_node
+// ============================================================================
 
 class SlotCapabilityBridge {
 public:
   explicit SlotCapabilityBridge(rclcpp::Node &node);
 
-  ExecuteResult run(const Command &cmd);
+  step_executor::ExecuteResult run(const step_executor::Command &cmd);
   void cancel();
   const char *lastError() const { return last_error_.c_str(); }
 
@@ -21,4 +27,4 @@ private:
   std::string last_error_;
 };
 
-} // namespace step_executor
+} // namespace engineer_auto::auto_bridge

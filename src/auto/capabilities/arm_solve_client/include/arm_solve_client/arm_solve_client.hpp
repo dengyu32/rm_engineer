@@ -1,20 +1,39 @@
 #pragma once
 
+// Rely
+
+//< C++
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 
+//< ROS 2
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 
+//< Engineer Interfaces 
 #include <engineer_interfaces/action/move.hpp>
 
+//< Other Modules
 #include "params_utils/param_utils.hpp"
 #include "arm_solve_client/arm_types.hpp"
+#include "step_executor/types/execute_result.hpp"
+#include "step_executor/types/command.hpp"
 
 namespace engineer_auto::arm_solve_client {
+
+// ============================================================================
+//  
+// ----------------------------------------------------------------------------
+//  私有参数（动态参数）
+//  - update_period_ms: 定时器周期，用于定期检查和执行任务
+//  - status_period_ms: 用于广播 AUTO 状态 <TODO: 接入串口，传给图传>
+//  通用参数（静态参数）
+//  - IntentResetConfig: intent_cmd_topic、intent_fb_topic
+// ============================================================================
 
 struct ArmSolveClientConfig {
   std::string action_name{"move_arm"};
@@ -44,68 +63,64 @@ struct ArmSolveClientConfig {
   }
 };
 
-enum class CommandStatus : uint8_t {
-  StartFailed = 0,
-  Started = 1,
-  Tracking = 2,
-  Succeeded = 3,
-  Failed = 4,
-};
-
 struct ExecuteResult {
-  CommandStatus status;
+  step_executor::ExecuteStatus status{step_executor::ExecuteStatus::Failed};
+  step_executor::ErrorCode error_code{step_executor::ErrorCode::Unknown};
   std::optional<std::string> error;
-};
-
-enum class GoalPhase : uint8_t {
-  None = 0,
-  Pending = 1,
-  Running = 2,
-  Succeeded = 3,
-  Failed = 4,
-  Canceled = 5,
-};
-
-struct GoalContext {
-  ArmMoveSpec request{};
-  std::atomic<GoalPhase> phase{GoalPhase::Pending};
-  std::atomic<bool> cancel_requested{false};
-  mutable std::mutex msg_mutex;
-  std::string error_msg;
-
-  void succeed() {
-    phase.store(GoalPhase::Succeeded);
-    std::lock_guard<std::mutex> lock(msg_mutex);
-    error_msg.clear();
-  }
-
-  void fail(const std::string &msg) {
-    phase.store(GoalPhase::Failed);
-    std::lock_guard<std::mutex> lock(msg_mutex);
-    error_msg = msg;
-  }
-
-  void cancel() {
-    phase.store(GoalPhase::Canceled);
-    std::lock_guard<std::mutex> lock(msg_mutex);
-    error_msg = "goal canceled";
-  }
-
-  std::string get_error() const {
-    std::lock_guard<std::mutex> lock(msg_mutex);
-    return error_msg;
-  }
 };
 
 class ArmSolveClient {
 public:
   explicit ArmSolveClient(rclcpp::Node &node, const ArmSolveClientConfig &config);
 
-  ExecuteResult execute(const ArmMoveSpec &command);
+  ExecuteResult execute(const step_executor::Command &cmd);
   void cancel();
   std::string lastError() const;
 
 private:
+  bool buildRequest(const step_executor::Command &cmd,
+                    ArmMoveSpec &out,
+                    std::string &error) const;
+  enum class GoalPhase : uint8_t {
+    None = 0,
+    Pending = 1,
+    Running = 2,
+    Succeeded = 3,
+    Failed = 4,
+    Canceled = 5,
+  };
+
+  struct GoalContext {
+    ArmMoveSpec request{};
+    std::atomic<GoalPhase> phase{GoalPhase::Pending};
+    std::atomic<bool> cancel_requested{false};
+    mutable std::mutex msg_mutex;
+    std::string error_msg;
+
+    void succeed() {
+      phase.store(GoalPhase::Succeeded);
+      std::lock_guard<std::mutex> lock(msg_mutex);
+      error_msg.clear();
+    }
+
+    void fail(const std::string &msg) {
+      phase.store(GoalPhase::Failed);
+      std::lock_guard<std::mutex> lock(msg_mutex);
+      error_msg = msg;
+    }
+
+    void cancel() {
+      phase.store(GoalPhase::Canceled);
+      std::lock_guard<std::mutex> lock(msg_mutex);
+      error_msg = "goal canceled";
+    }
+
+    std::string get_error() const {
+      std::lock_guard<std::mutex> lock(msg_mutex);
+      return error_msg;
+    }
+  };
+
   using Move = engineer_interfaces::action::Move;
   using GoalHandleMove = rclcpp_action::ClientGoalHandle<Move>;
 

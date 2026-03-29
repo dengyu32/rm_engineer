@@ -6,19 +6,28 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "step_executor/types/capability_bridge.hpp"
 #include "step_executor/types/command.hpp"
 #include "step_executor/types/context.hpp"
 #include "step_executor/types/execute_result.hpp"
 #include "step_executor/types/task.hpp"
+#include "step_executor/registry_bridge.hpp"
 
 namespace step_executor {
+
+// ============================================================================
+//  StepExecutor
+// ----------------------------------------------------------------------------
+//  - 执行 TaskPlan（线性）
+//  - 处理 Control Step（delay/guard）
+//  - 绑定 inputs -> params
+//  - 调用 capability，并写回 outputs
+//  - 负责超时/重试/失败策略
+// ============================================================================
 
 class StepExecutor {
 public:
   explicit StepExecutor(rclcpp::Logger logger,
-                        std::shared_ptr<ICapabilityBridge> bridge =
-                            std::make_shared<NoopCapabilityBridge>());
+                        std::shared_ptr<ICapabilityBridge> bridge);
 
   void start(const TaskPlan &plan);
   void tick(const rclcpp::Time &now);

@@ -5,13 +5,19 @@
 #include "gripper_control_node/gripper_control_node.hpp"
 #include "step_executor/types/capability_bridge.hpp"
 
-namespace step_executor {
+namespace engineer_auto::auto_bridge {
+
+// ============================================================================
+//  GripperCapabilityBridge
+// ----------------------------------------------------------------------------
+//  - 适配 gripper_control_node
+// ============================================================================
 
 class GripperCapabilityBridge {
 public:
   explicit GripperCapabilityBridge(rclcpp::Node &node);
 
-  ExecuteResult run(const Command &cmd);
+  step_executor::ExecuteResult run(const step_executor::Command &cmd);
   void cancel();
   const char *lastError() const { return last_error_.c_str(); }
 
@@ -20,4 +26,4 @@ private:
   std::string last_error_;
 };
 
-} // namespace step_executor
+} // namespace engineer_auto::auto_bridge

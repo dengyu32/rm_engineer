@@ -1,9 +1,16 @@
 #include "auto_bridge/vision_capability_bridge.hpp"
 
+#include <array>
+
 #include "task_orchestrator/protocol.hpp"
 #include "step_executor/types/step.hpp"
 
-namespace step_executor {
+namespace engineer_auto::auto_bridge {
+
+using step_executor::Command;
+using step_executor::ExecuteResult;
+using step_executor::ExecuteStatus;
+using step_executor::ErrorCode;
 
 VisionCapabilityBridge::VisionCapabilityBridge(rclcpp::Node &node) : client_(node) {}
 
@@ -23,8 +30,22 @@ ExecuteResult VisionCapabilityBridge::run(const Command &cmd) {
 
   if (client_.detect(detection)) {
     result.status = ExecuteStatus::Succeeded;
-    result.outputs[task_orchestrator::protocol::kVisionPose] = detection.pose;
-    result.outputs[task_orchestrator::protocol::kVisionVector] = detection.vector;
+    const std::array<double, 7> pose{
+        detection.pose.x,
+        detection.pose.y,
+        detection.pose.z,
+        detection.pose.qx,
+        detection.pose.qy,
+        detection.pose.qz,
+        detection.pose.qw,
+    };
+    const std::array<double, 3> vec{
+        detection.vector.x,
+        detection.vector.y,
+        detection.vector.z,
+    };
+    result.outputs[task_orchestrator::protocol::kVisionPose] = pose;
+    result.outputs[task_orchestrator::protocol::kVisionVector] = vec;
     last_error_.clear();
     return result;
   }
@@ -44,4 +65,4 @@ ExecuteResult VisionCapabilityBridge::run(const Command &cmd) {
 
 void VisionCapabilityBridge::cancel() {}
 
-} // namespace step_executor
+} // namespace engineer_auto::auto_bridge

@@ -41,7 +41,7 @@ src/auto/
 ```c++
 struct Command {
   std::string kind;                     // "arm.move" / "gripper.cmd" / ...
-  std::unordered_map<std::string,std::any> params; // 具体参数
+  std::unordered_map<std::string,Value> params; // 具体参数（variant）
 };
 ```
 
@@ -95,7 +95,7 @@ const char* lastError()
 ```c++
 struct ExecuteResult {
   ExecuteStatus status;                 // Running | Succeeded | Failed
-  std::unordered_map<std::string,std::any> outputs;
+  std::unordered_map<std::string,Value> outputs;
   ErrorInfo error;                      // Failed 时必填
 };
 ```

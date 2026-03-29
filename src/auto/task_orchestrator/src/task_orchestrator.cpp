@@ -11,7 +11,6 @@
 
 #include "step_executor/types/context.hpp"
 #include "step_executor/types/step.hpp"
-#include "step_executor/types/control.hpp"
 
 namespace task_orchestrator {
 namespace {
@@ -50,6 +49,14 @@ inline Step makeStep(const char *id, const char *kind, int timeout_ms = 0, int r
   return step;
 }
 
+inline std::array<double, 7> toPoseArray(const engineer_interfaces::msg::Pose &pose) {
+  return {pose.x, pose.y, pose.z, pose.qx, pose.qy, pose.qz, pose.qw};
+}
+
+inline std::array<double, 3> toVectorArray(const geometry_msgs::msg::Vector3 &vec) {
+  return {vec.x, vec.y, vec.z};
+}
+
 Step make_delay(const char *id, int delay_ms) {
   Step step = makeStep(id, "");
   step.type = step_executor::StepType::Control;
@@ -68,7 +75,7 @@ Step make_vision_detect(const char *id, int timeout_ms = 3000, int retries = 0) 
 Step make_arm_move_pose(const char *id, const engineer_interfaces::msg::Pose &target,
                         int timeout_ms = 8000, int retries = 1) {
   Step step = makeStep(id, protocol::kArmMoveKind, timeout_ms, retries);
-  step.command.params["target_pose"] = target;
+  step.command.params["target_pose"] = toPoseArray(target);
   return step;
 }
 
@@ -82,7 +89,7 @@ Step make_arm_move_joints(const char *id, const std::array<float, 6> &target,
 Step make_arm_move_vector(const char *id, const geometry_msgs::msg::Vector3 &target,
                           int timeout_ms = 8000, int retries = 1) {
   Step step = makeStep(id, protocol::kArmMoveKind, timeout_ms, retries);
-  step.command.params["target_vector"] = target;
+  step.command.params["target_vector"] = toVectorArray(target);
   return step;
 }
 
