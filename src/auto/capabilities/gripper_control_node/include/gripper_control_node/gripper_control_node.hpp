@@ -8,8 +8,8 @@
 
 #include <engineer_interfaces/msg/gripper.hpp>
 
-#include "task_step_library/step.hpp"
 #include "params_utils/param_utils.hpp"
+#include "gripper_control_node/gripper_types.hpp"
 
 namespace engineer_auto::gripper_control_node {
 
@@ -45,7 +45,7 @@ class GripperControlNode {
 public:
   explicit GripperControlNode(rclcpp::Node &node, const GripperPresetConfig &config);
 
-  void setCommand(task_step_library::GripperCommand command);
+  void setCommand(GripperCommand command);
   void cancel();
 
 private:

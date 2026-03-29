@@ -18,7 +18,7 @@
 //< Other Modules
 #include "step_executor/step_executor.hpp"
 #include "task_orchestrator/task_orchestrator.hpp"
-#include "task_step_library/task.hpp"
+#include "task_orchestrator/protocol.hpp"
 #include "params_utils/param_utils.hpp"
 
 namespace engineer_auto {
@@ -93,12 +93,12 @@ private:
   void statusTick();
 
   //< Built-in Function
-  void handleIntent(task_step_library::TaskId task_id);
-  void publishFeedback(task_step_library::TaskId task_id,
-                       task_step_library::TaskFinishCode code);
+  void handleIntent(task_orchestrator::TaskId task_id);
+  void publishFeedback(task_orchestrator::TaskId task_id,
+                       uint8_t code);
   void publishStatus(const std::string &text);
 
-  static bool toTaskId(uint8_t raw, task_step_library::TaskId &out);
+  static bool toTaskId(uint8_t raw, task_orchestrator::TaskId &out);
 
 private:
   AutoNodeConfig config_;
@@ -108,8 +108,8 @@ private:
   step_executor::StepExecutor executor_;
 
   // 下游状态，内部不能修改，只能通过intentCallback更新
-  std::atomic<task_step_library::TaskId> latest_task_id_;
-  task_step_library::TaskId applied_task_id_{task_step_library::TaskId::IDLE};
+  std::atomic<task_orchestrator::TaskId> latest_task_id_;
+  task_orchestrator::TaskId applied_task_id_{task_orchestrator::TaskId::IDLE};
 
   rclcpp::Subscription<engineer_interfaces::msg::Intent>::SharedPtr intent_sub_;
   rclcpp::Publisher<engineer_interfaces::msg::Intent>::SharedPtr feedback_pub_;

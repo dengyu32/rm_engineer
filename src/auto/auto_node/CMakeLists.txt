@@ -14,17 +14,25 @@ find_package(rclcpp_components REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(params_utils REQUIRED)
 find_package(engineer_interfaces REQUIRED)
-find_package(shared_data REQUIRED)
-find_package(task_step_library REQUIRED)
 find_package(task_orchestrator REQUIRED)
 find_package(step_executor REQUIRED)
+find_package(vision_detect_client REQUIRED)
+find_package(slot_select_node REQUIRED)
+find_package(gripper_control_node REQUIRED)
+find_package(arm_solve_client REQUIRED)
 
 add_library(${PROJECT_NAME}_component SHARED
   src/auto_node.cpp
+  ../capabilities/auto_bridge/src/capability_registry.cpp
+  ../capabilities/auto_bridge/src/arm_capability_bridge.cpp
+  ../capabilities/auto_bridge/src/gripper_capability_bridge.cpp
+  ../capabilities/auto_bridge/src/slot_capability_bridge.cpp
+  ../capabilities/auto_bridge/src/vision_capability_bridge.cpp
 )
 
 target_include_directories(${PROJECT_NAME}_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../capabilities/auto_bridge/include>
   $<INSTALL_INTERFACE:include>
 )
 
@@ -34,10 +42,12 @@ ament_target_dependencies(${PROJECT_NAME}_component
   std_msgs
   params_utils
   engineer_interfaces
-  shared_data
-  task_step_library
   task_orchestrator
   step_executor
+  vision_detect_client
+  slot_select_node
+  gripper_control_node
+  arm_solve_client
 )
 
 rclcpp_components_register_node(${PROJECT_NAME}_component

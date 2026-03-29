@@ -19,14 +19,14 @@ GripperControlNode::GripperControlNode(rclcpp::Node &node,
               config_.gripper_cmd_topic.c_str());
 }
 
-void GripperControlNode::setCommand(task_step_library::GripperCommand command) {
+void GripperControlNode::setCommand(GripperCommand command) {
   std::scoped_lock lock(target_mutex_);
-  target_position_ = command == task_step_library::GripperCommand::CLOSE
+  target_position_ = command == GripperCommand::CLOSE
                          ? config_.gripper_close_position
                          : config_.gripper_open_position;
 }
 
-void GripperControlNode::cancel() { setCommand(task_step_library::GripperCommand::OPEN); }
+void GripperControlNode::cancel() { setCommand(GripperCommand::OPEN); }
 
 void GripperControlNode::onTimer() {
   double pos = 0.0;

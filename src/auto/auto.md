@@ -1,133 +1,149 @@
 ### AUTO
-> auto 即为 automatic 自动的缩写
-> 与 teleop 相对的，auto 负责自动完成机械臂的组合动作,其中涉及到多层设计
-> 大致可以分为三层 :
-> 最外层业务层 只需设计节点本身 node 和 task 等业务
-> 中层编排层 将组合动作拆解成一步一步完成
-> 底层能力层 提供 robotic_arm规划控制 、视觉 、gripper io控制 的接口
-> 通过封装业务抽象提炼出几个专有名词 Task Step Capabilities 
+> auto = automatic
+> 与 teleop 相对，auto 负责自动完成机械臂的组合动作
+> 本系统采用“半自动 + 显式数据流”的三层结构
 
 #### 目录结构
 src/auto/
 ├── auto.md
 ├── auto_node
-│   ├── CMakeLists.txt
-│   ├── config
-│   │   └── auto_node.yaml
-│   ├── include
-│   │   └── auto_node
-│   │       └── auto_node.hpp
-│   ├── launch
-│   │   └── start_auto_node.launch.py
-│   ├── package.xml
-│   └── src
-│       └── auto_node.cpp
 ├── capabilities
-│   ├── arm_solve_client
-│   │   ├── CMakeLists.txt
-│   │   ├── include
-│   │   │   └── arm_solve_client
-│   │   │       └── arm_solve_client.hpp
-│   │   ├── package.xml
-│   │   └── src
-│   │       └── arm_solve_client.cpp
-│   ├── gripper_control_node
-│   │   ├── CMakeLists.txt
-│   │   ├── include
-│   │   │   └── gripper_control_node
-│   │   │       └── gripper_control_node.hpp
-│   │   ├── package.xml
-│   │   └── src
-│   │       └── gripper_control_node.cpp
-│   └── vision_detect_client
-│       ├── CMakeLists.txt
-│       ├── include
-│       │   └── vision_detect_client
-│       │       └── vision_detect_client.hpp
-│       ├── package.xml
-│       └── src
-│           └── vision_detect_client.cpp
 ├── step_executor
-│   ├── CMakeLists.txt
-│   ├── include
-│   │   └── step_executor
-│   │       ├── bridges
-│   │       │   ├── arm_capability_bridge.hpp
-│   │       │   ├── composite_capability_bridge.hpp
-│   │       │   ├── gripper_capability_bridge.hpp
-│   │       │   └── vision_capability_bridge.hpp
-│   │       ├── capability_bridge.hpp
-│   │       └── step_executor.hpp
-│   ├── package.xml
-│   └── src
-│       ├── bridges
-│       │   ├── arm_capability_bridge.cpp
-│       │   ├── composite_capability_bridge.cpp
-│       │   ├── gripper_capability_bridge.cpp
-│       │   └── vision_capability_bridge.cpp
-│       └── step_executor.cpp
-├── task_orchestrator
-│   ├── CMakeLists.txt
-│   ├── include
-│   │   └── task_orchestrator
-│   │       └── task_orchestrator.hpp
-│   ├── package.xml
-│   └── src
-│       └── task_orchestrator.cpp
-└── task_step_library
-    ├── CMakeLists.txt
-    ├── include
-    │   └── task_step_library
-    │       ├── step.hpp
-    │       └── task.hpp
-    └── package.xml
+└── task_orchestrator
 
-其中，auto_node 只做 ROS 通信和生命周期（只做收发调度，不实现具体业务拆解）：
-1. 订阅 Intent（含 intent_id）
-2. intent_id -> TaskRequest 映射（只做协议转换）
-3. 调 task_orchestrator.plan(TaskRequest) 拿 ExecutionPlan
-4. 调 step_executor.start(plan) 执行
-5. 发布 Intent 反馈（Running/Finished/Aborted）
-task_step_library 只定义 task 层和 step 层等具体业务定义，不依赖第三方中间件(ROS MoveIt)
-task_orchestrator 负责编排任务和上下文的传递，输入 Task 输出 std::vector<Step> 不直接执行 step ，保存运行态，唯一决策与上下文中心
-step_executor 只做 Step 的具体执行, 与实际能力的接轨, 无业务决策
-capabilities 则放置特定的能力层，里面按照名称（如arm_solve_client）封装成多个功能包,业务逻辑更清晰 ，特定订阅外部话题，维护长期记忆，校准状态
+#### 分层职责
+- Task Layer（task_orchestrator）
+  - 只定义步骤序列
+  - 显式声明 inputs / outputs / bindings
+  - 明确 timeout / retries
+  - 不写 Spec，不做推导
+
+- Step Layer（step_executor）
+  - 只执行 step
+  - 校验 inputs 是否存在
+  - bindings 把上下文注入 params
+  - 调 capability 执行 command
+  - 校验 outputs 并写入上下文
+  - 统一处理 retry / timeout / cancel
+
+- Capabilities Layer（capabilities/*）
+  - 只解析 command.kind + params 并执行
+  - 返回 ExecuteResult（Succeeded/Running/Failed + outputs + ErrorInfo）
+  - 不读 Context，不做推导，不做重试
 
 #### 依赖方向
-auto_node -> task_orchestrator -> task_step_library
-auto_node -> step_executor -> task_step_library
-step_executor -> capabilities/*
-capabilities/* -> engineer_interfaces/rclcpp/...
+- auto_node -> task_orchestrator -> step_executor
+- auto_node -> capabilities/*
+- capabilities/* -> engineer_interfaces / rclcpp / ...
 
-#### slot 链路
-1. TaskOrchestrator 在任务里插入 Slot step 和后续 slotMapped 的 ArmMove step。
-    AUTO_STORE / AUTO_GET 都是先选 slot，再移动到 slot 位姿。
-    task_orchestrator.cpp:73
-2. AutoNode 收到 intent 后拿到 plan，交给 StepExecutor 按 tick 执行。
-    auto_node.cpp:90
-3. StepExecutor 遇到 StepType::Slot 时，经 CompositeCapabilityBridge 分发到 SlotCapabilityBridge。
-    composite_capability_bridge.cpp:33
-4. SlotCapabilityBridge 调 slot_select_node.select(...)，把结果写进 StepResult（SelectedSlot）。
-    slot_capability_bridge.cpp:20
-5. StepExecutor::applyStepResult 把这个结果写入共享数据 SharedData。
-    step_executor.cpp:186
-    context.hpp:7
-6. 当执行后续 ArmMove(target_source=SlotMapped) 时，deriveStepFromSharedData 用 SelectedSlot 改写为固定关节目标（slot0/slot1 两组硬编码 joints）。
-    step_executor.cpp:162
-7. slot_select_node 的 slot 状态来源是 /slot_states（engineer_interfaces/Slots），内部只维护 2 个槽位。
-    SelectSlotToPut/SelectSlotToTake 就是基于这两个布尔值选 index。
-    slot_select_node.cpp:26
+#### 核心对象
+**Command（唯一执行对象）**
+```c++
+struct Command {
+  std::string kind;                     // "arm.move" / "gripper.cmd" / ...
+  std::unordered_map<std::string,std::any> params; // 具体参数
+};
+```
 
+**Step（显式依赖）**
+```c++
+struct Step {
+  std::string id;                       // 唯一
+  std::string label;                    // 展示用
+  Command command;
+  std::vector<ContextKey> inputs;       // 显式依赖
+  std::vector<ContextKey> outputs;      // 显式产出
+  std::vector<Binding> bindings;        // 绑定规则
+  int timeout_ms;
+  int max_retries;
+};
+```
 
+**ContextKey（显式共享）**
+```c++
+struct ContextKey {
+  std::string name;                     // "VisionPose" / "SlotID" / ...
+  ContextScope scope;                   // Task | Persist（目前只用 Task）
+};
+```
+
+**Binding（显式注入）**
+```c++
+struct Binding {
+  ContextKey from;
+  std::string to_param;                 // 注入到 command.params 的字段名
+};
+```
+
+#### StepExecutor 执行流程（线性）
+1. 读取 TaskPlan
+2. 校验 inputs 在 Context 中是否存在
+3. 依据 bindings 注入 command.params
+4. 调 capability 执行 command
+5. capability 返回 outputs
+6. StepExecutor 校验 outputs 并写入 Context
+7. 进入下一步
+
+#### Capabilities Bridge
+```c++
+ExecuteResult run(const Command &cmd)
+void cancel()
+const char* lastError()
+```
+
+**ExecuteResult**
+```c++
+struct ExecuteResult {
+  ExecuteStatus status;                 // Running | Succeeded | Failed
+  std::unordered_map<std::string,std::any> outputs;
+  ErrorInfo error;                      // Failed 时必填
+};
+```
+
+#### Command kind 约定
+- arm.move
+- gripper.cmd
+- vision.detect
+- slot.select
+- slot.lock
+- slot.unlock
+
+#### 任务编排示例
+**AUTO_GRAB（显式）**
+1. vision.detect
+   - outputs: VisionPose@task, VisionVector@task
+2. arm.move
+   - inputs: VisionPose@task
+   - bindings: VisionPose -> params.target_pose
+3. gripper.cmd
+   - params: {action: "close"}
+4. arm.move
+   - inputs: VisionVector@task
+   - bindings: VisionVector -> params.target_vector
+5. arm.move
+   - params: {target_joints: HOME}
+
+**AUTO_STORE（显式）**
+1. slot.select
+   - params: {strategy: "put"}
+   - outputs: SlotID@task
+2. arm.move
+   - inputs: SlotID@task
+   - bindings: SlotID -> preset.SLOTS -> params.target_joints
+3. gripper.cmd
+   - params: {action: "open"}
+4. slot.lock
+   - inputs: SlotID@task
+   - bindings: SlotID -> params.slot_id
+
+#### Slot 链路（新）
+1. TaskOrchestrator 插入 slot.select + 后续 slot.lock/unlock
+2. StepExecutor 执行 command，按 outputs 写入 Context
+3. SlotCapabilityBridge 返回 SlotID
+4. StepExecutor 依据 bindings 将 SlotID 显式映射到 preset.SLOTS，再注入 target_joints
+5. Arm capability 只接收 joints，不感知 slot
 
 #### 代办
-Delay Guard 待实现
-移植行为树
-
-#### 更新记录
-从最初的状态机设想到如今，反反复复做了很多工作，先是移植南京理工大学的单层状态机，结果想进一步封装安全检查，同时为未来扩展考虑，从github中找到HFSM2的库文件，移植后，成功跑通一个复合任务，但由于代码重复的地方太多，考虑进一步封装设计，受限必须要做成操作手控制而并非自动，同时话题通信使用状态流，状态流状态严格受上游控制，放弃了HFSM2,自主分层设计了如今的一套代码，对此我只想说，不要自主设计调度框架！！！，学习行为树足矣解决这个问题，同时扩展性肯定比如今的要好不少。悔之晚矣。
-
-ROS 这种成熟的中间件就没必要进一步封装
-只有ROS才使用config
-#### 其他
-同样的，自动控制链路与伺服控制链路互斥隔离，但是更为复杂
+- DAG 执行（暂不启用，当前线性）
+- Guard / Cleanup 机制扩展
+- 行为树替换调度框架（待评估）

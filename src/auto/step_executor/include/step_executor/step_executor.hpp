@@ -6,10 +6,11 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "step_executor/capability_bridge.hpp"
-#include "step_executor/target_resolver.hpp"
-#include "shared_data/context.hpp"
-#include "task_step_library/task.hpp"
+#include "step_executor/types/capability_bridge.hpp"
+#include "step_executor/types/command.hpp"
+#include "step_executor/types/context.hpp"
+#include "step_executor/types/execute_result.hpp"
+#include "step_executor/types/task.hpp"
 
 namespace step_executor {
 
@@ -19,32 +20,28 @@ public:
                         std::shared_ptr<ICapabilityBridge> bridge =
                             std::make_shared<NoopCapabilityBridge>());
 
-  void start(const task_step_library::TaskPlan &plan);
+  void start(const TaskPlan &plan);
   void tick(const rclcpp::Time &now);
   void cancel();
   void reset();
 
   bool isRunning() const;
   bool isFinished() const;
-  task_step_library::TaskResult report() const;
-  task_step_library::TaskId activeTaskId() const;
+  TaskResult report() const;
+  TaskId activeTaskId() const;
   std::size_t currentStepIndex() const;
   std::size_t totalSteps() const;
   std::string currentStepLabel() const;
 
 private:
-  bool deriveStepFromSharedData(const task_step_library::Step &input,
-                                task_step_library::Step &derived,
-                                std::string &error) const;
-  void applyStepResult(const task_step_library::StepResult &result);
-  void fail(task_step_library::TaskStatus status, const std::string &message);
+  bool applyBindings(const Step &step, Command &cmd, std::string &error) const;
+  bool applyOutputs(const Step &step, const ExecuteResult &result, std::string &error);
+  void fail(TaskStatus status, const std::string &message);
   void enterNextStep();
 
   rclcpp::Logger logger_;
   std::shared_ptr<ICapabilityBridge> bridge_;
-  TargetResolver resolver_{};
-
-  task_step_library::TaskPlan plan_;
+  TaskPlan plan_{};
   std::size_t step_index_{0};
   bool step_entered_{false};
   int retries_left_{0};
@@ -52,8 +49,8 @@ private:
 
   bool running_{false};
   bool finished_{false};
-  task_step_library::TaskResult report_;
-  task_step_library::SharedData data_{};
+  TaskResult report_{};
+  ContextStore context_{};
 };
 
 } // namespace step_executor

@@ -11,8 +11,7 @@
 
   <depend>engineer_interfaces</depend>
   <depend>geometry_msgs</depend>
-  <depend>shared_data</depend>
-  <depend>task_step_library</depend>
+  <depend>step_executor</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

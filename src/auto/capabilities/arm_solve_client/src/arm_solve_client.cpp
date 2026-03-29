@@ -1,9 +1,37 @@
 #include "arm_solve_client/arm_solve_client.hpp"
 
 #include <chrono>
+#include <mutex>
+#include <rclcpp_action/client.hpp>
+#include <rcutils/error_handling.h>
 
 namespace engineer_auto::arm_solve_client {
-using namespace task_step_library;
+
+// ============================================================================
+//  匿名空间
+// ============================================================================
+
+namespace {
+bool sameTarget(const engineer_interfaces::msg::Pose &lhs,
+                                const engineer_interfaces::msg::Pose &rhs) {
+  return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z && lhs.qx == rhs.qx &&
+         lhs.qy == rhs.qy && lhs.qz == rhs.qz && lhs.qw == rhs.qw;
+}
+
+bool sameVector(const geometry_msgs::msg::Vector3 &lhs,
+                                const geometry_msgs::msg::Vector3 &rhs) {
+  return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
+}
+
+bool sameRequest(const ArmMoveSpec &lhs, const ArmMoveSpec &rhs) {
+  return lhs.plan_option == rhs.plan_option && lhs.joints == rhs.joints &&
+         sameTarget(lhs.pose, rhs.pose) && sameVector(lhs.vector, rhs.vector);
+}
+}  
+
+// ============================================================================
+//  CTOR
+// ============================================================================
 
 ArmSolveClient::ArmSolveClient(rclcpp::Node &node,
                                const ArmSolveClientConfig &config)
@@ -12,64 +40,161 @@ ArmSolveClient::ArmSolveClient(rclcpp::Node &node,
   action_client_ = rclcpp_action::create_client<Move>(&node_, config_.action_name);
 }
 
-bool ArmSolveClient::sameTarget(const engineer_interfaces::msg::Pose &lhs,
-                                const engineer_interfaces::msg::Pose &rhs) {
-  return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z && lhs.qx == rhs.qx &&
-         lhs.qy == rhs.qy && lhs.qz == rhs.qz && lhs.qw == rhs.qw;
+// ============================================================================
+//  EXECUTE -- 核心函数，该能力层提供的对外接口，表示执行并跟进 GOAL 状态
+// ----------------------------------------------------------------------------
+//  相当于轮询状态机
+// ============================================================================
+
+ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command) {
+                                      std::shared_ptr<GoalContext> ctx;
+                                      std::shared_ptr<GoalHandleMove> gh;
+  // 拷贝共享数据
+  {
+    std::scoped_lock lock(mutex_);
+    ctx = active_ctx_;
+    gh = goal_handle_;
+  }
+
+  // 未执行任务
+  if (!ctx) {
+    if (sendGoal(command)) {
+      return {CommandStatus::Started, std::nullopt};
+    } else {
+      return {CommandStatus::StartFailed, lastError()};
+    }
+  }
+
+  // 执行任务中，且同时是同一个请求
+  if (sameRequest(ctx->request, command)) {
+    const auto phase = ctx->phase.load();
+    // TO REQUEST: None 的归属问题
+    switch (phase) {
+      case GoalPhase::Pending:
+      case GoalPhase::Running:
+        return {CommandStatus::Tracking, std::nullopt};
+
+      case GoalPhase::Succeeded:
+        // 清空 active_ctx_
+        {
+          std::scoped_lock lock(mutex_);
+          if (active_ctx_ == ctx) {
+            active_ctx_.reset();
+            goal_handle_.reset();
+          } 
+        }
+        return {CommandStatus::Succeeded, std::nullopt};
+
+      case GoalPhase::Failed:
+      case GoalPhase::Canceled:
+        // 清空 active_ctx_
+        {
+          std::scoped_lock lock(mutex_);
+          if (active_ctx_ == ctx) {
+            active_ctx_.reset();
+            goal_handle_.reset();
+          } 
+        }
+        return {CommandStatus::Failed, lastError()};
+      
+      default:
+        return {CommandStatus::Failed, "unknown phase state"};
+    }
+  }
+
+  // 上述情况均不成立，表明有新请求出现，需要取消旧任务
+  if (ctx) {
+
+    ctx->cancel_requested.store(true);
+    if (gh) {
+      action_client_->async_cancel_goal(gh);
+    }
+    // 旧任务丢弃
+    {
+      std::scoped_lock lock(mutex_);
+      if (active_ctx_ == ctx) {
+        active_ctx_.reset();
+        goal_handle_.reset();
+      }
+    }
+  }
+
+  // 启动新任务
+  if (sendGoal(command)) {
+    return {CommandStatus::Started, std::nullopt};
+  } else {
+    return {CommandStatus::StartFailed, lastError()};
+  }
 }
 
-bool ArmSolveClient::sameVector(const geometry_msgs::msg::Vector3 &lhs,
-                                const geometry_msgs::msg::Vector3 &rhs) {
-  return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
-}
-
-bool ArmSolveClient::sameRequest(const ArmMoveSpec &lhs, const ArmMoveSpec &rhs) {
-  return lhs.plan_option == rhs.plan_option && lhs.joints == rhs.joints &&
-         sameTarget(lhs.pose, rhs.pose) && sameVector(lhs.vector, rhs.vector);
-}
+// ============================================================================
+//  sendGoal -- 表示向服务端发送请求，同时修改 ctx 中的 GoalPhase
+// ----------------------------------------------------------------------------
+//  返回值：true 一定进入生命周期，构建 active_ctx_ , 用于 execute 状态机
+//        false 一定没有 active_ctx_ , 在 execute 直接返回 StartFailed
+//  回调：goal_response_callback
+//       result_callback
+// ============================================================================
 
 bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
+  // 发送前，清空旧的错误记录
+  {
+    std::scoped_lock lock(error_mutex_);
+    last_error_msg_.clear();
+  }
+
+  // 初始化
   auto ctx = std::make_shared<GoalContext>();
   ctx->request = command;
+  ctx->phase.store(GoalPhase::Pending);
 
+  // 前置检查
   if (!action_client_) {
-    ctx->phase.store(GoalPhase::Failed);
-    ctx->error_msg = "action client not created";
-    std::scoped_lock lock(mutex_);
-    active_ctx_ = ctx;
-    goal_handle_.reset();
+    ctx->fail("action client not created");
+    {
+      std::scoped_lock lock(error_mutex_);
+      last_error_msg_ = "action client not created";
+    }
     return false;
   }
 
   if (!action_client_->wait_for_action_server(
           std::chrono::milliseconds(config_.server_wait_ms))) {
-    ctx->phase.store(GoalPhase::Failed);
-    ctx->error_msg = "action server not available";
-    std::scoped_lock lock(mutex_);
-    active_ctx_ = ctx;
-    goal_handle_.reset();
+    ctx->fail("acition server not available");
+    {
+      std::scoped_lock lock(error_mutex_);
+      last_error_msg_ = "acition server not available";
+    }
     return false;
   }
 
+  // 激活当前ctx 这样做会直接替换掉旧的 active_ctx_
   {
     std::scoped_lock lock(mutex_);
     active_ctx_ = ctx;
     goal_handle_.reset();
   }
 
+  // 构造 goal
   Move::Goal goal;
   goal.option_id = static_cast<uint8_t>(command.plan_option);
   goal.target_pose = command.pose;
   goal.target_joints = command.joints;
   goal.target_vector = command.vector;
 
+  // 回调
   rclcpp_action::Client<Move>::SendGoalOptions opts;
+
   opts.goal_response_callback = [this, ctx](std::shared_ptr<GoalHandleMove> gh) {
     if (!gh) {
-      ctx->phase.store(GoalPhase::Failed);
-      ctx->error_msg = "goal rejected";
+      ctx->fail("goal rejected");
+      {
+        std::scoped_lock lock(error_mutex_);
+        last_error_msg_ = "goal rejected";
+      }
       return;
     }
+    // 更新 goal_handle_
     {
       std::scoped_lock lock(mutex_);
       if (active_ctx_ == ctx) {
@@ -77,89 +202,73 @@ bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
       }
     }
     ctx->phase.store(GoalPhase::Running);
+     // 检查是否取消
     if (ctx->cancel_requested.load()) {
       action_client_->async_cancel_goal(gh);
     }
   };
 
   opts.result_callback = [this, ctx](const GoalHandleMove::WrappedResult &result) {
-    if (!result.result) {
-      ctx->phase.store(GoalPhase::Failed);
-      ctx->error_msg = "empty result";
-    } else if (result.code == rclcpp_action::ResultCode::SUCCEEDED &&
-               result.result->success) {
-      ctx->phase.store(GoalPhase::Succeeded);
-      ctx->error_msg.clear();
-    } else if (result.code == rclcpp_action::ResultCode::CANCELED) {
-      ctx->phase.store(GoalPhase::Canceled);
-      ctx->error_msg = "goal canceled";
-    } else {
-      ctx->phase.store(GoalPhase::Failed);
-      ctx->error_msg = result.result->error_msg;
-      if (ctx->error_msg.empty()) {
-        ctx->error_msg = "goal failed";
-      }
+    // 错误获取 lamada
+    auto get_error = [&]() {
+      return (result.result && !result.result->error_msg.empty())
+             ? result.result->error_msg : "goal failed (unknown)";
+    };
+
+    // 先获取当前错误，并更新 last_error_msg_
+    // 防止 ctx 设置为 failed 瞬间，execute 轮询到但获取不到最新 last_error_msg
+    std::string current_error;
+    if (result.code == rclcpp_action::ResultCode::CANCELED) {
+      current_error = "goal canceled";
+    } else if (result.code != rclcpp_action::ResultCode::SUCCEEDED || 
+              (result.result && !result.result->success)) {
+      current_error = get_error();
     }
 
+    {
+      std::scoped_lock lock(error_mutex_);
+      last_error_msg_ = current_error;
+    }
+
+    // 处理 result code
+    switch (result.code) {
+      case rclcpp_action::ResultCode::SUCCEEDED:
+        if (result.result && result.result->success) {
+          ctx->succeed();
+        } else {
+          ctx->fail(get_error());
+        }
+        break;
+      case rclcpp_action::ResultCode::CANCELED:
+        ctx->cancel();
+        break;
+      default:
+        ctx->fail(current_error);
+        break;
+    }
+
+    // 清除句柄
+    // 这里只重置 goal_handle_ 而不重置 active_ctx_
+    // 是因为之后 execute() 还需要通过 active_ctx_ 来获取最终的 commandstatus 
     std::scoped_lock lock(mutex_);
     if (active_ctx_ == ctx) {
       goal_handle_.reset();
     }
   };
 
+  // 异步发送goal
   action_client_->async_send_goal(goal, opts);
   return true;
 }
 
-CommandStatus ArmSolveClient::execute(const ArmMoveSpec &command) {
-  std::shared_ptr<GoalContext> ctx;
-  std::shared_ptr<GoalHandleMove> gh;
-  {
-    std::scoped_lock lock(mutex_);
-    ctx = active_ctx_;
-    gh = goal_handle_;
-  }
-
-  if (ctx) {
-    if (sameRequest(ctx->request, command)) {
-      const GoalPhase phase = ctx->phase.load();
-      if (phase == GoalPhase::Pending || phase == GoalPhase::Running) {
-        return CommandStatus::Tracking;
-      }
-      CommandStatus final_status = CommandStatus::Failed;
-      if (phase == GoalPhase::Succeeded) {
-        final_status = CommandStatus::Succeeded;
-      }
-      {
-        std::scoped_lock lock(mutex_);
-        if (active_ctx_ == ctx) {
-          active_ctx_.reset();
-          goal_handle_.reset();
-        }
-      }
-      return final_status;
-    }
-
-    ctx->cancel_requested.store(true);
-    if (gh) {
-      action_client_->async_cancel_goal(gh);
-    }
-    std::scoped_lock lock(mutex_);
-    if (active_ctx_ == ctx) {
-      active_ctx_.reset();
-      goal_handle_.reset();
-    }
-  }
-
-  if (!sendGoal(command)) {
-    return CommandStatus::StartFailed;
-  }
-  return CommandStatus::Started;
-}
+// ============================================================================
+//  外置接口
+// ============================================================================
 
 void ArmSolveClient::cancel() {
   std::shared_ptr<GoalContext> ctx;
   std::shared_ptr<GoalHandleMove> gh;
+  // 拷贝共享数据
   {
     std::scoped_lock lock(mutex_);
     ctx = active_ctx_;
@@ -174,8 +283,8 @@ void ArmSolveClient::cancel() {
 }
 
 std::string ArmSolveClient::lastError() const {
-  std::scoped_lock lock(mutex_);
-  return active_ctx_ ? active_ctx_->error_msg : std::string();
+  std::scoped_lock lock(error_mutex_);
+  return last_error_msg_;
 }
 
 } // namespace engineer_auto::arm_solve_client

@@ -2,8 +2,8 @@
 
 #include <string>
 
-#include "step_executor/capability_bridge.hpp"
 #include "vision_detect_client/vision_detect_client.hpp"
+#include "step_executor/types/capability_bridge.hpp"
 
 namespace step_executor {
 
@@ -11,9 +11,8 @@ class VisionCapabilityBridge {
 public:
   explicit VisionCapabilityBridge(rclcpp::Node &node);
 
-  BridgeResult runVisionStep(const task_step_library::Step &step,
-                             task_step_library::StepResult *out_result);
-  void cancel() {}
+  ExecuteResult run(const Command &cmd);
+  void cancel();
   const char *lastError() const { return last_error_.c_str(); }
 
 private:

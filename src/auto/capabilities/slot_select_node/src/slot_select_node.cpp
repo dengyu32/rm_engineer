@@ -23,19 +23,19 @@ SlotSelectNode::SlotSelectNode(rclcpp::Node &node, const SlotSelectConfig &confi
               config_.slot_state_topic.c_str(), slots_[0] ? 1 : 0, slots_[1] ? 1 : 0);
 }
 
-bool SlotSelectNode::selectSlot(task_step_library::SlotStrategy strategy, int &selected_slot) {
+bool SlotSelectNode::selectSlot(SlotStrategy strategy, int &selected_slot) {
   std::scoped_lock lock(mutex_);
 
   selected_slot = -1;
   switch (strategy) {
-  case task_step_library::SlotStrategy::SelectSlotToPut:
+  case SlotStrategy::SelectSlotToPut:
     selected_slot = chooseFirstEmpty();
     if (selected_slot < 0) {
       last_error_ = "no empty slot";
       return false;
     }
     break;
-  case task_step_library::SlotStrategy::SelectSlotToTake:
+  case SlotStrategy::SelectSlotToTake:
     selected_slot = chooseFirstOccupied();
     if (selected_slot < 0) {
       last_error_ = "no occupied slot";
@@ -51,7 +51,7 @@ bool SlotSelectNode::selectSlot(task_step_library::SlotStrategy strategy, int &s
   return true;
 }
 
-bool SlotSelectNode::applySlotCommand(task_step_library::SlotStrategy strategy, int slot_id) {
+bool SlotSelectNode::applySlotCommand(SlotStrategy strategy, int slot_id) {
   std::scoped_lock lock(mutex_);
 
   if (!isValidSlotId(slot_id)) {
@@ -60,10 +60,10 @@ bool SlotSelectNode::applySlotCommand(task_step_library::SlotStrategy strategy, 
   }
 
   switch (strategy) {
-  case task_step_library::SlotStrategy::LockSlot:
+  case SlotStrategy::LockSlot:
     publishSlotCommand(slot_id, true);
     break;
-  case task_step_library::SlotStrategy::UnlockSlot:
+  case SlotStrategy::UnlockSlot:
     publishSlotCommand(slot_id, false);
     break;
   default:

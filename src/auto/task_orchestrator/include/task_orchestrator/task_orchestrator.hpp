@@ -2,14 +2,14 @@
 
 #include <optional>
 
-#include "task_step_library/task.hpp"
+#include "step_executor/types/task.hpp"
+#include "task_orchestrator/protocol.hpp"
 
 namespace task_orchestrator {
 
 class TaskOrchestrator {
 public:
-  std::optional<task_step_library::TaskPlan>
-  plan(const task_step_library::TaskRequest &request) const;
+  std::optional<step_executor::TaskPlan> plan(TaskId request) const;
 };
 
 } // namespace task_orchestrator
