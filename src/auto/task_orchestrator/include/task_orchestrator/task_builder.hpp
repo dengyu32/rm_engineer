@@ -1,7 +1,7 @@
 #pragma once
 
-#include "step_executor/types/step.hpp"
-#include "step_executor/types/task.hpp"
+#include "auto_library/step.hpp"
+#include "auto_library/task.hpp"
 #include "task_orchestrator/protocol.hpp"
 
 namespace task_orchestrator {

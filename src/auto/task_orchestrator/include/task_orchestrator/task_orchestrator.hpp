@@ -2,7 +2,7 @@
 
 #include <optional>
 
-#include "step_executor/types/task.hpp"
+#include "auto_library/task.hpp"
 #include "task_orchestrator/protocol.hpp"
 
 namespace task_orchestrator {

@@ -5,7 +5,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "step_executor/types/value.hpp"
+#include "auto_library/value.hpp"
 
 namespace step_executor {
 

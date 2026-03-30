@@ -10,6 +10,8 @@
 #include <engineer_interfaces/msg/target.hpp>
 
 #include "params_utils/param_utils.hpp"
+#include "auto_library/command.hpp"
+#include "auto_library/execute_result.hpp"
 
 namespace engineer_auto::vision_detect_client {
 
@@ -51,6 +53,7 @@ class VisionDetectClient {
 public:
   explicit VisionDetectClient(rclcpp::Node &node);
 
+  step_executor::ExecuteResult execute(const step_executor::Command &cmd);
   bool detect(VisionDetectionResult &out);
 
   const std::string &lastError() const { return last_error_; }

@@ -20,13 +20,13 @@
 //< Other Modules
 #include "params_utils/param_utils.hpp"
 #include "arm_solve_client/arm_types.hpp"
-#include "step_executor/types/execute_result.hpp"
-#include "step_executor/types/command.hpp"
+#include "auto_library/execute_result.hpp"
+#include "auto_library/command.hpp"
 
 namespace engineer_auto::arm_solve_client {
 
 // ============================================================================
-//  
+//  ArmSovleClientConfig:
 // ----------------------------------------------------------------------------
 //  私有参数（动态参数）
 //  - update_period_ms: 定时器周期，用于定期检查和执行任务
@@ -63,24 +63,25 @@ struct ArmSolveClientConfig {
   }
 };
 
-struct ExecuteResult {
-  step_executor::ExecuteStatus status{step_executor::ExecuteStatus::Failed};
-  step_executor::ErrorCode error_code{step_executor::ErrorCode::Unknown};
-  std::optional<std::string> error;
-};
+// ============================================================================
+//  ArmSovleClient: 机械臂求解客户端
+// ----------------------------------------------------------------------------
+
+// ============================================================================
 
 class ArmSolveClient {
 public:
   explicit ArmSolveClient(rclcpp::Node &node, const ArmSolveClientConfig &config);
 
-  ExecuteResult execute(const step_executor::Command &cmd);
+  bool buildSpec(const step_executor::Command &cmd,
+                 ArmMoveSpec &out,
+                 std::string &error) const;
+  step_executor::ExecuteResult execute(const ArmMoveSpec &spec);
   void cancel();
   std::string lastError() const;
 
 private:
-  bool buildRequest(const step_executor::Command &cmd,
-                    ArmMoveSpec &out,
-                    std::string &error) const;
+
   enum class GoalPhase : uint8_t {
     None = 0,
     Pending = 1,

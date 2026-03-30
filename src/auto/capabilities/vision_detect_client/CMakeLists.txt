@@ -13,6 +13,8 @@ find_package(rclcpp REQUIRED)
 find_package(params_utils REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(task_orchestrator REQUIRED)
+find_package(auto_library REQUIRED)
 
 add_library(${PROJECT_NAME}
   src/vision_detect_client.cpp
@@ -29,6 +31,8 @@ ament_target_dependencies(${PROJECT_NAME}
   params_utils
   engineer_interfaces
   geometry_msgs
+  task_orchestrator
+  auto_library
 )
 
 install(TARGETS ${PROJECT_NAME}
@@ -42,6 +46,6 @@ install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/)
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
-ament_export_dependencies(rclcpp params_utils engineer_interfaces geometry_msgs)
+ament_export_dependencies(rclcpp params_utils engineer_interfaces geometry_msgs task_orchestrator auto_library)
 
 ament_package()

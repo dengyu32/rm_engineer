@@ -9,8 +9,8 @@
 #include <cstddef>
 #include <string>
 
-#include "step_executor/types/context.hpp"
-#include "step_executor/types/step.hpp"
+#include "auto_library/context.hpp"
+#include "auto_library/step.hpp"
 
 namespace task_orchestrator {
 namespace {

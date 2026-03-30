@@ -5,7 +5,7 @@
 #include <rclcpp_action/client.hpp>
 #include <rcutils/error_handling.h>
 
-#include "step_executor/types/command.hpp"
+#include "auto_library/command.hpp"
 
 namespace engineer_auto::arm_solve_client {
 
@@ -43,12 +43,12 @@ ArmSolveClient::ArmSolveClient(rclcpp::Node &node,
 }
 
 // ============================================================================
-//  buildRequest -- 解析 Command 参数，生成 ArmMoveSpec
+//  buildSpec -- 解析 Command 参数，生成 ArmMoveSpec
 // ============================================================================
 
-bool ArmSolveClient::buildRequest(const step_executor::Command &cmd,
-                                  ArmMoveSpec &out,
-                                  std::string &error) const {
+bool ArmSolveClient::buildSpec(const step_executor::Command &cmd,
+                               ArmMoveSpec &out,
+                               std::string &error) const {
   if (const auto *pose =
           step_executor::paramAs<std::array<double, 7>>(cmd, "target_pose")) {
     out.plan_option = PlanOption::NORMAL;
@@ -89,14 +89,8 @@ bool ArmSolveClient::buildRequest(const step_executor::Command &cmd,
 //  相当于轮询状态机
 // ============================================================================
 
-ExecuteResult ArmSolveClient::execute(const step_executor::Command &cmd) {
-  ArmMoveSpec command{};
-  std::string build_error;
-  if (!buildRequest(cmd, command, build_error)) {
-    return {step_executor::ExecuteStatus::Failed,
-            step_executor::ErrorCode::ValidationError,
-            build_error};
-  }
+step_executor::ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command) {
+  step_executor::ExecuteResult result{};
 
   std::shared_ptr<GoalContext> ctx;
   std::shared_ptr<GoalHandleMove> gh;
@@ -110,13 +104,13 @@ ExecuteResult ArmSolveClient::execute(const step_executor::Command &cmd) {
   // 未执行任务
   if (!ctx) {
     if (sendGoal(command)) {
-      return {step_executor::ExecuteStatus::Running,
-              step_executor::ErrorCode::Unknown,
-              std::nullopt};
+      result.status = step_executor::ExecuteStatus::Running;
+      return result;
     } else {
-      return {step_executor::ExecuteStatus::Failed,
-              step_executor::ErrorCode::ExecutionError,
-              lastError()};
+      result.status = step_executor::ExecuteStatus::Failed;
+      result.error.message = lastError();
+      result.error.retriable = true;
+      return result;
     }
   }
 
@@ -127,9 +121,8 @@ ExecuteResult ArmSolveClient::execute(const step_executor::Command &cmd) {
     switch (phase) {
       case GoalPhase::Pending:
       case GoalPhase::Running:
-        return {step_executor::ExecuteStatus::Running,
-                step_executor::ErrorCode::Unknown,
-                std::nullopt};
+        result.status = step_executor::ExecuteStatus::Running;
+        return result;
 
       case GoalPhase::Succeeded:
         // 清空 active_ctx_
@@ -140,9 +133,8 @@ ExecuteResult ArmSolveClient::execute(const step_executor::Command &cmd) {
             goal_handle_.reset();
           } 
         }
-        return {step_executor::ExecuteStatus::Succeeded,
-                step_executor::ErrorCode::Unknown,
-                std::nullopt};
+        result.status = step_executor::ExecuteStatus::Succeeded;
+        return result;
 
       case GoalPhase::Failed:
       case GoalPhase::Canceled:
@@ -154,14 +146,16 @@ ExecuteResult ArmSolveClient::execute(const step_executor::Command &cmd) {
             goal_handle_.reset();
           } 
         }
-        return {step_executor::ExecuteStatus::Failed,
-                step_executor::ErrorCode::ExecutionError,
-                lastError()};
+        result.status = step_executor::ExecuteStatus::Failed;
+        result.error.message = lastError();
+        result.error.retriable = true;
+        return result;
       
       default:
-        return {step_executor::ExecuteStatus::Failed,
-                step_executor::ErrorCode::Unknown,
-                "unknown phase state"};
+        result.status = step_executor::ExecuteStatus::Failed;
+        result.error.message = "unknown phase state";
+        result.error.retriable = false;
+        return result;
     }
   }
 
@@ -184,13 +178,13 @@ ExecuteResult ArmSolveClient::execute(const step_executor::Command &cmd) {
 
   // 启动新任务
   if (sendGoal(command)) {
-    return {step_executor::ExecuteStatus::Running,
-            step_executor::ErrorCode::Unknown,
-            std::nullopt};
+    result.status = step_executor::ExecuteStatus::Running;
+    return result;
   } else {
-    return {step_executor::ExecuteStatus::Failed,
-            step_executor::ErrorCode::ExecutionError,
-            lastError()};
+    result.status = step_executor::ExecuteStatus::Failed;
+    result.error.message = lastError();
+    result.error.retriable = true;
+    return result;
   }
 }
 

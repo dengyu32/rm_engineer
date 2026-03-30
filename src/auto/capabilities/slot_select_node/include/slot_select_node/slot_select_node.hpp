@@ -11,8 +11,8 @@
 
 #include "params_utils/param_utils.hpp"
 #include "slot_select_node/slot_types.hpp"
-#include "step_executor/types/command.hpp"
-#include "step_executor/types/execute_result.hpp"
+#include "auto_library/command.hpp"
+#include "auto_library/execute_result.hpp"
 
 namespace engineer_auto::slot_select_node {
 

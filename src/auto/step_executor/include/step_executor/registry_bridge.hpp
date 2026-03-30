@@ -1,11 +1,18 @@
+// registry_bridge.hpp 
+// 作为 capability handler 的注册中心, 提供复用注册能力方法
+
+// 注册方法
+
+
 #pragma once
 
 #include <functional>
 #include <string>
 #include <unordered_map>
 
-#include "step_executor/types/command.hpp"
-#include "step_executor/types/execute_result.hpp"
+// step layer
+#include "auto_library/command.hpp"
+#include "auto_library/execute_result.hpp"
 
 namespace step_executor {
 
@@ -13,7 +20,7 @@ namespace step_executor {
 //  ICapabilityBridge
 // ----------------------------------------------------------------------------
 //  - capability 执行接口
-//  - RegistryBridge / NoopBridge 的统一基类
+//  - RegistryBridge 的统一基类
 // ============================================================================
 
 class ICapabilityBridge {
@@ -34,6 +41,7 @@ public:
 
 class RegistryBridge : public ICapabilityBridge {
 public:
+  // 三个注册函数指针
   using HandlerFn = std::function<ExecuteResult(const Command &)>;
   using CancelFn = std::function<void()>;
   using ErrorFn = std::function<const char *()>;

@@ -7,7 +7,6 @@
 namespace engineer_auto::slot_select_node {
 
 using step_executor::Command;
-using step_executor::ErrorCode;
 using step_executor::ExecuteResult;
 using step_executor::ExecuteStatus;
 using step_executor::getParam;
@@ -38,7 +37,6 @@ ExecuteResult SlotSelectNode::executeSelect(const Command &cmd) {
   const auto *strategy = paramAs<std::string>(cmd, "strategy");
   if (!strategy) {
     result.status = ExecuteStatus::Failed;
-    result.error.code = ErrorCode::ValidationError;
     result.error.message = "slot.select missing strategy";
     result.error.retriable = false;
     return result;
@@ -51,7 +49,6 @@ ExecuteResult SlotSelectNode::executeSelect(const Command &cmd) {
     slot_strategy = SlotStrategy::SelectSlotToTake;
   } else {
     result.status = ExecuteStatus::Failed;
-    result.error.code = ErrorCode::ValidationError;
     result.error.message = "slot.select invalid strategy: " + *strategy;
     result.error.retriable = false;
     return result;
@@ -64,7 +61,6 @@ ExecuteResult SlotSelectNode::executeSelect(const Command &cmd) {
       err = "slot selection failed";
     }
     result.status = ExecuteStatus::Failed;
-    result.error.code = ErrorCode::ExecutionError;
     result.error.message = err;
     result.error.retriable = true;
     return result;
@@ -83,7 +79,6 @@ ExecuteResult SlotSelectNode::executeLockUnlock(const Command &cmd,
   int64_t slot_id = -1;
   if (!getParam(cmd, "slot_id", slot_id)) {
     result.status = ExecuteStatus::Failed;
-    result.error.code = ErrorCode::ValidationError;
     result.error.message = "slot command missing slot_id";
     result.error.retriable = false;
     return result;
@@ -95,7 +90,6 @@ ExecuteResult SlotSelectNode::executeLockUnlock(const Command &cmd,
       err = "slot command failed";
     }
     result.status = ExecuteStatus::Failed;
-    result.error.code = ErrorCode::ExecutionError;
     result.error.message = err;
     result.error.retriable = true;
     return result;

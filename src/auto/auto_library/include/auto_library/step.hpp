@@ -7,8 +7,8 @@
 #include <utility>
 #include <vector>
 
-#include "step_executor/types/command.hpp"
-#include "step_executor/types/context.hpp"
+#include "auto_library/command.hpp"
+#include "auto_library/context.hpp"
 
 namespace step_executor {
 

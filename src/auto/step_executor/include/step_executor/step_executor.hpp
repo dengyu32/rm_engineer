@@ -6,10 +6,10 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "step_executor/types/command.hpp"
-#include "step_executor/types/context.hpp"
-#include "step_executor/types/execute_result.hpp"
-#include "step_executor/types/task.hpp"
+#include "auto_library/command.hpp"
+#include "auto_library/context.hpp"
+#include "auto_library/execute_result.hpp"
+#include "auto_library/task.hpp"
 #include "step_executor/registry_bridge.hpp"
 
 namespace step_executor {

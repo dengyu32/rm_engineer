@@ -12,7 +12,7 @@
 
   <depend>rclcpp</depend>
   <depend>params_utils</depend>
-  <depend>step_executor</depend>
+  <depend>auto_library</depend>
   <depend>engineer_interfaces</depend>
   <depend>task_orchestrator</depend>
   <test_depend>ament_lint_auto</test_depend>

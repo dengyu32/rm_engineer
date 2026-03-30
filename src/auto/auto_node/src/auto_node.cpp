@@ -1,5 +1,5 @@
 #include "auto_node/auto_node.hpp"
-#include "auto_bridge/capability_registry.hpp"
+#include "auto_node/capability_registry.hpp"
 
 #include <chrono>
 #include <functional>
@@ -17,7 +17,7 @@ AutoNode::AutoNode(const rclcpp::NodeOptions &options)
     : rclcpp::Node("auto_node", options),
       config_(AutoNodeConfig::load(*this)),
       logger_(this->get_logger()),
-      executor_(this->get_logger(), auto_bridge::createAutoCapabilityBridge(*this)) {
+      executor_(this->get_logger(), auto_node::createAutoCapabilityBridge(*this)) {
   latest_task_id_.store(TaskId::IDLE, std::memory_order_relaxed);
 
   initRosInterfaces();

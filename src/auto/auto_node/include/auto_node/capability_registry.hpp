@@ -6,7 +6,7 @@
 
 #include "step_executor/types/capability_bridge.hpp"
 
-namespace engineer_auto::auto_bridge {
+namespace engineer_auto::auto_node {
 
 // ============================================================================
 //  Capability Registry
@@ -17,4 +17,4 @@ namespace engineer_auto::auto_bridge {
 std::shared_ptr<step_executor::ICapabilityBridge> createAutoCapabilityBridge(
     rclcpp::Node &node);
 
-} // namespace engineer_auto::auto_bridge
+} // namespace engineer_auto::auto_node

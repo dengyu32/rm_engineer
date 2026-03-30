@@ -35,6 +35,7 @@ bool hasOutputName(const Step &step, const std::string &name) {
 
 } // namespace
 
+// 传入 capability bridge 指针
 StepExecutor::StepExecutor(rclcpp::Logger logger,
                            std::shared_ptr<ICapabilityBridge> bridge)
     : logger_(logger), bridge_(std::move(bridge)) {}
@@ -160,7 +161,6 @@ void StepExecutor::tick(const rclcpp::Time &now) {
     result = bridge_->run(exec_cmd);
   } else {
     result.status = ExecuteStatus::Failed;
-    result.error.code = ErrorCode::TransportError;
     result.error.message = "bridge missing";
     result.error.retriable = false;
   }

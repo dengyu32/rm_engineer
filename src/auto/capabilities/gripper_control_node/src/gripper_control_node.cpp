@@ -5,7 +5,6 @@
 namespace engineer_auto::gripper_control_node {
 
 using step_executor::Command;
-using step_executor::ErrorCode;
 using step_executor::ExecuteResult;
 using step_executor::ExecuteStatus;
 using step_executor::paramAs;
@@ -31,7 +30,6 @@ ExecuteResult GripperControlNode::execute(const Command &cmd) {
   const auto *action = paramAs<std::string>(cmd, "action");
   if (!action) {
     result.status = ExecuteStatus::Failed;
-    result.error.code = ErrorCode::ValidationError;
     result.error.message = "gripper command missing action";
     result.error.retriable = false;
     return result;
@@ -44,7 +42,6 @@ ExecuteResult GripperControlNode::execute(const Command &cmd) {
     command = GripperCommand::CLOSE;
   } else {
     result.status = ExecuteStatus::Failed;
-    result.error.code = ErrorCode::ValidationError;
     result.error.message = "gripper action invalid: " + *action;
     result.error.retriable = false;
     return result;

@@ -9,6 +9,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(auto_library REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
 
@@ -24,6 +25,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 ament_target_dependencies(${PROJECT_NAME}
+  auto_library
   engineer_interfaces
   rclcpp
 )
@@ -38,6 +40,6 @@ install(DIRECTORY include/ DESTINATION include/)
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
-ament_export_dependencies(engineer_interfaces rclcpp)
+ament_export_dependencies(auto_library engineer_interfaces rclcpp)
 
 ament_package()

@@ -10,8 +10,8 @@
 
 #include "params_utils/param_utils.hpp"
 #include "gripper_control_node/gripper_types.hpp"
-#include "step_executor/types/command.hpp"
-#include "step_executor/types/execute_result.hpp"
+#include "auto_library/command.hpp"
+#include "auto_library/execute_result.hpp"
 
 namespace engineer_auto::gripper_control_node {
 

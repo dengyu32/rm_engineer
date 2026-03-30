@@ -14,6 +14,8 @@
   <depend>params_utils</depend>
   <depend>engineer_interfaces</depend>
   <depend>geometry_msgs</depend>
+  <depend>task_orchestrator</depend>
+  <depend>auto_library</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

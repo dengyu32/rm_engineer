@@ -13,7 +13,7 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(params_utils REQUIRED)
 find_package(engineer_interfaces REQUIRED)
-find_package(step_executor REQUIRED)
+find_package(auto_library REQUIRED)
 
 add_library(${PROJECT_NAME}
   src/arm_solve_client.cpp
@@ -30,7 +30,7 @@ ament_target_dependencies(${PROJECT_NAME}
   rclcpp_action
   params_utils
   engineer_interfaces
-  step_executor
+  auto_library
 )
 
 install(TARGETS ${PROJECT_NAME}
@@ -44,6 +44,6 @@ install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/)
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
-ament_export_dependencies(rclcpp rclcpp_action params_utils engineer_interfaces step_executor)
+ament_export_dependencies(rclcpp rclcpp_action params_utils engineer_interfaces auto_library)
 
 ament_package()

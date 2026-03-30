@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "step_executor/types/step.hpp"
+#include "auto_library/step.hpp"
 
 namespace step_executor {
 

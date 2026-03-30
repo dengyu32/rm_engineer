@@ -15,6 +15,7 @@
   <depend>std_msgs</depend>
   <depend>params_utils</depend>
   <depend>engineer_interfaces</depend>
+  <depend>auto_library</depend>
   <depend>task_orchestrator</depend>
   <depend>step_executor</depend>
   <depend>vision_detect_client</depend>

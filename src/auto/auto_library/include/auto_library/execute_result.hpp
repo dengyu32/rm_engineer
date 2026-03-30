@@ -4,7 +4,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "step_executor/types/value.hpp"
+#include "auto_library/value.hpp"
 
 namespace step_executor {
 
@@ -22,18 +22,7 @@ enum class ExecuteStatus : uint8_t {
   Failed = 2,
 };
 
-enum class ErrorCode : uint8_t {
-  ValidationError = 0,
-  NotReady = 1,
-  TransportError = 2,
-  ExecutionError = 3,
-  Timeout = 4,
-  Canceled = 5,
-  Unknown = 6,
-};
-
 struct ErrorInfo {
-  ErrorCode code{ErrorCode::Unknown};
   std::string message{};
   bool retriable{false};
   std::string detail{};

@@ -11,7 +11,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(params_utils REQUIRED)
-find_package(step_executor REQUIRED)
+find_package(auto_library REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(task_orchestrator REQUIRED)
 add_library(${PROJECT_NAME}
@@ -27,7 +27,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   params_utils
-  step_executor
+  auto_library
   engineer_interfaces
   task_orchestrator
 )
@@ -43,6 +43,6 @@ install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/)
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
-ament_export_dependencies(rclcpp params_utils step_executor engineer_interfaces task_orchestrator)
+ament_export_dependencies(rclcpp params_utils auto_library engineer_interfaces task_orchestrator)
 
 ament_package()
