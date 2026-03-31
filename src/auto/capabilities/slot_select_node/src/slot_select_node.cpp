@@ -6,11 +6,11 @@
 
 namespace engineer_auto::slot_select_node {
 
-using step_executor::Command;
-using step_executor::ExecuteResult;
-using step_executor::ExecuteStatus;
-using step_executor::getParam;
-using step_executor::paramAs;
+using core::Command;
+using core::ExecuteResult;
+using core::makeFailed;
+using core::makeSucceeded;
+using core::requireParam;
 
 SlotSelectNode::SlotSelectNode(rclcpp::Node &node, const SlotSelectConfig &config)
     : node_(node), logger_(node.get_logger()), config_(config) {
@@ -32,14 +32,10 @@ SlotSelectNode::SlotSelectNode(rclcpp::Node &node, const SlotSelectConfig &confi
 }
 
 ExecuteResult SlotSelectNode::executeSelect(const Command &cmd) {
-  ExecuteResult result{};
-
-  const auto *strategy = paramAs<std::string>(cmd, "strategy");
+  std::string err;
+  const auto *strategy = requireParam<std::string>(cmd, "strategy", err);
   if (!strategy) {
-    result.status = ExecuteStatus::Failed;
-    result.error.message = "slot.select missing strategy";
-    result.error.retriable = false;
-    return result;
+    return makeFailed(err, false);
   }
 
   SlotStrategy slot_strategy = SlotStrategy::SelectSlotToPut;
@@ -48,10 +44,7 @@ ExecuteResult SlotSelectNode::executeSelect(const Command &cmd) {
   } else if (*strategy == "take") {
     slot_strategy = SlotStrategy::SelectSlotToTake;
   } else {
-    result.status = ExecuteStatus::Failed;
-    result.error.message = "slot.select invalid strategy: " + *strategy;
-    result.error.retriable = false;
-    return result;
+    return makeFailed("slot.select invalid strategy", false);
   }
 
   int selected_slot = -1;
@@ -60,13 +53,10 @@ ExecuteResult SlotSelectNode::executeSelect(const Command &cmd) {
     if (err.empty()) {
       err = "slot selection failed";
     }
-    result.status = ExecuteStatus::Failed;
-    result.error.message = err;
-    result.error.retriable = true;
-    return result;
+    return makeFailed(err, true);
   }
 
-  result.status = ExecuteStatus::Succeeded;
+  auto result = makeSucceeded();
   result.outputs[task_orchestrator::protocol::kSlotId] =
       static_cast<int64_t>(selected_slot);
   return result;
@@ -74,29 +64,21 @@ ExecuteResult SlotSelectNode::executeSelect(const Command &cmd) {
 
 ExecuteResult SlotSelectNode::executeLockUnlock(const Command &cmd,
                                                 SlotStrategy strategy) {
-  ExecuteResult result{};
-
-  int64_t slot_id = -1;
-  if (!getParam(cmd, "slot_id", slot_id)) {
-    result.status = ExecuteStatus::Failed;
-    result.error.message = "slot command missing slot_id";
-    result.error.retriable = false;
-    return result;
+  std::string err;
+  const auto *slot_id = requireParam<int64_t>(cmd, "slot_id", err);
+  if (!slot_id) {
+    return makeFailed(err, false);
   }
 
-  if (!applySlotCommand(strategy, static_cast<int>(slot_id))) {
+  if (!applySlotCommand(strategy, static_cast<int>(*slot_id))) {
     std::string err = lastError();
     if (err.empty()) {
       err = "slot command failed";
     }
-    result.status = ExecuteStatus::Failed;
-    result.error.message = err;
-    result.error.retriable = true;
-    return result;
+    return makeFailed(err, true);
   }
 
-  result.status = ExecuteStatus::Succeeded;
-  return result;
+  return makeSucceeded();
 }
 
 bool SlotSelectNode::selectSlot(SlotStrategy strategy, int &selected_slot) {

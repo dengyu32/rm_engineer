@@ -1,11 +1,11 @@
 #pragma once
 
-#include <array>
 #include <cstdint>
 #include <string>
+#include <vector>
 #include <variant>
 
-namespace step_executor {
+namespace core {
 
 // ============================================================================
 //  Value
@@ -19,9 +19,15 @@ using Value = std::variant<
     int64_t,
     double,
     std::string,
-    std::array<double, 3>,  // vector
-    std::array<double, 7>,  // pose
-    std::array<float, 6>    // joints
+    std::vector<double>,
+    std::vector<float>
     >;
 
-} // namespace step_executor
+// 统一访问接口，减少业务层重复 std::get_if.
+// 获取 Value 中的具体类型指针，如果类型不匹配返回 nullptr
+template <typename T>
+inline const T *valueAs(const Value &value) {
+  return std::get_if<T>(&value);
+}
+
+} // namespace core

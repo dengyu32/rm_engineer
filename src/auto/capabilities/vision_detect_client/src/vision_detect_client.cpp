@@ -1,15 +1,16 @@
 #include "vision_detect_client/vision_detect_client.hpp"
 
-#include <array>
 #include <chrono>
 
 #include "task_orchestrator/protocol.hpp"
 
 namespace engineer_auto::vision_detect_client {
 
-using step_executor::Command;
-using step_executor::ExecuteResult;
-using step_executor::ExecuteStatus;
+using core::Command;
+using core::ExecuteResult;
+using core::makeFailed;
+using core::makeRunning;
+using core::makeSucceeded;
 
 VisionDetectClient::VisionDetectClient(rclcpp::Node &node)
     : node_(node), logger_(node.get_logger()), config_(VisionDetectClientConfig::load(node)) {
@@ -23,12 +24,10 @@ VisionDetectClient::VisionDetectClient(rclcpp::Node &node)
 
 ExecuteResult VisionDetectClient::execute(const Command &cmd) {
   (void)cmd;
-  ExecuteResult result{};
-
   VisionDetectionResult detection{};
   if (detect(detection)) {
-    result.status = ExecuteStatus::Succeeded;
-    const std::array<double, 7> pose{
+    auto result = makeSucceeded();
+    const std::vector<double> pose{
         detection.pose.x,
         detection.pose.y,
         detection.pose.z,
@@ -37,7 +36,7 @@ ExecuteResult VisionDetectClient::execute(const Command &cmd) {
         detection.pose.qz,
         detection.pose.qw,
     };
-    const std::array<double, 3> vec{
+    const std::vector<double> vec{
         detection.vector.x,
         detection.vector.y,
         detection.vector.z,
@@ -48,14 +47,10 @@ ExecuteResult VisionDetectClient::execute(const Command &cmd) {
   }
 
   if (last_error_ == "no vision target received yet" || last_error_ == "vision target stale") {
-    result.status = ExecuteStatus::Running;
-    return result;
+    return makeRunning();
   }
 
-  result.status = ExecuteStatus::Failed;
-  result.error.message = last_error_.empty() ? "vision command failed" : last_error_;
-  result.error.retriable = true;
-  return result;
+  return makeFailed(last_error_.empty() ? "vision command failed" : last_error_, true);
 }
 
 bool VisionDetectClient::detect(VisionDetectionResult &out) {

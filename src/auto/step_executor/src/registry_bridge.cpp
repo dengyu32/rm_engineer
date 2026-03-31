@@ -32,20 +32,20 @@ bool RegistryBridge::registerHandler(const std::string &kind,
 }
 
 // run 主要运行函数
-ExecuteResult RegistryBridge::run(const Command &cmd) {
+core::ExecuteResult RegistryBridge::run(const core::Command &cmd) {
   const auto it = handlers_.find(cmd.kind);
   // 没有注册这个 kind 的 handler
   if (it == handlers_.end()) {
     last_error_ = "Capability Not Registered";
-    ExecuteResult result{};
-    result.status = ExecuteStatus::Failed;
+    core::ExecuteResult result{};
+    result.status = core::ExecuteStatus::Failed;
     result.error.message = last_error_;
     result.error.retriable = false;
     return result;
   }
   // 调用注册的 handler run 函数
-  ExecuteResult result = it->second.run(cmd);
-  if (result.status == ExecuteStatus::Failed) {
+  core::ExecuteResult result = it->second.run(cmd);
+  if (result.status == core::ExecuteStatus::Failed) {
     if (result.error.message.empty() && it->second.error) {
       const char *err = it->second.error();
       if (err) {
@@ -56,7 +56,7 @@ ExecuteResult RegistryBridge::run(const Command &cmd) {
       result.error.message = "command failed";
     }
     last_error_ = result.error.message;
-  } else if (result.status == ExecuteStatus::Succeeded) {
+  } else if (result.status == core::ExecuteStatus::Succeeded) {
     last_error_.clear();
   }
   return result;

@@ -17,13 +17,13 @@ class TaskBuilder {
 public:
   explicit TaskBuilder(TaskId task_id);
 
-  TaskBuilder &add(step_executor::Step step);
+  TaskBuilder &add(core::Step step);
 
-  step_executor::TaskPlan build() &&;
-  step_executor::TaskPlan build() const &;
+  core::TaskPlan build() &&;
+  core::TaskPlan build() const &;
 
 private:
-  step_executor::TaskPlan plan_{};
+  core::TaskPlan plan_{};
 };
 
 } // namespace task_orchestrator

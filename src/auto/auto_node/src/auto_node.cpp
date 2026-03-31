@@ -28,7 +28,7 @@ AutoNode::AutoNode(const rclcpp::NodeOptions &options)
                                    std::bind(&AutoNode::statusTick, this));
 
   RCLCPP_INFO(logger_, "\n%s", config_.summary().c_str());
-  publishFeedback(TaskId::IDLE, step_executor::TaskStatus::Running);
+  publishFeedback(TaskId::IDLE, core::TaskStatus::Running);
   RCLCPP_INFO(logger_, "[AUTO_NODE] started");
 }
 
@@ -102,7 +102,7 @@ void AutoNode::tick() {
   // 3. 如果executor_结束，发布 feedback，并更新当前status_text_
   // TO REQUEST: 这里只在这打印一次feedback是否有所不妥？
   if (executor_.isFinished()) {
-    const step_executor::TaskResult report = executor_.report();
+    const core::TaskResult report = executor_.report();
     TaskId done_task_id = TaskId::IDLE;
     const uint8_t done_raw = executor_.activeTaskId();
     toTaskId(done_raw, done_task_id);
@@ -116,7 +116,7 @@ void AutoNode::tick() {
     oss << "task=" << task_orchestrator::task_name(done_task_id)
         << " step=" << (executor_.currentStepIndex() + 1) << "/" << executor_.totalSteps()
         << " label=" << executor_.currentStepLabel()
-        << " status=" << (report.status == step_executor::TaskStatus::Success ? "finished" : "failed");
+        << " status=" << (report.status == core::TaskStatus::Success ? "finished" : "failed");
     if (!report.message.empty()) {
       oss << " reason=" << report.message;
     }
@@ -142,24 +142,24 @@ void AutoNode::handleIntent(TaskId task_id) {
 
   if (task_id == TaskId::IDLE) {
     // IDLE 状态返回 Running 表明 IDLE 正常运行
-    publishFeedback(TaskId::IDLE, step_executor::TaskStatus::Running);
+    publishFeedback(TaskId::IDLE, core::TaskStatus::Running);
     status_text_ = "task=IDLE status=idle";
     return;
   }
 
   const auto plan = orchestrator_.plan(task_id);
   if (!plan) {
-    publishFeedback(task_id, step_executor::TaskStatus::Failure);
+    publishFeedback(task_id, core::TaskStatus::Failure);
     RCLCPP_WARN(logger_, "[AUTO_NODE] no plan for task=%u",
                 static_cast<unsigned>(task_id));
     return;
   }
 
   executor_.start(*plan);
-  publishFeedback(task_id, step_executor::TaskStatus::Running);
+  publishFeedback(task_id, core::TaskStatus::Running);
 }
 
-void AutoNode::publishFeedback(TaskId task_id, step_executor::TaskStatus status) {
+void AutoNode::publishFeedback(TaskId task_id, core::TaskStatus status) {
   engineer_interfaces::msg::Intent msg;
   msg.stamp = this->now();
   msg.intent_id = static_cast<uint8_t>(task_id);

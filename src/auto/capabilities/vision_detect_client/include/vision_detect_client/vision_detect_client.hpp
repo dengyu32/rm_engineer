@@ -53,7 +53,7 @@ class VisionDetectClient {
 public:
   explicit VisionDetectClient(rclcpp::Node &node);
 
-  step_executor::ExecuteResult execute(const step_executor::Command &cmd);
+  core::ExecuteResult execute(const core::Command &cmd);
   bool detect(VisionDetectionResult &out);
 
   const std::string &lastError() const { return last_error_; }

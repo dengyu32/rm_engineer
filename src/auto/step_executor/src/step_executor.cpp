@@ -5,6 +5,21 @@
 
 namespace step_executor {
 
+using core::Binding;
+using core::BindingOp;
+using core::Command;
+using core::ContextKey;
+using core::ContextScope;
+using core::ExecuteResult;
+using core::ExecuteStatus;
+using core::Step;
+using core::TaskPlan;
+using core::TaskResult;
+using core::TaskId;
+using core::TaskStatus;
+using core::Value;
+using core::valueAs;
+
 namespace {
 
 const char *scopeName(ContextScope scope) {
@@ -46,6 +61,8 @@ void StepExecutor::start(const TaskPlan &plan) {
   step_entered_ = false;
   retries_left_ = 0;
   step_start_time_ = rclcpp::Time(0, 0, RCL_STEADY_TIME);
+  post_delay_active_ = false;
+  post_delay_start_time_ = rclcpp::Time(0, 0, RCL_STEADY_TIME);
   running_ = true;
   finished_ = false;
   context_.clearTask();
@@ -86,6 +103,19 @@ void StepExecutor::tick(const rclcpp::Time &now) {
     }
   }
 
+  if (post_delay_active_) {
+    if (step.post_delay_ms < 0) {
+      fail(TaskStatus::Failure, "post delay invalid duration_ms: " + step.id);
+      return;
+    }
+    const double elapsed_ms = (now - post_delay_start_time_).seconds() * 1000.0;
+    if (elapsed_ms >= static_cast<double>(step.post_delay_ms)) {
+      post_delay_active_ = false;
+      enterNextStep();
+    }
+    return;
+  }
+
   if (step.timeout_ms > 0) {
     const double elapsed_ms = (now - step_start_time_).seconds() * 1000.0;
     if (elapsed_ms >= static_cast<double>(step.timeout_ms)) {
@@ -114,41 +144,6 @@ void StepExecutor::tick(const rclcpp::Time &now) {
     }
   }
 
-  if (step.type == StepType::Control) {
-    switch (step.control.kind) {
-    case ControlKind::Delay: {
-      if (step.control.delay_ms < 0) {
-        fail(TaskStatus::Failure, "delay step invalid duration_ms: " + step.id);
-        return;
-      }
-      const double elapsed_ms = (now - step_start_time_).seconds() * 1000.0;
-      if (elapsed_ms >= static_cast<double>(step.control.delay_ms)) {
-        enterNextStep();
-      }
-      return;
-    }
-    case ControlKind::Guard: {
-      if (step.control.guard_key.name.empty()) {
-        fail(TaskStatus::Failure, "guard step missing key: " + step.id);
-        return;
-      }
-      const bool present = context_.has(step.control.guard_key);
-      if (step.control.require_present != present) {
-        const std::string expect = step.control.require_present ? "present" : "absent";
-        fail(TaskStatus::Failure,
-             "guard step failed: " + step.id + " key=" + step.control.guard_key.name +
-                 " expect=" + expect);
-        return;
-      }
-      enterNextStep();
-      return;
-    }
-    default:
-      fail(TaskStatus::Failure, "unsupported control step: " + step.id);
-      return;
-    }
-  }
-
   Command exec_cmd = step.command;
   std::string error;
   if (!applyBindings(step, exec_cmd, error)) {
@@ -172,6 +167,11 @@ void StepExecutor::tick(const rclcpp::Time &now) {
   if (result.status == ExecuteStatus::Succeeded) {
     if (!applyOutputs(step, result, error)) {
       fail(TaskStatus::Failure, "step output failed: " + step.id + " err=" + error);
+      return;
+    }
+    if (step.post_delay_ms > 0) {
+      post_delay_active_ = true;
+      post_delay_start_time_ = now;
       return;
     }
     enterNextStep();
@@ -219,6 +219,8 @@ void StepExecutor::reset() {
   step_entered_ = false;
   retries_left_ = 0;
   step_start_time_ = rclcpp::Time(0, 0, RCL_STEADY_TIME);
+  post_delay_active_ = false;
+  post_delay_start_time_ = rclcpp::Time(0, 0, RCL_STEADY_TIME);
   running_ = false;
   finished_ = false;
   context_.clearTask();
@@ -265,7 +267,7 @@ bool StepExecutor::applyBindings(const Step &step, Command &cmd, std::string &er
           error = "binding table missing: " + binding.from.name;
           return false;
         }
-        const int64_t *slot_id = std::get_if<int64_t>(&value);
+        const int64_t *slot_id = valueAs<int64_t>(value);
         if (!slot_id) {
           error = "binding type mismatch (expected int64): " + binding.from.name;
           return false;
@@ -275,7 +277,8 @@ bool StepExecutor::applyBindings(const Step &step, Command &cmd, std::string &er
           error = "binding index out of range: " + binding.from.name;
           return false;
         }
-        cmd.params[binding.to_param] = binding.joints_table[*slot_id];
+        const auto &row = binding.joints_table[*slot_id];
+        cmd.params[binding.to_param] = std::vector<float>(row.begin(), row.end());
         break;
       }
       default:
@@ -322,6 +325,7 @@ void StepExecutor::fail(TaskStatus status, const std::string &message) {
 void StepExecutor::enterNextStep() {
   ++step_index_;
   step_entered_ = false;
+  post_delay_active_ = false;
 }
 
 } // namespace step_executor

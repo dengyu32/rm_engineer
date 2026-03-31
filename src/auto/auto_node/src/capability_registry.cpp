@@ -18,15 +18,7 @@ namespace visc = engineer_auto::vision_detect_client;
 
 namespace protocol = task_orchestrator::protocol;
 
-namespace {
-inline step_executor::ExecuteResult Fail(const std::string &msg) {
-  step_executor::ExecuteResult result{};
-  result.status = step_executor::ExecuteStatus::Failed;
-  result.error.message = msg;
-  result.error.retriable = false;
-  return result;
-}
-}
+using core::makeFailed;
 
 std::shared_ptr<step_executor::ICapabilityBridge> createAutoCapabilityBridge(rclcpp::Node &node) {
     auto registry = std::make_shared<step_executor::RegistryBridge>();
@@ -42,7 +34,7 @@ std::shared_ptr<step_executor::ICapabilityBridge> createAutoCapabilityBridge(rcl
     {
         auto a = std::make_shared<armc::ArmSolveClient>(node, armc::ArmSolveClientConfig::load(node));
         bind(protocol::kArmMoveKind, 
-             [a](const auto& c) { armc::ArmMoveSpec s; std::string e; return a->buildSpec(c, s, e) ? a->execute(s) : Fail(e); },
+             [a](const auto& c) { armc::ArmMoveSpec s; std::string e; return a->buildSpec(c, s, e) ? a->execute(s) : makeFailed(e, false); },
              [a]() { a->cancel(); });
     }
 

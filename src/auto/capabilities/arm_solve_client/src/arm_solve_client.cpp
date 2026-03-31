@@ -46,11 +46,14 @@ ArmSolveClient::ArmSolveClient(rclcpp::Node &node,
 //  buildSpec -- 解析 Command 参数，生成 ArmMoveSpec
 // ============================================================================
 
-bool ArmSolveClient::buildSpec(const step_executor::Command &cmd,
+bool ArmSolveClient::buildSpec(const core::Command &cmd,
                                ArmMoveSpec &out,
                                std::string &error) const {
-  if (const auto *pose =
-          step_executor::paramAs<std::array<double, 7>>(cmd, "target_pose")) {
+  if (const auto *pose = core::paramAs<std::vector<double>>(cmd, "target_pose")) {
+    if (pose->size() != 7) {
+      error = "arm target_pose must have 7 elements";
+      return false;
+    }
     out.plan_option = PlanOption::NORMAL;
     out.pose.x = (*pose)[0];
     out.pose.y = (*pose)[1];
@@ -62,15 +65,22 @@ bool ArmSolveClient::buildSpec(const step_executor::Command &cmd,
     error.clear();
     return true;
   }
-  if (const auto *joints =
-          step_executor::paramAs<std::array<float, 6>>(cmd, "target_joints")) {
+  if (const auto *joints = core::paramAs<std::vector<float>>(cmd, "target_joints")) {
+    if (joints->size() != 6) {
+      error = "arm target_joints must have 6 elements";
+      return false;
+    }
     out.plan_option = PlanOption::JOINTS;
-    out.joints = *joints;
+    out.joints = {(*joints)[0], (*joints)[1], (*joints)[2],
+                  (*joints)[3], (*joints)[4], (*joints)[5]};
     error.clear();
     return true;
   }
-  if (const auto *vec =
-          step_executor::paramAs<std::array<double, 3>>(cmd, "target_vector")) {
+  if (const auto *vec = core::paramAs<std::vector<double>>(cmd, "target_vector")) {
+    if (vec->size() != 3) {
+      error = "arm target_vector must have 3 elements";
+      return false;
+    }
     out.plan_option = PlanOption::CARTESIAN;
     out.vector.x = (*vec)[0];
     out.vector.y = (*vec)[1];
@@ -89,8 +99,8 @@ bool ArmSolveClient::buildSpec(const step_executor::Command &cmd,
 //  相当于轮询状态机
 // ============================================================================
 
-step_executor::ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command) {
-  step_executor::ExecuteResult result{};
+core::ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command) {
+  core::ExecuteResult result{};
 
   std::shared_ptr<GoalContext> ctx;
   std::shared_ptr<GoalHandleMove> gh;
@@ -104,10 +114,10 @@ step_executor::ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command)
   // 未执行任务
   if (!ctx) {
     if (sendGoal(command)) {
-      result.status = step_executor::ExecuteStatus::Running;
+      result.status = core::ExecuteStatus::Running;
       return result;
     } else {
-      result.status = step_executor::ExecuteStatus::Failed;
+      result.status = core::ExecuteStatus::Failed;
       result.error.message = lastError();
       result.error.retriable = true;
       return result;
@@ -121,7 +131,7 @@ step_executor::ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command)
     switch (phase) {
       case GoalPhase::Pending:
       case GoalPhase::Running:
-        result.status = step_executor::ExecuteStatus::Running;
+        result.status = core::ExecuteStatus::Running;
         return result;
 
       case GoalPhase::Succeeded:
@@ -133,7 +143,7 @@ step_executor::ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command)
             goal_handle_.reset();
           } 
         }
-        result.status = step_executor::ExecuteStatus::Succeeded;
+        result.status = core::ExecuteStatus::Succeeded;
         return result;
 
       case GoalPhase::Failed:
@@ -146,13 +156,13 @@ step_executor::ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command)
             goal_handle_.reset();
           } 
         }
-        result.status = step_executor::ExecuteStatus::Failed;
+        result.status = core::ExecuteStatus::Failed;
         result.error.message = lastError();
         result.error.retriable = true;
         return result;
       
       default:
-        result.status = step_executor::ExecuteStatus::Failed;
+        result.status = core::ExecuteStatus::Failed;
         result.error.message = "unknown phase state";
         result.error.retriable = false;
         return result;
@@ -178,10 +188,10 @@ step_executor::ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command)
 
   // 启动新任务
   if (sendGoal(command)) {
-    result.status = step_executor::ExecuteStatus::Running;
+    result.status = core::ExecuteStatus::Running;
     return result;
   } else {
-    result.status = step_executor::ExecuteStatus::Failed;
+    result.status = core::ExecuteStatus::Failed;
     result.error.message = lastError();
     result.error.retriable = true;
     return result;

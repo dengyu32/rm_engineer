@@ -6,7 +6,7 @@
 
 #include "auto_library/value.hpp"
 
-namespace step_executor {
+namespace core {
 
 // ============================================================================
 //  ExecuteResult
@@ -34,4 +34,27 @@ struct ExecuteResult {
   ErrorInfo error{};
 };
 
-} // namespace step_executor
+// 辅助函数 构造不同类型的 ExecuteResult
+inline ExecuteResult makeSucceeded() {
+  ExecuteResult result{};
+  result.status = ExecuteStatus::Succeeded;
+  return result;
+}
+
+inline ExecuteResult makeRunning() {
+  ExecuteResult result{};
+  result.status = ExecuteStatus::Running;
+  return result;
+}
+
+inline ExecuteResult makeFailed(std::string message, bool retriable = false,
+                                std::string detail = {}) {
+  ExecuteResult result{};
+  result.status = ExecuteStatus::Failed;
+  result.error.message = std::move(message);
+  result.error.retriable = retriable;
+  result.error.detail = std::move(detail);
+  return result;
+}
+
+} // namespace core

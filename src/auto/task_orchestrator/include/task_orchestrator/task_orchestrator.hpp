@@ -16,7 +16,7 @@ namespace task_orchestrator {
 
 class TaskOrchestrator {
 public:
-  std::optional<step_executor::TaskPlan> plan(TaskId request) const;
+  std::optional<core::TaskPlan> plan(TaskId request) const;
 };
 
 } // namespace task_orchestrator

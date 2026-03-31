@@ -6,6 +6,7 @@
 #### 目录结构
 src/auto/
 ├── auto.md
+├── auto_library
 ├── auto_node
 ├── capabilities
 ├── step_executor
@@ -33,16 +34,31 @@ src/auto/
 
 #### 依赖方向
 - auto_node -> task_orchestrator -> step_executor
+- auto_node -> auto_library
 - auto_node -> capabilities/*
-- capabilities/* -> engineer_interfaces / rclcpp / ...
+- capabilities/* -> auto_library / engineer_interfaces / rclcpp / ...
+- step_executor -> auto_library
+- task_orchestrator -> auto_library
 
 #### 核心对象
+**auto_library（层间接口）**
+- Command / Value / ExecuteResult / Context / Step / Task
+- 放在 auto_library 包，供 task/step/capability 共用
+
 **Command（唯一执行对象）**
 ```c++
 struct Command {
   std::string kind;                     // "arm.move" / "gripper.cmd" / ...
   std::unordered_map<std::string,Value> params; // 具体参数（variant）
 };
+```
+
+Value 支持基础数值、字符串与向量：
+```c++
+using Value = std::variant<
+  bool, int64_t, double, std::string,
+  std::vector<double>, std::vector<float>
+>;
 ```
 
 **Step（显式依赖）**
@@ -54,6 +70,7 @@ struct Step {
   std::vector<ContextKey> inputs;       // 显式依赖
   std::vector<ContextKey> outputs;      // 显式产出
   std::vector<Binding> bindings;        // 绑定规则
+  int post_delay_ms;                    // 动作完成后等待
   int timeout_ms;
   int max_retries;
 };
@@ -82,9 +99,11 @@ struct Binding {
 4. 调 capability 执行 command
 5. capability 返回 outputs
 6. StepExecutor 校验 outputs 并写入 Context
-7. 进入下一步
+7. 若 post_delay_ms > 0，等待后进入下一步
+   - Guard 暂不实现，后续按需求再设计
 
-#### Capabilities Bridge
+#### Capability Registry
+（不再使用独立 bridge 类，registry 直接注册能力对象）
 ```c++
 ExecuteResult run(const Command &cmd)
 void cancel()
@@ -97,6 +116,15 @@ struct ExecuteResult {
   ExecuteStatus status;                 // Running | Succeeded | Failed
   std::unordered_map<std::string,Value> outputs;
   ErrorInfo error;                      // Failed 时必填
+};
+```
+
+**ErrorInfo**
+```c++
+struct ErrorInfo {
+  std::string message;
+  bool retriable;
+  std::string detail;                   // 可选
 };
 ```
 
@@ -136,14 +164,14 @@ struct ExecuteResult {
    - inputs: SlotID@task
    - bindings: SlotID -> params.slot_id
 
-#### Slot 链路（新）
+#### Slot 链路
 1. TaskOrchestrator 插入 slot.select + 后续 slot.lock/unlock
 2. StepExecutor 执行 command，按 outputs 写入 Context
-3. SlotCapabilityBridge 返回 SlotID
+3. SlotSelectNode 返回 SlotID
 4. StepExecutor 依据 bindings 将 SlotID 显式映射到 preset.SLOTS，再注入 target_joints
 5. Arm capability 只接收 joints，不感知 slot
 
 #### 代办
 - DAG 执行（暂不启用，当前线性）
-- Guard / Cleanup 机制扩展
+- Cleanup 机制扩展
 - 行为树替换调度框架（待评估）

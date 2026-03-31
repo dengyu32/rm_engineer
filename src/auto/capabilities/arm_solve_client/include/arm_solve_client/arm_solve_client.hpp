@@ -73,10 +73,10 @@ class ArmSolveClient {
 public:
   explicit ArmSolveClient(rclcpp::Node &node, const ArmSolveClientConfig &config);
 
-  bool buildSpec(const step_executor::Command &cmd,
+  bool buildSpec(const core::Command &cmd,
                  ArmMoveSpec &out,
                  std::string &error) const;
-  step_executor::ExecuteResult execute(const ArmMoveSpec &spec);
+  core::ExecuteResult execute(const ArmMoveSpec &spec);
   void cancel();
   std::string lastError() const;
 

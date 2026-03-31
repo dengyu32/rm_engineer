@@ -47,7 +47,7 @@ class GripperControlNode {
 public:
   explicit GripperControlNode(rclcpp::Node &node, const GripperPresetConfig &config);
 
-  step_executor::ExecuteResult execute(const step_executor::Command &cmd);
+  core::ExecuteResult execute(const core::Command &cmd);
   void setCommand(GripperCommand command);
   void cancel();
 

@@ -27,7 +27,7 @@ class ICapabilityBridge {
 public:
   virtual ~ICapabilityBridge() = default;
 
-  virtual ExecuteResult run(const Command &cmd) = 0;
+  virtual core::ExecuteResult run(const core::Command &cmd) = 0;
   virtual void cancel() = 0;
   virtual const char *lastError() const = 0;
 };
@@ -42,7 +42,7 @@ public:
 class RegistryBridge : public ICapabilityBridge {
 public:
   // 三个注册函数指针
-  using HandlerFn = std::function<ExecuteResult(const Command &)>;
+  using HandlerFn = std::function<core::ExecuteResult(const core::Command &)>;
   using CancelFn = std::function<void()>;
   using ErrorFn = std::function<const char *()>;
 
@@ -51,7 +51,7 @@ public:
                        CancelFn cancel = {},
                        ErrorFn error = {});
 
-  ExecuteResult run(const Command &cmd) override;
+  core::ExecuteResult run(const core::Command &cmd) override;
   void cancel() override;
   const char *lastError() const override { return last_error_.c_str(); }
 
