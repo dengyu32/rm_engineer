@@ -2,3 +2,4 @@
   ros__parameters:
     group_name: "engineer_arm"
     ee_link_name: "link6"
+    c: "base_link" 

@@ -1,25 +1,23 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>arm_solve_server</name>
+  <name>executor</name>
   <version>0.0.0</version>
-  <description>ROS 2 action server for arm solve requests.</description>
-  <maintainer email="2281904682@qq.com">wrj</maintainer>
+  <description>Motion execution logic package that wraps planning, collision checking and time parameterization.</description>
+  <maintainer email="2188755469@qq.com">zc</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>engineer_interfaces</depend>
-  <depend>executor</depend>
+  <depend>calculator</depend>
+  <depend>collision</depend>
   <depend>geometry_msgs</depend>
   <depend>moveit_core</depend>
   <depend>moveit_ros_planning</depend>
   <depend>moveit_ros_planning_interface</depend>
-  <depend>moveit_visual_tools</depend>
   <depend>params_utils</depend>
+  <depend>planner</depend>
   <depend>rclcpp</depend>
-  <depend>rclcpp_action</depend>
-  <depend>rclcpp_components</depend>
   <depend>tf2</depend>
   <depend>tf2_eigen</depend>
   <depend>tf2_geometry_msgs</depend>

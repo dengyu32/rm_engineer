@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(arm_solve_server)
+project(executor)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,24 +9,25 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
-find_package(engineer_interfaces REQUIRED)
-find_package(executor REQUIRED)
+find_package(calculator REQUIRED)
+find_package(collision REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(moveit_core REQUIRED)
 find_package(moveit_ros_planning REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
-find_package(moveit_visual_tools REQUIRED)
 find_package(params_utils REQUIRED)
+find_package(planner REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(rclcpp_action REQUIRED)
-find_package(rclcpp_components REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(types REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
-  src/arm_solve_server.cpp
+  src/executor.cpp
+  src/detail.cpp
+  src/test.cpp
+  src/time_params.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
@@ -35,26 +36,19 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 ament_target_dependencies(${PROJECT_NAME}
-  engineer_interfaces
-  executor
+  calculator
+  collision
   geometry_msgs
   moveit_core
   moveit_ros_planning
   moveit_ros_planning_interface
-  moveit_visual_tools
   params_utils
+  planner
   rclcpp
-  rclcpp_action
-  rclcpp_components
   tf2
   tf2_eigen
   tf2_geometry_msgs
   types
-)
-
-rclcpp_components_register_node(${PROJECT_NAME}
-  PLUGIN "arm_solve::ArmSolveServer"
-  EXECUTABLE arm_solve_server_node
 )
 
 install(TARGETS ${PROJECT_NAME}
@@ -68,24 +62,24 @@ install(DIRECTORY include/
   DESTINATION include
 )
 
-install(DIRECTORY config
-  DESTINATION share/${PROJECT_NAME}
-)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/config")
+  install(DIRECTORY config
+    DESTINATION share/${PROJECT_NAME}
+  )
+endif()
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
 ament_export_dependencies(
-  engineer_interfaces
-  executor
+  calculator
+  collision
   geometry_msgs
   moveit_core
   moveit_ros_planning
   moveit_ros_planning_interface
-  moveit_visual_tools
   params_utils
+  planner
   rclcpp
-  rclcpp_action
-  rclcpp_components
   tf2
   tf2_eigen
   tf2_geometry_msgs
