@@ -44,7 +44,7 @@ std::shared_ptr<step_executor::ICapabilityBridge> createAutoCapabilityBridge(rcl
         bind(protocol::kGripperKind, [g](const auto& c) { return g->execute(c); }, [g]() { g->cancel(); });
     }
 
-    // 3. Slot Select (一个对象，多个绑定)
+    // 3. Slot Select (一个对象，多个绑定, 对应多个动作)
     {
         auto s = std::make_shared<slotc::SlotSelectNode>(node, slotc::SlotSelectConfig::load(node));
         bind(protocol::kSlotSelectKind, [s](const auto& c) { return s->executeSelect(c); });
