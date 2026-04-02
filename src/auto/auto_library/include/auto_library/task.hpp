@@ -23,11 +23,11 @@ struct TaskPlan {
 };
 
 enum class TaskStatus : uint8_t {
-  Success = 0,
-  Failure = 1,
-  Timeout = 2,
-  Canceled = 3,
-  Running = 4,
+  Running = 0,
+  Success = 1,
+  Failure = 2,
+  Timeout = 3,
+  Canceled = 4,
 };
 
 struct TaskResult {

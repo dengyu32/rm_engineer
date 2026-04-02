@@ -9,19 +9,15 @@
 
 namespace engineer_auto::arm_solve_client {
 
-// ============================================================================
-//  匿名空间
-// ============================================================================
-
 namespace {
 bool sameTarget(const engineer_interfaces::msg::Pose &lhs,
-                                const engineer_interfaces::msg::Pose &rhs) {
+                const engineer_interfaces::msg::Pose &rhs) {
   return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z && lhs.qx == rhs.qx &&
          lhs.qy == rhs.qy && lhs.qz == rhs.qz && lhs.qw == rhs.qw;
 }
 
 bool sameVector(const geometry_msgs::msg::Vector3 &lhs,
-                                const geometry_msgs::msg::Vector3 &rhs) {
+                const geometry_msgs::msg::Vector3 &rhs) {
   return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
 }
 
@@ -29,7 +25,7 @@ bool sameRequest(const ArmMoveSpec &lhs, const ArmMoveSpec &rhs) {
   return lhs.plan_option == rhs.plan_option && lhs.joints == rhs.joints &&
          sameTarget(lhs.pose, rhs.pose) && sameVector(lhs.vector, rhs.vector);
 }
-}  
+} // namespace
 
 // ============================================================================
 //  CTOR
@@ -42,20 +38,146 @@ ArmSolveClient::ArmSolveClient(rclcpp::Node &node,
   action_client_ = rclcpp_action::create_client<Move>(&node_, config_.action_name);
 }
 
-bool ArmSolveClient::sameTarget(const engineer_interfaces::msg::Pose &lhs,
-                                const engineer_interfaces::msg::Pose &rhs) {
-  return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z && lhs.qx == rhs.qx &&
-         lhs.qy == rhs.qy && lhs.qz == rhs.qz && lhs.qw == rhs.qw;
+// ============================================================================
+//  buildSpec -- 解析 Command 参数，生成 ArmMoveSpec
+// ============================================================================
+
+bool ArmSolveClient::buildSpec(const core::Command &cmd,
+                               ArmMoveSpec &out,
+                               std::string &error) const {
+  if (const auto *pose = core::paramAs<std::vector<double>>(cmd, "target_pose")) {
+    if (pose->size() != 7) {
+      error = "arm target_pose must have 7 elements";
+      return false;
+    }
+    out.plan_option = PlanOption::NORMAL;
+    out.pose.x = (*pose)[0];
+    out.pose.y = (*pose)[1];
+    out.pose.z = (*pose)[2];
+    out.pose.qx = (*pose)[3];
+    out.pose.qy = (*pose)[4];
+    out.pose.qz = (*pose)[5];
+    out.pose.qw = (*pose)[6];
+    error.clear();
+    return true;
+  }
+  if (const auto *joints = core::paramAs<std::vector<float>>(cmd, "target_joints")) {
+    if (joints->size() != 6) {
+      error = "arm target_joints must have 6 elements";
+      return false;
+    }
+    out.plan_option = PlanOption::JOINTS;
+    out.joints = {(*joints)[0], (*joints)[1], (*joints)[2],
+                  (*joints)[3], (*joints)[4], (*joints)[5]};
+    error.clear();
+    return true;
+  }
+  if (const auto *vec = core::paramAs<std::vector<double>>(cmd, "target_vector")) {
+    if (vec->size() != 3) {
+      error = "arm target_vector must have 3 elements";
+      return false;
+    }
+    out.plan_option = PlanOption::CARTESIAN;
+    out.vector.x = (*vec)[0];
+    out.vector.y = (*vec)[1];
+    out.vector.z = (*vec)[2];
+    error.clear();
+    return true;
+  }
+
+  error = "arm command missing target";
+  return false;
 }
 
-bool ArmSolveClient::sameVector(const geometry_msgs::msg::Vector3 &lhs,
-                                const geometry_msgs::msg::Vector3 &rhs) {
-  return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
-}
+// ============================================================================
+//  EXECUTE -- 核心函数，该能力层提供的对外接口，表示执行并跟进 GOAL 状态
+// ----------------------------------------------------------------------------
+//  相当于轮询状态机
+// ============================================================================
 
-bool ArmSolveClient::sameRequest(const ArmMoveSpec &lhs, const ArmMoveSpec &rhs) {
-  return lhs.plan_option == rhs.plan_option && lhs.joints == rhs.joints &&
-         sameTarget(lhs.pose, rhs.pose) && sameVector(lhs.vector, rhs.vector);
+core::ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command) {
+  core::ExecuteResult result{};
+
+  std::shared_ptr<GoalContext> ctx;
+  std::shared_ptr<GoalHandleMove> gh;
+  {
+    std::scoped_lock lock(mutex_);
+    ctx = active_ctx_;
+    gh = goal_handle_;
+  }
+
+  if (!ctx) {
+    if (sendGoal(command)) {
+      result.status = core::ExecuteStatus::Running;
+      return result;
+    }
+    result.status = core::ExecuteStatus::Failed;
+    result.error.message = lastError();
+    result.error.retriable = true;
+    return result;
+  }
+
+  if (sameRequest(ctx->request, command)) {
+    const auto phase = ctx->phase.load();
+    switch (phase) {
+      case GoalPhase::Pending:
+      case GoalPhase::Running:
+        result.status = core::ExecuteStatus::Running;
+        return result;
+
+      case GoalPhase::Succeeded: {
+        std::scoped_lock lock(mutex_);
+        if (active_ctx_ == ctx) {
+          active_ctx_.reset();
+          goal_handle_.reset();
+        }
+        result.status = core::ExecuteStatus::Succeeded;
+        return result;
+      }
+
+      case GoalPhase::Failed:
+      case GoalPhase::Canceled: {
+        std::scoped_lock lock(mutex_);
+        if (active_ctx_ == ctx) {
+          active_ctx_.reset();
+          goal_handle_.reset();
+        }
+        result.status = core::ExecuteStatus::Failed;
+        result.error.message = lastError();
+        result.error.retriable = true;
+        return result;
+      }
+
+      default:
+        result.status = core::ExecuteStatus::Failed;
+        result.error.message = "unknown phase state";
+        result.error.retriable = false;
+        return result;
+    }
+  }
+
+  if (ctx) {
+    ctx->cancel_requested.store(true);
+    if (gh) {
+      action_client_->async_cancel_goal(gh);
+    }
+    {
+      std::scoped_lock lock(mutex_);
+      if (active_ctx_ == ctx) {
+        active_ctx_.reset();
+        goal_handle_.reset();
+      }
+    }
+  }
+
+  if (sendGoal(command)) {
+    result.status = core::ExecuteStatus::Running;
+    return result;
+  }
+  result.status = core::ExecuteStatus::Failed;
+  result.error.message = lastError();
+  result.error.retriable = true;
+  return result;
 }
 
 bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
@@ -103,7 +225,6 @@ bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
   goal.target_pose = command.pose;
   goal.target_joints = command.joints;
   goal.target_vector = command.vector;
-  goal.target_length = command.target_length;
 
   // 回调
   rclcpp_action::Client<Move>::SendGoalOptions opts;

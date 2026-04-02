@@ -167,7 +167,7 @@ def generate_launch_description():
         static_tf,
         node_object_load,
         node_move_group,
-        node_rviz,
+        # node_rviz,
         late_init
     ])
     
