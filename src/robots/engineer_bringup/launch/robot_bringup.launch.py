@@ -75,6 +75,7 @@ def generate_launch_description():
     bringup_config_path     = os.path.join(bringup_config, "config", "bringup.yaml")
     joint_reset_path        = os.path.join(params_utils_share, "config", "joint_reset.yaml")
     moveit_reset_path       = os.path.join(params_utils_share, "config", "moveit_reset.yaml")
+    solve_executor_path     = os.path.join(params_utils_share, "config", "solve_executor.yaml")
     
     # 一些配置参数
     # initial_positions = load_yaml(initial_positions_path)["initial_positions"]
@@ -118,7 +119,7 @@ def generate_launch_description():
         executable="arm_solve_server",
         name="arm_solve_server",
         output="screen",
-        parameters=common_params + [joint_reset_path, moveit_reset_path, bringup_config_path],
+        parameters=common_params + [joint_reset_path, moveit_reset_path, solve_executor_path, bringup_config_path],
     )
     
     # top_hfsm launch 文件（多线程组件容器）

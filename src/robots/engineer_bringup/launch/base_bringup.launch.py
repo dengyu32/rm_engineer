@@ -72,6 +72,7 @@ def generate_launch_description():
     bringup_config_path     = os.path.join(bringup_config, "config", "bringup.yaml")
     joint_reset_path        = os.path.join(params_utils_share, "config", "joint_reset.yaml")
     moveit_reset_path       = os.path.join(params_utils_share, "config", "moveit_reset.yaml")
+    solve_executor_path     = os.path.join(params_utils_share, "config", "solve_executor.yaml")
     
     # 一些配置参数
     # initial_positions = load_yaml(initial_positions_path)["initial_positions"]
@@ -144,11 +145,11 @@ def generate_launch_description():
     
     # arm_solve_server 节点 : 提供 IK/轨迹求解服务，读取 MoveIt 参数与 bringup.yaml 的业务配置
     node_arm_solve = Node(
-        package="arm_solve",
-        executable="arm_solve_server",
+        package="arm_solve_server",
+        executable="arm_solve_server_node",
         name="arm_solve_server",
         output="screen",
-        parameters=common_params + [joint_reset_path, moveit_reset_path, bringup_config_path],
+        parameters=common_params + [joint_reset_path, moveit_reset_path, solve_executor_path, bringup_config_path],
     )
     
     late_init = TimerAction(

@@ -280,7 +280,7 @@ Results are saved to `benchmarks/results/`.
 YOLOs-CPP/
 ├── include/yolos/           # Core library
 │   ├── core/                # Shared utilities
-│   │   ├── types.hpp        # Detection, Segmentation result types
+│   │   ├── adapter.hpp        # Detection, Segmentation result types
 │   │   ├── preprocessing.hpp # Letterbox, normalization
 │   │   ├── nms.hpp          # Non-maximum suppression
 │   │   ├── drawing.hpp      # Visualization utilities

@@ -1,0 +1,25 @@
+/**:
+  ros__parameters:
+    # late init for move_group_interface
+    late_init_delay_ms: 10
+    # request related:
+    plan_min_interval_ms: 0
+
+    # time_related:
+    max_velocity_scaling: 1.0
+    max_acc_scaling: 1.0
+
+    # moveit_planner:
+    goal_position_tolerance: 1e-3
+    goal_orientation_tolerance: 1e-3
+    planning_time: 2.0
+    num_planning_attempts: 5
+
+    # cartesian_planner:
+    use_vision_target_vector: false
+    sample_step_m: 0.005
+    alignment_dot_threshold: 0.98
+    reference_link: "base_link"
+    max_contacts: 8
+    max_contacts_per_pair: 1
+    # 后续可能使用某种插值方式来生成路径点，而不是简单的线性采样，这时可能需要更多参数来控制插值方式和采样密度等

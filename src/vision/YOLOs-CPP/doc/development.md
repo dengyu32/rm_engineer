@@ -7,7 +7,7 @@ Architecture overview, extending YOLOs-CPP, and debugging.
 ```
 include/yolos/
 ├── core/                    # Shared utilities
-│   ├── types.hpp           # Detection, Segmentation types
+│   ├── adapter.hpp           # Detection, Segmentation types
 │   ├── preprocessing.hpp   # Letterbox, normalization
 │   ├── nms.hpp             # Non-maximum suppression
 │   ├── drawing.hpp         # Visualization

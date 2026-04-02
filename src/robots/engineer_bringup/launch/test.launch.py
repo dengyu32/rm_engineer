@@ -51,7 +51,7 @@ def generate_launch_description():
         package="moveit_ros_move_group",
         executable="move_group",
         output="screen",
-        parameters=[moveit_config.to_dict()],
+        parameters=[moveit_config.to_dict(), robot_description],
         arguments=["--ros-args", "--log-level", "info"],
     )
     
@@ -86,10 +86,7 @@ def generate_launch_description():
     ros2_control_node = Node(
         package="controller_manager",
         executable="ros2_control_node",
-        parameters=[ros2_controllers_path],
-        remappings=[
-            ("/controller_manager/robot_description", "/robot_description"),
-        ],
+        parameters=[ros2_controllers_path,robot_description],
         output="both",
     )
 
