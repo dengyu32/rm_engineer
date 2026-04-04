@@ -1,0 +1,7 @@
+# Detect Energy Unit 视觉解算资源区能量单元
+
+bool enable 
+---
+bool success
+string message
+Target target

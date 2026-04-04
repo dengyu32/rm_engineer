@@ -41,6 +41,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Slots.msg"
   "msg/Target.msg"
   "action/Move.action"
+  "srv/DetectEnergyUnit.srv"
   DEPENDENCIES 
     builtin_interfaces
     geometry_msgs

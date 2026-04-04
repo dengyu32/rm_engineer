@@ -11,10 +11,10 @@ import os
 # ----------------------------------------------------------------------------
 def generate_launch_description():
 
-    params_utils_share = get_package_share_directory("params_utils")
-    joint_reset = os.path.join(params_utils_share, "config", "joint_reset.yaml")
-    intent_reset = os.path.join(params_utils_share, "config", "intent_reset.yaml")
-    gripper_reset = os.path.join(params_utils_share, "config", "gripper_reset.yaml")
+    robot_config_share = get_package_share_directory("robot_config")
+    joint_reset = os.path.join(robot_config_share, "config", "joint_reset.yaml")
+    intent_reset = os.path.join(robot_config_share, "config", "intent_reset.yaml")
+    gripper_reset = os.path.join(robot_config_share, "config", "gripper_reset.yaml")
 
     config_path = os.path.join(
         get_package_share_directory("usb_cdc"),

@@ -4,7 +4,7 @@
 
 // uitlsws:
 //localhost:8765
-#include "log_utils/log.hpp"
+#include "log_tools/log.hpp"
 
 // C++
 #include <cstddef>
@@ -85,7 +85,7 @@ UsbCdcNode::UsbCdcNode(const rclcpp::NodeOptions &options)
   });
 
   // log 
-  log_utils::init_console_logger("core");
+  log_tools::init_console_logger("core");
   LOGI("\n{}",config_.summary());
   RCLCPP_INFO(logger_, "\n%s", config_.summary().c_str());
   RCLCPP_INFO(logger_, "USB_CDC_NODE START!!!");
@@ -195,7 +195,6 @@ void UsbCdcNode::engineer_handle_packet(const std::byte *data, size_t size) {
 //  Timers & callbacks
 // ============================================================================
 void UsbCdcNode::send_timer_callback() {
-  std::scoped_lock<std::mutex> lock(tx_data_mutex_);
   const bool device_open = device_.is_open();
   if (!device_open) {
     if (last_device_open_) {
@@ -215,7 +214,10 @@ void UsbCdcNode::send_timer_callback() {
   tx_data.header.len = sizeof(decltype(tx_data.data));
   tx_data.header.sof = HeaderFrame::SoF();
   tx_data.eof = HeaderFrame::EoF();
-  tx_data.data = tx_data_.data;
+  {
+    std::scoped_lock<std::mutex> lock(tx_data_mutex_);
+    tx_data.data = tx_data_.data;
+  }
 
   // NO_CRC
   // tx_data.header.crc = calc_crc_len_id_payload(
@@ -230,15 +232,64 @@ void UsbCdcNode::send_timer_callback() {
   }
 
   std::memcpy(buffer_, &tx_data, sizeof(EngineerTransmitData));
-  if (!device_.send_data(buffer_, sizeof(EngineerTransmitData))) {
+  const auto send_wall_start = std::chrono::system_clock::now();
+  const auto send_start = std::chrono::steady_clock::now();
+  const bool send_ok = device_.send_data(buffer_, sizeof(EngineerTransmitData));
+  const auto send_end = std::chrono::steady_clock::now();
+  const auto send_wall_end = std::chrono::system_clock::now();
+  const auto send_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      send_end - send_start).count();
+  const auto wall_start_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      send_wall_start.time_since_epoch()).count();
+  const auto wall_end_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      send_wall_end.time_since_epoch()).count();
+  if (send_ms > 5 || !send_ok) {
+    RCLCPP_WARN(this->get_logger(),
+                "[send][ts] wall_start_ms=%ld, wall_end_ms=%ld, dur_ms=%ld, ok=%d",
+                wall_start_ms, wall_end_ms, send_ms, send_ok ? 1 : 0);
+  }
+  if (!send_ok) {
     RCLCPP_ERROR(this->get_logger(),
                  " [FAILED] faild to send data ");
     publish_error(static_cast<int>(CommCode::UsbSendFailed),
                   to_string(CommCode::UsbSendFailed), "FAILED to send data");
   }
+
+  // 发送定时器统计（1s 汇总一次）
+  static uint64_t send_count = 0;
+  static uint64_t send_count_last = 0;
+  static int64_t send_ms_sum = 0;
+  static int64_t send_ms_max = 0;
+  static uint64_t send_over_5ms = 0;
+  static auto send_last_report = std::chrono::steady_clock::now();
+  send_count++;
+  send_ms_sum += send_ms;
+  if (send_ms > send_ms_max) {
+    send_ms_max = send_ms;
+  }
+  if (send_ms > 5) {
+    send_over_5ms++;
+  }
+  const auto now = std::chrono::steady_clock::now();
+  const auto dt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      now - send_last_report).count();
+  if (dt_ms >= 1000) {
+    const auto delta = send_count - send_count_last;
+    const double hz = dt_ms > 0 ? (1000.0 * delta / dt_ms) : 0.0;
+    const double avg_ms = delta > 0 ? (1.0 * send_ms_sum / delta) : 0.0;
+    RCLCPP_INFO(this->get_logger(),
+                "[timer][send] hz=%.1f, avg_send=%.2f ms, max_send=%ld ms, over5ms=%lu",
+                hz, avg_ms, send_ms_max, send_over_5ms);
+    send_count_last = send_count;
+    send_ms_sum = 0;
+    send_ms_max = 0;
+    send_over_5ms = 0;
+    send_last_report = now;
+  }
 }
 
 void UsbCdcNode::publish_timer_callback() {
+  const auto cb_start = std::chrono::steady_clock::now();
   std::scoped_lock<std::mutex> lock(rx_data_mutex_);
   const auto &d = rx_data_.data;
   const rclcpp::Time stamp = this->now();
@@ -265,7 +316,7 @@ void UsbCdcNode::publish_timer_callback() {
   joint_states.header.stamp = stamp;
   joint_states.header.frame_id = "base_link";
   joint_states.name = config_.joint_names;
-  joint_states.name.push_back("left_finger_joint");
+  joint_states.name.push_back("left_gripper_joint");
   joint_states.position = {
       d.actualJointPosition[0],
       d.actualJointPosition[1],
@@ -309,6 +360,13 @@ void UsbCdcNode::publish_timer_callback() {
     slot_states.slots[i].command = d.realSlotStatus[i] != 0U;
   }
   slot_states_pub_->publish(slot_states);
+
+  // 发布定时器统计（1s 汇总一次）
+  const auto cb_end = std::chrono::steady_clock::now();
+  const auto cb_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      cb_end - cb_start).count();
+  static BasicTimerStats pub_stats;
+  pub_stats.tick_and_log(this->get_logger(), "publish", cb_ms);
 }
 
 // ============================================================================

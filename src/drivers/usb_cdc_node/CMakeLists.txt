@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # 共享接口头路径，供目标复用
 set(MY_ROBOT_INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/../../robots/engineer/engineer_interface")
+set(CRCPP_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../third_party/CRCpp/include")
 
 # ----------------------------------------------------------------------------
 #  编译选项
@@ -26,8 +27,8 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
-find_package(log_utils REQUIRED)
-find_package(params_utils REQUIRED)
+find_package(log_tools REQUIRED)
+find_package(robot_config REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -56,7 +57,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   ${LIBUSB_INCLUDE_DIRS}  # libusb 头文件
   $<BUILD_INTERFACE:${MY_ROBOT_INTERFACE}>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  # 本项目 include
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CRCpp>    # CRC++ headers
+  $<BUILD_INTERFACE:${CRCPP_INCLUDE_DIR}>                 # CRC++ headers
 )
 
 # 注入 libusb 库目录
@@ -76,8 +77,8 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE CRCPP_INCLUDE_ESOTERIC_CRC_DE
 ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   rclcpp_components
-  log_utils
-  params_utils
+  log_tools
+  robot_config
   std_msgs
   std_srvs
   tf2_ros

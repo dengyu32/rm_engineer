@@ -32,7 +32,7 @@ install(DIRECTORY config launch
 )
 
 ament_export_include_directories(include)
-ament_export_dependencies(rclcpp params_utils)
+ament_export_dependencies(rclcpp robot_config)
 
 # 输出包元数据
 ament_package()

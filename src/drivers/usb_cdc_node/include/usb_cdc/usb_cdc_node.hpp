@@ -3,7 +3,7 @@
 // USB CDC
 #include "usb_cdc/packet.hpp"
 #include "usb_cdc/usb_cdc_driver.hpp"
-#include "params_utils/param_utils.hpp"
+#include "robot_config/robot_config.hpp"
 
 // ROS messages
 #include <engineer_interfaces/msg/gripper.hpp>

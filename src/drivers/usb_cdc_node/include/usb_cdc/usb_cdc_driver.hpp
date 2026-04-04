@@ -146,7 +146,7 @@ public:
   // -----------------------------------------------------------------------
   bool open(uint16_t vid, uint16_t pid = 0);
   void process_once();
-  bool sync_send(uint8_t *data, std::size_t size, unsigned tout_ms = 500);
+  bool sync_send(uint8_t *data, std::size_t size, unsigned tout_ms = 5);
   bool is_open() const;
   void request_reconnect();
 
@@ -162,6 +162,7 @@ public:
   void alloc_transfer();
   void submit_transfer();
   void cleanup();
+  void cleanup_unlocked();
   bool try_reopen();
 
   // -----------------------------------------------------------------------

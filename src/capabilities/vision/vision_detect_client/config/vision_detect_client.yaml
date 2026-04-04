@@ -1,0 +1,4 @@
+/**:
+  ros__parameters:
+    vision_service_name: "/vision/detect_energy_unit"
+    vision_service_wait_ms: 200

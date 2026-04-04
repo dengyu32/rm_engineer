@@ -7,9 +7,11 @@
 #### 目录结构
 
 ├── ee_path_node
+├── log_tools
 └── tools.md
 
 其中 ee_path_node 订阅机械臂末端的/tf,发布 path 消息，供 FoxGlove 3D 可视化末端轨迹
+log_tools 提供基于 spdlog 的轻量日志封装
 
 
 #### 使用方法

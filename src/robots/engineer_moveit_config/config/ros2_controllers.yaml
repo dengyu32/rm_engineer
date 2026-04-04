@@ -31,7 +31,13 @@ engineer_arm_controller:
 engineer_hand_controller:
   ros__parameters:
     joints:
-      - left_finger_joint
+      - left_gripper_joint
+      - right_gripper_joint
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
     command_interfaces:
       - position
     state_interfaces:

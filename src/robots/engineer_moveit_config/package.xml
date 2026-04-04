@@ -4,9 +4,9 @@
   <name>engineer_moveit_config</name>
   <version>0.3.0</version>
   <description>
-     An automatically generated package with all the configuration and launch files for using the engineer_v4 with the MoveIt Motion Planning Framework
+     An automatically generated package with all the configuration and launch files for using the engineer_v5 with the MoveIt Motion Planning Framework
   </description>
-  <maintainer email="2188755469@qq.com">Chiz</maintainer>
+  <maintainer email="2188755469@qq.com">zc</maintainer>
 
   <license>BSD</license>
 
@@ -14,7 +14,7 @@
   <url type="bugtracker">https://github.com/ros-planning/moveit2/issues</url>
   <url type="repository">https://github.com/ros-planning/moveit2</url>
 
-  <author email="2188755469@qq.com">Chiz</author>
+  <author email="2188755469@qq.com">zc</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
@@ -31,7 +31,7 @@
   <!-- <exec_depend>joint_trajectory_controller</exec_depend> -->
   <!-- <exec_depend>gazebo_ros_control</exec_depend> -->
   <exec_depend>controller_manager</exec_depend>
-  <exec_depend>engineer_description</exec_depend>
+  <exec_depend>engineer_v5</exec_depend>
   <exec_depend>moveit_configs_utils</exec_depend>
   <exec_depend>moveit_ros_move_group</exec_depend>
   <exec_depend>moveit_ros_visualization</exec_depend>

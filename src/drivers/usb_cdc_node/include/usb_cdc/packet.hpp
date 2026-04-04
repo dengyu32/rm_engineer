@@ -9,9 +9,13 @@
 // ============================================================================
 
 // C++
+#include <chrono>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
+
+// ROS2
+#include <rclcpp/logging.hpp>
 
 // CRC
 // NO_CRC
@@ -228,5 +232,47 @@ inline void engineer_print_transmit_data(const EngineerTransmitData &tx_data) {
             << static_cast<int>(tx_data.eof) << std::dec << '\n';
   std::cout << "=====================================================\n";
 }
+
+// ============================================================================
+//  Timer Stats
+// ----------------------------------------------------------------------------
+//  - 轻量级定时器统计：Hz + 平均/最大回调耗时
+//  - 1s 汇总一次，适合多个定时器复用
+// ============================================================================
+struct BasicTimerStats {
+  uint64_t count{0};
+  uint64_t count_last{0};
+  int64_t ms_sum{0};
+  int64_t ms_max{0};
+  std::chrono::steady_clock::time_point last_report =
+      std::chrono::steady_clock::now();
+
+  void tick_and_log(const rclcpp::Logger &logger, const char *tag,
+                    int64_t cb_ms) {
+    count++;
+    ms_sum += cb_ms;
+    if (cb_ms > ms_max) {
+      ms_max = cb_ms;
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    const auto dt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now - last_report).count();
+    if (dt_ms < 1000) {
+      return;
+    }
+
+    const auto delta = count - count_last;
+    const double hz = dt_ms > 0 ? (1000.0 * delta / dt_ms) : 0.0;
+    const double avg_ms = delta > 0 ? (1.0 * ms_sum / delta) : 0.0;
+    RCLCPP_INFO(logger, "[timer][%s] hz=%.1f, avg_cb=%.2f ms, max_cb=%ld ms",
+                tag, hz, avg_ms, ms_max);
+
+    count_last = count;
+    ms_sum = 0;
+    ms_max = 0;
+    last_report = now;
+  }
+};
 
 } // namespace usb_cdc

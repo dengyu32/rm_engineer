@@ -2,7 +2,7 @@
 #include "fake_system/fake_system_node.hpp"
 
 // utils
-#include "log_utils/log.hpp"
+#include "log_tools/log.hpp"
 
 // C++
 #include <chrono>
@@ -93,7 +93,7 @@ FakeSystemNode::FakeSystemNode(const rclcpp::NodeOptions &options)
       std::bind(&FakeSystemNode::publish_timer_callback, this));
 
   // log
-  log_utils::init_console_logger("core");
+  log_tools::init_console_logger("core");
   LOGI("\n{}",config_.summary());
   RCLCPP_INFO(logger_, "\n%s", config_.summary().c_str());
   RCLCPP_INFO(logger_, "FAKE_SYSTEM_NODE START!!!"); // 与节点有关的日志还用ros日志
@@ -234,7 +234,7 @@ void FakeSystemNode::publish_timer_callback() {
   for (size_t i = 0; i < joint_count; ++i) {
     joint_states.position.push_back(joint_positions_copy[i]);
   }
-  joint_states.name.push_back("left_finger_joint");
+  joint_states.name.push_back("left_gripper_joint");
   joint_states.position.push_back(gripper_copy);
 
   joint_states.velocity.resize(joint_states.name.size(), 0.0);

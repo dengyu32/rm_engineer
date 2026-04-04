@@ -55,11 +55,17 @@ bool Device::Impl::open(uint16_t vid, uint16_t pid) {
       throw error(LIBUSB_ERROR_OTHER);
   }
 
+  if (handle_ || rx_transfer_) {
+    cleanup_unlocked();
+  }
+
   if (pid == 0)
     pid = find_device(vid);
 
   reconnect_vid_ = vid;
   reconnect_pid_ = pid;
+
+  FinalAction rollback{[this]() { cleanup_unlocked(); }};
 
   // 打开设备句柄
   handle_ = libusb_open_device_with_vid_pid(ctx_, vid, pid);
@@ -107,6 +113,8 @@ bool Device::Impl::open(uint16_t vid, uint16_t pid) {
   disconnected_ = false;
   hotplug_arrived_ = false;
   rx_transfer_done_ = false;
+  first_rx_ = true;
+  rollback.disable();
   return true;
 }
 
@@ -228,7 +236,7 @@ void Device::Impl::submit_transfer() {
  * - 释放接口
  * - 关闭设备句柄
  */
-void Device::Impl::cleanup() {
+void Device::Impl::cleanup_unlocked() {
   if (hotplug_registered_ && ctx_) {
     libusb_hotplug_deregister_callback(ctx_, hp_handle_);
     hotplug_registered_ = false;
@@ -250,6 +258,13 @@ void Device::Impl::cleanup() {
     libusb_close(handle_);
     handle_ = nullptr;
   }
+  first_rx_ = true;
+  hotplug_arrived_ = false;
+}
+
+void Device::Impl::cleanup() {
+  std::lock_guard<std::mutex> lock(io_mutex_);
+  cleanup_unlocked();
 }
 
 // ============================================================================
@@ -270,19 +285,14 @@ void Device::Impl::process_once() {
     return;
   }
 
-  {
-    std::lock_guard<std::mutex> lock(io_mutex_);
-    timeval tv{0, 1000}; // 1ms to avoid busy loop
-    libusb_handle_events_timeout_completed(ctx_, &tv, nullptr);
+  timeval tv{0, 1000}; // 1ms to avoid busy loop
+  libusb_handle_events_timeout_completed(ctx_, &tv, nullptr);
 
-    if (disconnected_ || hotplug_arrived_) {
-      hotplug_arrived_ = false;
-      cleanup();
-    } else {
-      return;
-    }
+  if (!disconnected_) {
+    return;
   }
 
+  cleanup();
   try_reopen();
 }
 // timeval tv{0, 0};
@@ -353,19 +363,48 @@ void Device::Impl::request_reconnect() {
  */
 bool Device::Impl::sync_send(uint8_t *data, std::size_t size,
                              unsigned tout_ms) {
-  std::lock_guard<std::mutex> lock(io_mutex_);
+  const auto lock_start = std::chrono::steady_clock::now();
+  std::unique_lock<std::mutex> lock(io_mutex_);
+  const auto lock_acquired = std::chrono::steady_clock::now();
 
   if (!handle_)
     return false;
+
+  // 打印实际超时时间（每秒最多一次）
+  static auto last_report = std::chrono::steady_clock::now();
+  const auto now = std::chrono::steady_clock::now();
+  if (std::chrono::duration_cast<std::chrono::seconds>(now - last_report)
+          .count() >= 1) {
+    RCLCPP_INFO(rclcpp::get_logger("usb_cdc"),
+                "[send][timeout] tout_ms=%u", tout_ms);
+    last_report = now;
+  }
+
+  const auto usb_start = std::chrono::steady_clock::now();
   int actual = 0;
   int rc = libusb_bulk_transfer(handle_, EP_OUT, data, static_cast<int>(size),
                                 &actual, tout_ms);
+  const auto usb_end = std::chrono::steady_clock::now();
+
+  if (rc == LIBUSB_ERROR_NO_DEVICE || rc == LIBUSB_ERROR_IO) {
+    disconnected_ = true;
+  }
+
+  const auto lock_wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      lock_acquired - lock_start).count();
+  const auto usb_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      usb_end - usb_start).count();
+  if (lock_wait_ms > 5 || usb_ms > 5) {
+    RCLCPP_WARN(rclcpp::get_logger("usb_cdc"),
+                "[send][split] lock_wait=%ld ms, usb_send=%ld ms",
+                lock_wait_ms, usb_ms);
+  }
   return rc == 0 && actual == static_cast<int>(size);
 }
 
 bool Device::Impl::is_open() const {
   std::lock_guard<std::mutex> lock(io_mutex_);
-  return handle_ != nullptr;
+  return handle_ != nullptr && !disconnected_;
 }
 
 // ============================================================================

@@ -1,0 +1,9 @@
+# 每个目标两行:
+# position x y z
+# orientation qx qy qz qw
+
+position 0.56392 0.17588 0.65313
+orientation 0.5552 0.50536 -0.50233 -0.42898
+
+position 0.58646  0.044249  0.51013
+orientation -0.26833   -0.70109  0.25559  0.60922

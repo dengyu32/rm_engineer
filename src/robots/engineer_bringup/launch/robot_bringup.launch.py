@@ -59,13 +59,13 @@ def generate_launch_description():
     # 自定义包
     pkg_config      = get_package_share_directory("engineer_moveit_config")
     bringup_config  = get_package_share_directory("engineer_bringup")
-    params_utils_share = get_package_share_directory("params_utils")
+    robot_config_share = get_package_share_directory("robot_config")
     arm_servo_config = get_package_share_directory("arm_servo")
     top_hfsm_config = get_package_share_directory("top_hfsm")
     
     # 自定义路径
-    urdf_path        = os.path.join(pkg_config, "config", "engineer_v4.urdf.xacro")
-    srdf_path        = os.path.join(pkg_config, "config", "engineer_v4.srdf")
+    urdf_path        = os.path.join(pkg_config, "config", "engineer_v5.urdf.xacro")
+    srdf_path        = os.path.join(pkg_config, "config", "engineer_v5.srdf")
     kinematics_path  = os.path.join(pkg_config, "config", "kinematics.yaml")
     joint_limits_path       = os.path.join(pkg_config, "config", "joint_limits.yaml")
     moveit_controllers_path = os.path.join(pkg_config, "config", "moveit_controllers.yaml")
@@ -73,9 +73,9 @@ def generate_launch_description():
     # initial_positions_path  = os.path.join(pkg_config, "config", "initial_positions.yaml")
     ompl_path               = os.path.join(bringup_config, "config", "ompl_planning.yaml")
     bringup_config_path     = os.path.join(bringup_config, "config", "bringup.yaml")
-    joint_reset_path        = os.path.join(params_utils_share, "config", "joint_reset.yaml")
-    moveit_reset_path       = os.path.join(params_utils_share, "config", "moveit_reset.yaml")
-    solve_executor_path     = os.path.join(params_utils_share, "config", "solve_executor.yaml")
+    joint_reset_path        = os.path.join(robot_config_share, "config", "joint_reset.yaml")
+    moveit_reset_path       = os.path.join(robot_config_share, "config", "moveit_reset.yaml")
+    solve_executor_path     = os.path.join(robot_config_share, "config", "solve_executor.yaml")
     
     # 一些配置参数
     # initial_positions = load_yaml(initial_positions_path)["initial_positions"]

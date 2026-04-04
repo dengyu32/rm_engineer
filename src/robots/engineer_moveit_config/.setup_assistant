@@ -1,10 +1,10 @@
 moveit_setup_assistant_config:
   urdf:
-    package: engineer_description
-    relative_path: urdf/engineer_v4.urdf
+    package: engineer_v5
+    relative_path: urdf/engineer_v5.urdf
   srdf:
-    relative_path: config/engineer_v4.srdf
+    relative_path: config/engineer_v5.srdf
   package_settings:
-    author_name: Chiz
+    author_name: zc
     author_email: 2188755469@qq.com
-    generated_timestamp: 1773471734
+    generated_timestamp: 1775286875

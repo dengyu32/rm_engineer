@@ -1,22 +1,22 @@
 <?xml version="1.0"?>
-<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>engineer_description</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="2281904682@qq.com">wrj</maintainer>
-  <license>TODO: License declaration</license>
+  <version>1.0.0</version>
+  <description>URDF description package for engineer_v5 with meshes, configuration, and ROS 2 launch files.</description>
+
+  <maintainer email="TODO@email.com">TODO</maintainer>
+  <license>BSD</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <exec_depend>joint_state_publisher_gui</exec_depend>
-  <exec_depend>hardware_interface</exec_depend>
-  <exec_depend>robot_state_publisher</exec_depend>
-  <exec_depend>rviz2</exec_depend>
-  <exec_depend>xacro</exec_depend>
-
-  <test_depend>ament_lint_auto</test_depend>
-  <test_depend>ament_lint_common</test_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <depend>gazebo_ros</depend>
+  <depend>joint_state_publisher_gui</depend>
+  <depend>launch</depend>
+  <depend>launch_ros</depend>
+  <depend>robot_state_publisher</depend>
+  <depend>rviz2</depend>
+  <depend>tf2_ros</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

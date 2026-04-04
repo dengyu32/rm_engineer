@@ -20,7 +20,7 @@
 #include <engineer_interfaces/msg/slots.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
-#include "params_utils/param_utils.hpp"
+#include "robot_config/robot_config.hpp"
 
 namespace fake_system {
 
