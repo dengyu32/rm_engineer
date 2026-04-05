@@ -35,7 +35,7 @@ ArmSolveClient::ArmSolveClient(rclcpp::Node &node,
                                const ArmSolveClientConfig &config)
     : node_(node), logger_(node.get_logger()), config_(config) {
   RCLCPP_INFO(logger_, "\n%s", config_.summary().c_str());
-  action_client_ = rclcpp_action::create_client<Move>(&node_, config_.action_name);
+  action_client_ = rclcpp_action::create_client<ArmMove>(&node_, config_.action_name);
 }
 
 // ============================================================================
@@ -61,7 +61,7 @@ bool ArmSolveClient::buildSpec(const core::Command &cmd,
     error.clear();
     return true;
   }
-  if (const auto *joints = core::paramAs<std::vector<float>>(cmd, "target_joints")) {
+  if (const auto *joints = core::paramAs<std::vector<double>>(cmd, "target_joints")) {
     if (joints->size() != 6) {
       error = "arm target_joints must have 6 elements";
       return false;
@@ -99,7 +99,7 @@ core::ExecuteResult ArmSolveClient::execute(const ArmMoveSpec &command) {
   core::ExecuteResult result{};
 
   std::shared_ptr<GoalContext> ctx;
-  std::shared_ptr<GoalHandleMove> gh;
+  std::shared_ptr<GoalHandleArmMove> gh;
   {
     std::scoped_lock lock(mutex_);
     ctx = active_ctx_;
@@ -220,16 +220,16 @@ bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
   }
 
   // 构造 goal
-  Move::Goal goal;
+  ArmMove::Goal goal;
   goal.option_id = static_cast<uint8_t>(command.plan_option);
   goal.target_pose = command.pose;
   goal.target_joints = command.joints;
   goal.target_vector = command.vector;
 
   // 回调
-  rclcpp_action::Client<Move>::SendGoalOptions opts;
+  rclcpp_action::Client<ArmMove>::SendGoalOptions opts;
 
-  opts.goal_response_callback = [this, ctx](std::shared_ptr<GoalHandleMove> gh) {
+  opts.goal_response_callback = [this, ctx](std::shared_ptr<GoalHandleArmMove> gh) {
     if (!gh) {
       ctx->fail("goal rejected");
       {
@@ -252,7 +252,7 @@ bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
     }
   };
 
-  opts.result_callback = [this, ctx](const GoalHandleMove::WrappedResult &result) {
+  opts.result_callback = [this, ctx](const GoalHandleArmMove::WrappedResult &result) {
     // 错误获取 lamada
     auto get_error = [&]() {
       return (result.result && !result.result->error_msg.empty())
@@ -311,7 +311,7 @@ bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
 
 void ArmSolveClient::cancel() {
   std::shared_ptr<GoalContext> ctx;
-  std::shared_ptr<GoalHandleMove> gh;
+  std::shared_ptr<GoalHandleArmMove> gh;
   // 拷贝共享数据
   {
     std::scoped_lock lock(mutex_);

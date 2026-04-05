@@ -15,7 +15,7 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 
 //< Engineer Interfaces 
-#include <engineer_interfaces/action/move.hpp>
+#include <engineer_interfaces/action/arm_move.hpp>
 
 //< Other Modules
 #include "robot_config/robot_config.hpp"
@@ -122,8 +122,8 @@ private:
     }
   };
 
-  using Move = engineer_interfaces::action::Move;
-  using GoalHandleMove = rclcpp_action::ClientGoalHandle<Move>;
+  using ArmMove = engineer_interfaces::action::ArmMove;
+  using GoalHandleArmMove = rclcpp_action::ClientGoalHandle<ArmMove>;
 
   bool sendGoal(const ArmMoveSpec &command);
 
@@ -131,10 +131,10 @@ private:
   rclcpp::Node &node_;
   rclcpp::Logger logger_;
   ArmSolveClientConfig config_;
-  rclcpp_action::Client<Move>::SharedPtr action_client_;
+  rclcpp_action::Client<ArmMove>::SharedPtr action_client_;
 
   mutable std::mutex mutex_;
-  std::shared_ptr<GoalHandleMove> goal_handle_;
+  std::shared_ptr<GoalHandleArmMove> goal_handle_;
   std::shared_ptr<GoalContext> active_ctx_;
   std::string last_error_msg_;
   mutable std::mutex error_mutex_;

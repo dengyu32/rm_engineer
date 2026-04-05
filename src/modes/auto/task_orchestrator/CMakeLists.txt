@@ -9,13 +9,16 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(auto_library REQUIRED)
 find_package(engineer_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 add_library(${PROJECT_NAME}
   src/task_orchestrator.cpp
-  src/task_builder.cpp
+  src/task_catalog.cpp
+  src/yaml_parser.cpp
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -25,9 +28,13 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 ament_target_dependencies(${PROJECT_NAME}
+  ament_index_cpp
   auto_library
   engineer_interfaces
   geometry_msgs
+)
+target_link_libraries(${PROJECT_NAME}
+  yaml-cpp
 )
 
 install(TARGETS ${PROJECT_NAME}
@@ -37,9 +44,10 @@ install(TARGETS ${PROJECT_NAME}
   RUNTIME DESTINATION bin
 )
 install(DIRECTORY include/ DESTINATION include/)
+install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config)
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
-ament_export_dependencies(auto_library engineer_interfaces geometry_msgs)
+ament_export_dependencies(ament_index_cpp auto_library engineer_interfaces geometry_msgs yaml-cpp)
 
 ament_package()

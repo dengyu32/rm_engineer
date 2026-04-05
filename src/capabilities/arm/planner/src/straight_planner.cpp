@@ -85,7 +85,7 @@ StraightPlanner::StraightPlanner(const moveit::core::RobotModelConstPtr& model, 
 
 std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_state,
                                                 const Eigen::Vector3d& target_vector,
-                                                const float target_length,
+                                                double target_length,
                                                 const calculator::CostOptions& cost_opt)
 {
   LOGI("Start Plan Cartesian!");

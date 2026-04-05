@@ -6,5 +6,8 @@
 #### 自定义消息（/msg）
 > 按功能分类的消息列表。
 **消息分类**
-- 通用消息：`Joint`、`JointCommand`、`Joints`、`Target`。
+- 通用消息：`Joint`、`Joints`、`Target`、`Gripper`、`Pose`、`Slot`、`Slots`、`Intent`。
 - 触发事件：`Event`。
+
+#### 动作（/action）
+- `ArmMove`

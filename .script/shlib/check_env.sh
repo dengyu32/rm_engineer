@@ -90,7 +90,7 @@ ensure_onnxruntime() {
     print_color yellow "未发现 ONNX Runtime，准备下载 v${ONNX_ORT_VERSION} ..."
     
     mkdir -p "$(dirname "$ONNX_ORT_DIR")"
-    if ! curl_download "$ONNX_ORT_ARCHIVE_PATH" "$ONNX_ORT_URL"; then
+    if ! curl_download "$ONNX_ORT_URL" "$ONNX_ORT_ARCHIVE_PATH"; then
         die "无法从 $ONNX_ORT_URL 下载 ONNX Runtime"
     fi
 

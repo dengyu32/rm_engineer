@@ -1,6 +1,6 @@
 #include "arm_solve_server/arm_solve_server.hpp"
 #include "executor/executor.hpp"
-#include "engineer_interfaces/action/move.hpp"
+#include "engineer_interfaces/action/arm_move.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -20,7 +20,7 @@ using namespace std::chrono_literals;
 
 namespace
 {
-std::shared_ptr<GoalContext> makeGoalContext(const Move::Goal& goal,
+std::shared_ptr<GoalContext> makeGoalContext(const ArmMove::Goal& goal,
                                              const engineer_interfaces::msg::Joints& current_joints,
                                              const arm_solve::ArmSolveConfig& config)
 {
@@ -36,7 +36,7 @@ std::shared_ptr<GoalContext> makeGoalContext(const Move::Goal& goal,
   ctx->req.target_pose.qw = goal.target_pose.qw;
   ctx->req.target_vector = { static_cast<double>(goal.target_vector.x), static_cast<double>(goal.target_vector.y),
                              static_cast<double>(goal.target_vector.z) };
-  ctx->req.target_length = static_cast<float>(goal.target_length);
+  ctx->req.target_length = goal.target_length;
   ctx->req.target_joints.assign(goal.target_joints.begin(), goal.target_joints.end());
   ctx->req.current_joints.names.reserve(current_joints.joints.size());
   ctx->req.current_joints.positions.reserve(current_joints.joints.size());
@@ -48,9 +48,9 @@ std::shared_ptr<GoalContext> makeGoalContext(const Move::Goal& goal,
   return ctx;
 }
 
-std::shared_ptr<Move::Result> make_move_result(bool success, const std::string& msg)
+std::shared_ptr<ArmMove::Result> make_move_result(bool success, const std::string& msg)
 {
-  auto result = std::make_shared<Move::Result>();
+  auto result = std::make_shared<ArmMove::Result>();
   result->success = success;
   result->error_msg = msg;
   return result;
@@ -59,7 +59,7 @@ std::shared_ptr<Move::Result> make_move_result(bool success, const std::string& 
 // ------------------------------------------------------------------
 // 任务状态反馈
 // ------------------------------------------------------------------
-void finish_move_goal(const std::shared_ptr<GoalHandleMove>& gh, bool success, bool canceled, const std::string& msg)
+void finish_move_goal(const std::shared_ptr<GoalHandleArmMove>& gh, bool success, bool canceled, const std::string& msg)
 {
   if (!gh)
   {
@@ -91,7 +91,7 @@ ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions& options)
 
   joint_cmd_pub_ = this->create_publisher<engineer_interfaces::msg::Joints>(config_.joint_cmd_topic, rclcpp::QoS(10));
 
-  action_server_ = rclcpp_action::create_server<Move>(
+  action_server_ = rclcpp_action::create_server<ArmMove>(
       this, config_.arm_action_name,
       std::bind(&ArmSolveServer::handle_goal, this, std::placeholders::_1, std::placeholders::_2),
       std::bind(&ArmSolveServer::handle_cancel, this, std::placeholders::_1),
@@ -108,7 +108,7 @@ void ArmSolveServer::jointCallBack(const engineer_interfaces::msg::Joints::Share
 }
 
 rclcpp_action::GoalResponse ArmSolveServer::handle_goal(const rclcpp_action::GoalUUID& uuid,
-                                                        std::shared_ptr<const Move::Goal> goal)
+                                                        std::shared_ptr<const ArmMove::Goal> goal)
 {
   (void)uuid;
   LOGI("[arm_solve_server] Received goal: option_id={}", goal->option_id);
@@ -121,7 +121,7 @@ rclcpp_action::GoalResponse ArmSolveServer::handle_goal(const rclcpp_action::Goa
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
-rclcpp_action::CancelResponse ArmSolveServer::handle_cancel(const std::shared_ptr<GoalHandleMove> gh)
+rclcpp_action::CancelResponse ArmSolveServer::handle_cancel(const std::shared_ptr<GoalHandleArmMove> gh)
 {
   LOGI("[arm_solve_server] Cancel requested");
   std::scoped_lock<std::mutex> lock(active_mtx_);
@@ -138,7 +138,7 @@ rclcpp_action::CancelResponse ArmSolveServer::handle_cancel(const std::shared_pt
   return rclcpp_action::CancelResponse::ACCEPT;
 }
 
-void ArmSolveServer::handle_accepted(const std::shared_ptr<GoalHandleMove> gh)
+void ArmSolveServer::handle_accepted(const std::shared_ptr<GoalHandleArmMove> gh)
 {
   auto goal = gh->get_goal();
   engineer_interfaces::msg::Joints current_joints_snapshot;
@@ -166,7 +166,7 @@ void ArmSolveServer::handle_accepted(const std::shared_ptr<GoalHandleMove> gh)
   std::thread([self, gh, ctx]() { self->execute(gh, ctx); }).detach();
 }
 
-void ArmSolveServer::execute(const std::shared_ptr<GoalHandleMove> gh, const std::shared_ptr<GoalContext>& ctx)
+void ArmSolveServer::execute(const std::shared_ptr<GoalHandleArmMove> gh, const std::shared_ptr<GoalContext>& ctx)
 {
   const auto cleanup_active_goal = [this, &gh]() {
     std::scoped_lock<std::mutex> lock(active_mtx_);
@@ -247,7 +247,7 @@ void ArmSolveServer::execute(const std::shared_ptr<GoalHandleMove> gh, const std
   cleanup_active_goal();
 }
 
-bool ArmSolveServer::publishTrajectoryPoints(const std::shared_ptr<GoalHandleMove> gh,
+bool ArmSolveServer::publishTrajectoryPoints(const std::shared_ptr<GoalHandleArmMove> gh,
                                              const std::shared_ptr<GoalContext>& ctx)
 {
   const auto& traj = ctx->traj;
@@ -289,7 +289,7 @@ bool ArmSolveServer::publishTrajectoryPoints(const std::shared_ptr<GoalHandleMov
 
     joint_cmd_pub_->publish(cmd);
 
-    auto fb = std::make_shared<Move::Feedback>();
+    auto fb = std::make_shared<ArmMove::Feedback>();
     fb->progress = static_cast<float>(i + 1) / traj.points.size();
     gh->publish_feedback(fb);
 

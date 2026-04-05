@@ -1,0 +1,5 @@
+# Request is empty; server returns the next computed pose
+---
+bool success
+string message
+geometry_msgs/PoseStamped pose

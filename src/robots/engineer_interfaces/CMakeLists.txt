@@ -40,7 +40,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Slot.msg"
   "msg/Slots.msg"
   "msg/Target.msg"
-  "action/Move.action"
+  "action/ArmMove.action"
   "srv/DetectEnergyUnit.srv"
   DEPENDENCIES 
     builtin_interfaces

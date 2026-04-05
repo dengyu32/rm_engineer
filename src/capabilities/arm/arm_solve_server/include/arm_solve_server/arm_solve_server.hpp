@@ -11,7 +11,7 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
 
-#include "engineer_interfaces/action/move.hpp"
+#include "engineer_interfaces/action/arm_move.hpp"
 #include "engineer_interfaces/msg/joint.hpp"
 #include "engineer_interfaces/msg/joints.hpp"
 #include "executor/executor.hpp"
@@ -99,8 +99,8 @@ struct GoalContext
 // - 功能实现类
 // ============================================================================
 
-using Move = engineer_interfaces::action::Move;
-using GoalHandleMove = rclcpp_action::ServerGoalHandle<Move>;
+using ArmMove = engineer_interfaces::action::ArmMove;
+using GoalHandleArmMove = rclcpp_action::ServerGoalHandle<ArmMove>;
 
 class ArmSolveServer : public rclcpp::Node
 {
@@ -116,7 +116,7 @@ private:
   rclcpp::Subscription<engineer_interfaces::msg::Joints>::SharedPtr joint_states_verbose_sub_;
   rclcpp::Publisher<engineer_interfaces::msg::Joints>::SharedPtr joint_cmd_pub_;
 
-  rclcpp_action::Server<Move>::SharedPtr action_server_;
+  rclcpp_action::Server<ArmMove>::SharedPtr action_server_;
 
   // 共享变量
   engineer_interfaces::msg::Joints current_joints_;
@@ -124,7 +124,7 @@ private:
 
   // 活跃机制
   std::mutex active_mtx_;
-  std::weak_ptr<GoalHandleMove> active_goal_handle_;
+  std::weak_ptr<GoalHandleArmMove> active_goal_handle_;
   std::shared_ptr<GoalContext> active_ctx_;
 
   // 执行器对象
@@ -134,18 +134,18 @@ private:
   void jointCallBack(const engineer_interfaces::msg::Joints::SharedPtr msg);
 
   // 请求处理
-  rclcpp_action::GoalResponse handle_goal(const rclcpp_action::GoalUUID& uuid, std::shared_ptr<const Move::Goal> goal);
-  rclcpp_action::CancelResponse handle_cancel(const std::shared_ptr<GoalHandleMove> gh);
-  void handle_accepted(const std::shared_ptr<GoalHandleMove> gh);
+  rclcpp_action::GoalResponse handle_goal(const rclcpp_action::GoalUUID& uuid, std::shared_ptr<const ArmMove::Goal> goal);
+  rclcpp_action::CancelResponse handle_cancel(const std::shared_ptr<GoalHandleArmMove> gh);
+  void handle_accepted(const std::shared_ptr<GoalHandleArmMove> gh);
 
   // 运行服务端程序
-  void execute(const std::shared_ptr<GoalHandleMove> gh, const std::shared_ptr<GoalContext>& ctx);
+  void execute(const std::shared_ptr<GoalHandleArmMove> gh, const std::shared_ptr<GoalContext>& ctx);
 
   // 发布结果
-  bool publishTrajectoryPoints(const std::shared_ptr<GoalHandleMove> gh, const std::shared_ptr<GoalContext>& ctx);
+  bool publishTrajectoryPoints(const std::shared_ptr<GoalHandleArmMove> gh, const std::shared_ptr<GoalContext>& ctx);
 
   // 客户端请求状态判断
-  inline bool isCanceled(const std::shared_ptr<GoalHandleMove>& gh, const std::shared_ptr<GoalContext>& ctx) const
+  inline bool isCanceled(const std::shared_ptr<GoalHandleArmMove>& gh, const std::shared_ptr<GoalContext>& ctx) const
   {
     return (gh && gh->is_canceling()) || (ctx && ctx->cancel_requested.load());
   }

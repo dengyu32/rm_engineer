@@ -1,0 +1,19 @@
+/**:
+  ros__parameters:
+    # Axis / smoothing
+    axis_conf_min: 0.35
+    axis_smooth_alpha: 0.6
+    axis_force_flip: false
+
+    # Target tracking (IoU)
+    track_iou_min: 0.3
+    track_bad_max: 5
+
+    # Cylinder RANSAC
+    cyl_voxel_leaf: 0.0035
+    cyl_normal_radius: 0.010
+    cyl_max_iter: 1000
+    cyl_dist_thresh: 0.0045
+    cyl_radius_margin_std_mult: 3.0
+    cyl_radius_margin_min: 0.005
+    cyl_use_radius_limits: true

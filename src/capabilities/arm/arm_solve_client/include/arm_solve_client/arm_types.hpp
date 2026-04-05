@@ -16,7 +16,7 @@ enum class PlanOption : uint8_t {
 
 struct ArmMoveSpec {
   engineer_interfaces::msg::Pose pose{};
-  std::array<float, 6> joints{{0.f, 0.f, 0.f, 0.f, 0.f, 0.f}};
+  std::array<double, 6> joints{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
   geometry_msgs::msg::Vector3 vector{};
 
   PlanOption plan_option{PlanOption::NORMAL};

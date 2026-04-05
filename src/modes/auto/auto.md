@@ -4,12 +4,18 @@
 > 本系统采用“半自动 + 显式数据流”的三层结构
 
 #### 目录结构
-src/auto/
+src/modes/auto/
 ├── auto.md
-├── auto_library
-├── auto_node
-├── step_executor
-└── task_orchestrator
+├── auto_library/
+├── auto_node/
+├── step_executor/
+└── task_orchestrator/
+    └── config/
+        ├── presets.yaml
+        └── tasks/
+            ├── AUTO_INIT.yaml
+            ├── AUTO_GRAB.yaml
+            └── ...
 
 src/capabilities/
 ├── arm
@@ -62,7 +68,7 @@ Value 支持基础数值、字符串与向量：
 ```c++
 using Value = std::variant<
   bool, int64_t, double, std::string,
-  std::vector<double>, std::vector<float>
+  std::vector<double>
 >;
 ```
 
@@ -140,6 +146,124 @@ struct ErrorInfo {
 - slot.select
 - slot.lock
 - slot.unlock
+
+#### Task YAML 编写规则
+任务编排已从 C++ 硬编码迁到 YAML，当前只支持线性步骤序列。
+
+- `presets` 单独放在 [presets.yaml](/home/wrj/Desktop/rm_engineer/src/modes/auto/task_orchestrator/config/presets.yaml)
+- `tasks` 按“一个任务一个文件”放在 `task_orchestrator/config/tasks/*.yaml`
+- 文件名建议与任务名一致，例如 `AUTO_INIT.yaml`
+- 一个任务文件只声明一个任务，顶层 key 必须是 `TaskId` 名称，如 `AUTO_INIT`、`AUTO_GRAB`
+- 当前支持 `version: 1`
+- 不允许重复声明同一个任务
+- `IDLE` 不能写入 YAML
+
+**任务文件最小格式**
+```yaml
+version: 1
+
+AUTO_INIT:
+  steps:
+    - id: gripper_open
+      kind: gripper.cmd
+      params:
+        action: open
+
+    - id: move_home_joints
+      kind: arm.move
+      timeout_ms: 8000
+      max_retries: 1
+      params:
+        target_joints:
+          type: double_array
+          preset: HOME
+```
+
+**step 字段**
+- `id`: 必填，step 唯一标识
+- `kind`: 必填，对应 capability 的 `command.kind`
+- `label`: 可选，默认等于 `id`
+- `timeout_ms`: 可选
+- `post_delay_ms`: 可选
+- `max_retries`: 可选
+- `retries`: 兼容旧写法，等价于 `max_retries`
+- `params`: 可选，命令参数
+- `inputs`: 可选，显式依赖的上下文 key 列表
+- `outputs`: 可选，显式产出的上下文 key 列表
+- `bindings`: 可选，上下文到参数的注入规则
+
+**params 写法**
+- 标量会自动推断为 `bool / int / double / string`
+- 数组字面量会解析为 `std::vector<double>`
+- 需要显式类型或引用 preset 时，使用带 `type` 的 map
+
+```yaml
+params:
+  action: open
+  enable: true
+  speed: 0.2
+  target_pose: [-0.5, 0.1, 0.6, 0.0, 0.0, 0.0, 1.0]
+  target_joints:
+    type: double_array
+    preset: HOME
+```
+
+当前推荐的显式类型：
+- `string`
+- `bool`
+- `int`
+- `double`
+- `double_array`
+
+**presets 写法**
+```yaml
+version: 1
+
+double_arrays:
+  HOME: [0.0, -0.6109, -2.1293, 0.0, 0.0, 0.0]
+
+double_tables:
+  SLOTS:
+    - [-0.9250, -0.1396, 1.9722, -3.0718, -1.2741, 0.7679]
+    - [0.4363, -0.1047, 1.9024, 0.0175, 1.3265, -0.9774]
+```
+
+**inputs / outputs 写法**
+- 简写：直接写字符串，默认作用域为 `task`
+- 完整写法：`name + scope`
+
+```yaml
+inputs: [VisionPose]
+
+outputs:
+  - name: SlotID
+    scope: task
+```
+
+当前支持的 `scope`：
+- `task`
+- `persist`
+
+**bindings 写法**
+```yaml
+bindings:
+  - from: VisionPose
+    to_param: target_pose
+    op: direct
+
+  - from: SlotID
+    to_param: target_joints
+    op: index_to_joints_table
+    table: SLOTS
+```
+
+当前支持的 `BindingOp`：
+- `direct`
+- `index_to_joints_table`
+
+说明：
+- `direct` 表示把上下文值直接写入 `command.params[to_param]`
+- `index_to_joints_table` 表示把上下文中的索引映射到 `double_tables`
 
 #### 任务编排示例
 **AUTO_GRAB（显式）**

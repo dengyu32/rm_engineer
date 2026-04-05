@@ -5,20 +5,12 @@
 #include <algorithm>
 #include <vector>
 #include <cmath>
-#include <random>
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+#include <limits>
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
-#include <pcl/filters/voxel_grid.h>
-#include <pcl/filters/filter.h>
-#include <pcl/filters/radius_outlier_removal.h>
-#include <pcl/segmentation/extract_clusters.h>
-#include <pcl/search/kdtree.h>
-#include <pcl/features/normal_3d_omp.h>
-#include <pcl/registration/icp_nl.h>
-#include <pcl/registration/transformation_estimation_point_to_plane_lls.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <filesystem>
 
@@ -27,21 +19,49 @@ namespace arm_controller
 
 DetectNode::DetectNode(const rclcpp::NodeOptions &options)
     : Node("detect_node", options),
+      detector_([]
+                {
+                    const std::string share_dir =
+                        ament_index_cpp::get_package_share_directory("detect_node");
+                    const std::filesystem::path model_dir =
+                        std::filesystem::path(share_dir) / "models";
+                    const std::string onnx_path =
+                        (model_dir / "best.onnx").string();
+                    const std::string names_path =
+                        (model_dir / "target.names").string();
+                    return yolos::seg::YOLOSegDetector(onnx_path, names_path, false);
+                }()),  // CPU
       fx_(0.0), fy_(0.0), cx_(0.0), cy_(0.0),
       depth_scale_(0.001),
+      has_lock_(false),
+      bad_track_count_(0),
+      iou_min_(0.3),
+      bad_track_max_(5),
       has_valid_pose_(false),
-      pose_quality_(PoseQuality::DEGRADED_5DOF)
+      pose_quality_(PoseQuality::DEGRADED_5DOF),
+      fallback_count_(0),
+      alt_axis_count_(0),
+      alt_axis_(Eigen::Vector3f::UnitZ()),
+      axis_conf_min_(0.35),
+      axis_smooth_alpha_(0.6),
+      axis_force_flip_(false),
+      cyl_voxel_leaf_(0.0035),
+      cyl_normal_radius_(0.010),
+      cyl_max_iter_(1000),
+      cyl_dist_thresh_(0.0045),
+      cyl_radius_margin_std_mult_(3.0),
+      cyl_radius_margin_min_(0.005),
+      cyl_use_radius_limits_(true),
+      cad_axis_len_(0.0),
+      cad_axis_valid_(false),
+      cad_radius_mean_(0.0),
+      cad_radius_std_(0.0),
+      cad_radius_valid_(false)
 {
-    const auto share_dir = ament_index_cpp::get_package_share_directory("detect_node");
-    const auto default_model_path = (std::filesystem::path(share_dir) / "models" / "yolo11s-seg.onnx").string();
-    const auto default_labels_path = (std::filesystem::path(share_dir) / "models" / "coco.names").string();
-
-    const auto model_path = declare_parameter<std::string>("model_path", default_model_path);
-    const auto labels_path = declare_parameter<std::string>("labels_path", default_labels_path);
-    const auto cad_path = declare_parameter<std::string>("cad_path", "");
-    const auto use_gpu = declare_parameter<bool>("use_gpu", true);
-
-    detector_ = std::make_unique<yolos::seg::YOLOSegDetector>(model_path, labels_path, use_gpu);
+    const std::string share_dir = ament_index_cpp::get_package_share_directory("detect_node");
+    const std::filesystem::path model_dir = std::filesystem::path(share_dir) / "models";
+    const std::string onnx_path = (model_dir / "yolo11s-seg.onnx").string();
+    const std::string names_path = (model_dir / "target.names").string();
 
     // ================= Message Filters 时间同步 =================
     mf_color_sub_ = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::Image>>(
@@ -62,21 +82,146 @@ DetectNode::DetectNode(const rclcpp::NodeOptions &options)
     // 发布 T_init (CAD → 相机初始位姿)
     pose_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(
         "/detect/cad_initial_pose", rclcpp::SensorDataQoS());
+    center_pub_ = create_publisher<geometry_msgs::msg::PointStamped>(
+        "/detect/center", rclcpp::SensorDataQoS());
+    axis_pub_ = create_publisher<geometry_msgs::msg::Vector3Stamped>(
+        "/detect/v_max", rclcpp::SensorDataQoS());
+
+    axis_conf_min_ = declare_parameter<double>("axis_conf_min", 0.35);
+    axis_smooth_alpha_ = declare_parameter<double>("axis_smooth_alpha", 0.6);
+    axis_force_flip_ = declare_parameter<bool>("axis_force_flip", false);
+    iou_min_ = declare_parameter<double>("track_iou_min", 0.3);
+    bad_track_max_ = declare_parameter<int>("track_bad_max", 5);
+    cyl_voxel_leaf_ = declare_parameter<double>("cyl_voxel_leaf", 0.0035);
+    cyl_normal_radius_ = declare_parameter<double>("cyl_normal_radius", 0.010);
+    cyl_max_iter_ = declare_parameter<int>("cyl_max_iter", 1000);
+    cyl_dist_thresh_ = declare_parameter<double>("cyl_dist_thresh", 0.0045);
+    cyl_radius_margin_std_mult_ = declare_parameter<double>("cyl_radius_margin_std_mult", 3.0);
+    cyl_radius_margin_min_ = declare_parameter<double>("cyl_radius_margin_min", 0.005);
+    cyl_use_radius_limits_ = declare_parameter<bool>("cyl_use_radius_limits", true);
+
+    param_cb_handle_ = add_on_set_parameters_callback(
+        [this](const std::vector<rclcpp::Parameter>& params)
+        {
+            rcl_interfaces::msg::SetParametersResult result;
+            result.successful = true;
+            result.reason = "success";
+            for (const auto& p : params) {
+                const auto& name = p.get_name();
+                if (name == "cyl_voxel_leaf") {
+                    const double v = p.as_double();
+                    if (v <= 0.0) { result.successful = false; result.reason = "cyl_voxel_leaf must be > 0"; break; }
+                    cyl_voxel_leaf_ = v;
+                } else if (name == "cyl_normal_radius") {
+                    const double v = p.as_double();
+                    if (v <= 0.0) { result.successful = false; result.reason = "cyl_normal_radius must be > 0"; break; }
+                    cyl_normal_radius_ = v;
+                } else if (name == "cyl_max_iter") {
+                    const int v = p.as_int();
+                    if (v <= 0) { result.successful = false; result.reason = "cyl_max_iter must be > 0"; break; }
+                    cyl_max_iter_ = v;
+                } else if (name == "cyl_dist_thresh") {
+                    const double v = p.as_double();
+                    if (v <= 0.0) { result.successful = false; result.reason = "cyl_dist_thresh must be > 0"; break; }
+                    cyl_dist_thresh_ = v;
+                } else if (name == "cyl_radius_margin_std_mult") {
+                    const double v = p.as_double();
+                    if (v < 0.0) { result.successful = false; result.reason = "cyl_radius_margin_std_mult must be >= 0"; break; }
+                    cyl_radius_margin_std_mult_ = v;
+                } else if (name == "cyl_radius_margin_min") {
+                    const double v = p.as_double();
+                    if (v < 0.0) { result.successful = false; result.reason = "cyl_radius_margin_min must be >= 0"; break; }
+                    cyl_radius_margin_min_ = v;
+                } else if (name == "cyl_use_radius_limits") {
+                    cyl_use_radius_limits_ = p.as_bool();
+                } else if (name == "axis_force_flip") {
+                    axis_force_flip_ = p.as_bool();
+                }
+            }
+            return result;
+        });
 
     // ================= 加载 CAD 点云（一次性） =================
     cad_cloud_.reset(new pcl::PointCloud<pcl::PointXYZ>());
-    if (cad_path.empty()) {
-        RCLCPP_WARN(get_logger(), "[DetectNode] cad_path parameter is empty; ICP alignment will be disabled.");
-        cad_cloud_->clear();
-    } else if (pcl::io::loadPCDFile<pcl::PointXYZ>(cad_path, *cad_cloud_) == -1) {
+    const std::string cad_path = (model_dir / "水杯_cad_sidewall.pcd").string();
+    if (pcl::io::loadPCDFile<pcl::PointXYZ>(cad_path, *cad_cloud_) == -1) {
         RCLCPP_ERROR(get_logger(), "Failed to load CAD point cloud from %s", cad_path.c_str());
         cad_cloud_->clear();
     } else {
+        std::vector<double> rs;
+        rs.reserve(cad_cloud_->size());
+        float z_min = std::numeric_limits<float>::infinity();
+        float z_max = -std::numeric_limits<float>::infinity();
+        for (const auto& pt : cad_cloud_->points) {
+            if (!std::isfinite(pt.z)) continue;
+            z_min = std::min(z_min, pt.z);
+            z_max = std::max(z_max, pt.z);
+            const double r = std::hypot(static_cast<double>(pt.x), static_cast<double>(pt.y));
+            if (std::isfinite(r)) rs.push_back(r);
+        }
+        if (std::isfinite(z_min) && std::isfinite(z_max) && z_max > z_min) {
+            cad_axis_len_ = static_cast<double>(z_max - z_min);
+            cad_axis_valid_ = true;
+            RCLCPP_INFO(get_logger(), "[DetectNode] CAD axis length (Z): %.4f", cad_axis_len_);
+        } else {
+            cad_axis_valid_ = false;
+            RCLCPP_WARN(get_logger(), "[DetectNode] CAD axis length invalid, z_min=%.4f z_max=%.4f", z_min, z_max);
+        }
         RCLCPP_INFO(get_logger(), "[DetectNode] Loaded CAD point cloud: %zu points from %s",
                     cad_cloud_->size(), cad_path.c_str());
+
+        if (rs.size() >= 100) {
+            double sum = 0.0;
+            for (double r : rs) sum += r;
+            cad_radius_mean_ = sum / static_cast<double>(rs.size());
+            double var = 0.0;
+            for (double r : rs) {
+                const double d = r - cad_radius_mean_;
+                var += d * d;
+            }
+            cad_radius_std_ = std::sqrt(var / static_cast<double>(rs.size()));
+            cad_radius_valid_ = std::isfinite(cad_radius_mean_) && std::isfinite(cad_radius_std_) && cad_radius_mean_ > 1e-6;
+            if (cad_radius_valid_) {
+                RCLCPP_INFO(get_logger(),
+                    "[DetectNode] CAD radius mean=%.4f std=%.4f (m)",
+                    cad_radius_mean_, cad_radius_std_);
+            } else {
+                RCLCPP_WARN(get_logger(), "[DetectNode] CAD radius invalid, mean=%.4f std=%.4f", cad_radius_mean_, cad_radius_std_);
+            }
+        } else {
+            cad_radius_valid_ = false;
+            RCLCPP_WARN(get_logger(), "[DetectNode] CAD radius stats invalid, rs.size=%zu", rs.size());
+        }
     }
 
     RCLCPP_INFO(get_logger(), "[DetectNode] started with message_filters sync");
+    RCLCPP_INFO(get_logger(), "[DetectNode] Model path: %s", onnx_path.c_str());
+    RCLCPP_INFO(get_logger(), "[DetectNode] Names path: %s", names_path.c_str());
+    RCLCPP_INFO(get_logger(), "[DetectNode] Model exists: %s", std::filesystem::exists(onnx_path) ? "yes" : "no");
+    RCLCPP_INFO(get_logger(), "[DetectNode] Names exists: %s", std::filesystem::exists(names_path) ? "yes" : "no");
+    if (std::filesystem::exists(onnx_path)) {
+        const auto size = std::filesystem::file_size(onnx_path);
+        RCLCPP_INFO(get_logger(), "[DetectNode] Model size: %zu bytes", static_cast<size_t>(size));
+    }
+    {
+        const auto& names = detector_.getClassNames();
+        RCLCPP_INFO(get_logger(), "[DetectNode] Class count: %zu", names.size());
+        if (!names.empty()) {
+            std::string first = names.front();
+            std::string last = names.back();
+            RCLCPP_INFO(get_logger(), "[DetectNode] First class: %s", first.c_str());
+            RCLCPP_INFO(get_logger(), "[DetectNode] Last class: %s", last.c_str());
+        }
+    }
+
+    // Create the visualization window explicitly to avoid lazy creation issues in component threads.
+    cv::namedWindow("segmentation", cv::WINDOW_NORMAL);
+    cv::startWindowThread();
+}
+
+DetectNode::~DetectNode()
+{
+    cv::destroyWindow("segmentation");
 }
 
 void DetectNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::ConstSharedPtr msg)
@@ -91,19 +236,37 @@ void DetectNode::syncCallback(
     const sensor_msgs::msg::Image::ConstSharedPtr color_msg,
     const sensor_msgs::msg::Image::ConstSharedPtr depth_msg)
 {
+    const int64_t max_pixels = 20000000;  // 20 MP sanity limit
+    if (color_msg->width == 0 || color_msg->height == 0 ||
+        depth_msg->width == 0 || depth_msg->height == 0)
+    {
+        RCLCPP_ERROR(get_logger(), "Empty image meta (color %ux%u, depth %ux%u), skip",
+                     color_msg->width, color_msg->height,
+                     depth_msg->width, depth_msg->height);
+        return;
+    }
+    if (static_cast<int64_t>(color_msg->width) * static_cast<int64_t>(color_msg->height) > max_pixels ||
+        static_cast<int64_t>(depth_msg->width) * static_cast<int64_t>(depth_msg->height) > max_pixels)
+    {
+        RCLCPP_ERROR(get_logger(), "Abnormal image meta (color %ux%u, depth %ux%u), skip",
+                     color_msg->width, color_msg->height,
+                     depth_msg->width, depth_msg->height);
+        return;
+    }
+
     // 转换彩色图像
-    cv::Mat color = cv_bridge::toCvShare(color_msg, "bgr8")->image.clone();
+    cv::Mat color = cv_bridge::toCvShare(color_msg, "bgr8")->image;
 
     // 转换深度图像
     cv::Mat depth;
     if (depth_msg->encoding == "16UC1")
     {
-        depth = cv_bridge::toCvShare(depth_msg, "16UC1")->image.clone();
+        depth = cv_bridge::toCvShare(depth_msg, "16UC1")->image;
         depth_scale_ = 0.001;
     }
     else if (depth_msg->encoding == "32FC1")
     {
-        depth = cv_bridge::toCvShare(depth_msg, "32FC1")->image.clone();
+        depth = cv_bridge::toCvShare(depth_msg, "32FC1")->image;
         depth_scale_ = 1.0;
     }
     else
@@ -112,153 +275,29 @@ void DetectNode::syncCallback(
         return;
     }
 
+    // Clone after basic sanity checks to own the buffer.
+    color = color.clone();
+    depth = depth.clone();
+
     // 处理同步的帧
     process(color, depth, color_msg->header.stamp);
 }
 
-// ==================== 小工具：用 nth_element 求分位数 ====================
-static float quantile_inplace(std::vector<float>& v, float q)
-{
-    if (v.empty()) return 0.0f;
-    if (q < 0.0f) q = 0.0f;
-    if (q > 1.0f) q = 1.0f;
-
-    const size_t k = static_cast<size_t>(q * (v.size() - 1));
-    auto it = v.begin() + k;
-    std::nth_element(v.begin(), it, v.end());
-    return *it;
-}
-
-// ==================== Step6 ICP 辅助函数 ====================
-
-// 1) Voxel 下采样（带空输入保护）
-static pcl::PointCloud<pcl::PointXYZ>::Ptr voxelDownsample(
-    const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& in, float leaf)
-{
-    if (!in || in->empty() || leaf < 1e-6f) {
-        return pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>());
-    }
-    pcl::VoxelGrid<pcl::PointXYZ> voxel;
-    voxel.setInputCloud(in);
-    voxel.setLeafSize(leaf, leaf, leaf);
-    auto out = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>());
-    voxel.filter(*out);
-    return out;
-}
-
-// 2) 法线估计（点到平面必备，带 NaN 法线过滤）
-static pcl::PointCloud<pcl::PointNormal>::Ptr estimateNormals(
-    const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& in, float radius)
-{
-    if (!in || in->empty() || radius < 1e-6f) {
-        return pcl::PointCloud<pcl::PointNormal>::Ptr(new pcl::PointCloud<pcl::PointNormal>());
-    }
-
-    pcl::NormalEstimationOMP<pcl::PointXYZ, pcl::Normal> ne;
-    ne.setInputCloud(in);
-
-    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>());
-    ne.setSearchMethod(tree);
-    ne.setRadiusSearch(radius);
-
-    pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>());
-    ne.compute(*normals);
-
-    // 门禁：normals->size() 必须等于 in->size()，否则越界
-    if (!normals || normals->size() != in->size()) {
-        return pcl::PointCloud<pcl::PointNormal>::Ptr(new pcl::PointCloud<pcl::PointNormal>());
-    }
-
-    auto out = pcl::PointCloud<pcl::PointNormal>::Ptr(new pcl::PointCloud<pcl::PointNormal>());
-    out->reserve(in->size());
-
-    for (size_t i = 0; i < in->size(); ++i) {
-        // 法线有效性检查：必须 finite（非 NaN、非无限）
-        const float nx = (*normals)[i].normal_x;
-        const float ny = (*normals)[i].normal_y;
-        const float nz = (*normals)[i].normal_z;
-        if (!std::isfinite(nx) || !std::isfinite(ny) || !std::isfinite(nz)) {
-            continue;  // 跳过无效法线
-        }
-
-        pcl::PointNormal pn;
-        pn.x = (*in)[i].x; pn.y = (*in)[i].y; pn.z = (*in)[i].z;
-        pn.normal_x = nx; pn.normal_y = ny; pn.normal_z = nz;
-        out->push_back(pn);
-    }
-    return out;
-}
-
-// 3) 单层点到平面 ICP
-static bool icpPointToPlaneOneLevel(
-    const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& cad_xyz,     // source: CAD (CAD系)
-    const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& obs_xyz,     // target: 观测 (cam系)
-    const Eigen::Matrix4f& init_guess,                         // CAD->cam 初值
-    float voxel_leaf,
-    float max_corr_dist,
-    int max_iter,
-    float normal_radius,
-    float trim_ratio,                                         // 鲁棒 trim 比例（0.9f 或 0.95f）
-    Eigen::Matrix4f& T_out,                                    // 输出 CAD->cam
-    float& fitness_out)
-{
-    (void)trim_ratio;
-    fitness_out = 1e9f;
-    T_out = init_guess;
-
-    if (!cad_xyz || cad_xyz->empty() || !obs_xyz || obs_xyz->empty()) return false;
-
-    // 1) 同尺度 voxel
-    auto cad_ds = voxelDownsample(cad_xyz, voxel_leaf);
-    auto obs_ds = voxelDownsample(obs_xyz, voxel_leaf);
-    if (!cad_ds || cad_ds->empty() || !obs_ds || obs_ds->empty()) return false;
-
-    // 2) NaN 清理（非常关键）
-    std::vector<int> idx;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cad_clean(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::PointCloud<pcl::PointXYZ>::Ptr obs_clean(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::removeNaNFromPointCloud(*cad_ds, *cad_clean, idx);
-    pcl::removeNaNFromPointCloud(*obs_ds, *obs_clean, idx);
-
-    if (cad_clean->size() < 80 || obs_clean->size() < 80) return false;
-
-    // 3) 法线（点到平面必备）
-    auto cad_pn = estimateNormals(cad_clean, normal_radius);
-    auto obs_pn = estimateNormals(obs_clean, normal_radius);
-    if (!cad_pn || cad_pn->empty() || !obs_pn || obs_pn->empty()) return false;
-
-    // 4) ICP point-to-plane
-    pcl::IterativeClosestPointWithNormals<pcl::PointNormal, pcl::PointNormal> icp;
-    icp.setInputSource(cad_pn);
-    icp.setInputTarget(obs_pn);
-
-    icp.setMaximumIterations(max_iter);
-    icp.setMaxCorrespondenceDistance(max_corr_dist);
-    icp.setTransformationEpsilon(1e-4f);
-    icp.setEuclideanFitnessEpsilon(1e-4f);
-
-    // point-to-plane 估计器
-    icp.setTransformationEstimation(
-        pcl::registration::TransformationEstimationPointToPlaneLLS<pcl::PointNormal, pcl::PointNormal>::Ptr(
-            new pcl::registration::TransformationEstimationPointToPlaneLLS<pcl::PointNormal, pcl::PointNormal>()
-        )
-    );
-
-    // 5) 鲁棒 trim（PCL 版本不支持 CorrespondenceRejectorTrimmed，改用简单方式）
-    // 暂时不做 trim，直接对齐
-    pcl::PointCloud<pcl::PointNormal> aligned;
-    icp.align(aligned, init_guess);
-
-    if (!icp.hasConverged()) return false;
-
-    T_out = icp.getFinalTransformation();               // 直接就是 CAD->cam
-    fitness_out = static_cast<float>(icp.getFitnessScore());
-    return true;
-}
 
 void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcpp::Time& stamp)
 {
     if (color.empty() || depth.empty()) return;
+    if (color.rows <= 0 || color.cols <= 0 || depth.rows <= 0 || depth.cols <= 0) return;
+    // Guard against corrupted frames that can cause huge allocations downstream.
+    const int64_t max_pixels = 20000000;  // 20 MP sanity limit
+    if (static_cast<int64_t>(color.total()) > max_pixels ||
+        static_cast<int64_t>(depth.total()) > max_pixels)
+    {
+        RCLCPP_ERROR(get_logger(),
+            "[DetectNode] Abnormal image size color=%dx%d depth=%dx%d, skip frame",
+            color.cols, color.rows, depth.cols, depth.rows);
+        return;
+    }
     if (fx_ < 1e-6 || fy_ < 1e-6) return;
     // 已由 message_filters 同步，无需 dt 检查
 
@@ -300,150 +339,135 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
     const int border_margin = 20;  // 贴边阈值：像素
 
     // YOLO 分割检测
-    std::vector<yolos::seg::Segmentation> results =
-        detector_->segment(color_local, 0.5f, 0.5f);
-
-    // 显示可视化（原图 + mask + 点云）
     cv::Mat vis = color_local.clone();
+    std::vector<SegObject> results = runSegmentation(color_local, vis);
 
     bool frame_valid = false;  // 整帧是否有效
-    has_valid_pose_ = false;  // 每帧开始时重置
+    // has_valid_pose_ 不再每帧重置，保留跨帧锚点
 
     if (!results.empty())
     {
-        // 绘制 mask
-        detector_->drawMasksOnly(vis, results, 0.6f);
-
-        for (const auto &obj : results)
+        auto iou_bbox = [](const cv::Rect& a, const cv::Rect& b) -> float
         {
-            if (obj.conf < 0.5f || obj.mask.empty()) continue;
+            const int x1 = std::max(a.x, b.x);
+            const int y1 = std::max(a.y, b.y);
+            const int x2 = std::min(a.x + a.width, b.x + b.width);
+            const int y2 = std::min(a.y + a.height, b.y + b.height);
+            const int w = x2 - x1;
+            const int h = y2 - y1;
+            if (w <= 0 || h <= 0) return 0.0f;
+            const float inter = static_cast<float>(w * h);
+            const float uni = static_cast<float>(a.area() + b.area()) - inter;
+            return (uni > 1e-6f) ? (inter / uni) : 0.0f;
+        };
+
+        SegObject* selected = nullptr;
+        if (has_lock_) {
+            float best_iou = -1.0f;
+            size_t best_i = 0;
+            for (size_t i = 0; i < results.size(); ++i) {
+                const float iou = iou_bbox(locked_bbox_, results[i].bbox);
+                if (iou > best_iou) {
+                    best_iou = iou;
+                    best_i = i;
+                }
+            }
+            if (best_iou >= static_cast<float>(iou_min_)) {
+                selected = &results[best_i];
+                bad_track_count_ = 0;
+            } else {
+                bad_track_count_++;
+                if (bad_track_count_ >= bad_track_max_) {
+                    size_t max_i = 0;
+                    for (size_t i = 1; i < results.size(); ++i) {
+                        if (results[i].conf > results[max_i].conf) max_i = i;
+                    }
+                    selected = &results[max_i];
+                    bad_track_count_ = 0;
+                    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 500,
+                        "[detect_node] Track reset by low IoU (%.2f < %.2f)",
+                        best_iou, static_cast<float>(iou_min_));
+                }
+            }
+        } else {
+            size_t max_i = 0;
+            for (size_t i = 1; i < results.size(); ++i) {
+                if (results[i].conf > results[max_i].conf) max_i = i;
+            }
+            selected = &results[max_i];
+            bad_track_count_ = 0;
+        }
+
+        if (selected) {
+            locked_bbox_ = selected->bbox;
+            has_lock_ = true;
+        }
+
+        const auto *objp = selected;
+        bool skip = false;
+
+        if (!objp) {
+            skip = true;
+        }
+
+        do {
+            if (skip) break;
+            const auto &obj = *objp;
+            if (obj.conf < 0.5f || obj.mask.empty()) { skip = true; break; }
 
             // -------------------- Step 0: Bbox 贴边检查（深度缺失高风险） --------------------
-            cv::Rect bbox(obj.box.x, obj.box.y, obj.box.width, obj.box.height);
-            bool is_at_border = (bbox.x < border_margin) ||
-                                (bbox.y < border_margin) ||
-                                (bbox.x + bbox.width > img_w - border_margin) ||
-                                (bbox.y + bbox.height > img_h - border_margin);
+            bool is_at_border = isBboxAtBorder(obj.bbox, img_w, img_h, border_margin);
 
             if (is_at_border) {
-                RCLCPP_WARN(get_logger(), "Class %d bbox at border, skip", obj.classId);
-                continue;
+                RCLCPP_WARN(get_logger(), "Class %d bbox at border, skip", obj.class_id);
+                skip = true;
+                break;
             }
 
             // -------------------- Step 1: 采样 mask 非零像素（控制点数量） --------------------
-            std::vector<cv::Point> nz;
-            cv::findNonZero(obj.mask, nz);
-            if (nz.empty()) continue;
-
-            // 改动4：改为随机抽样（减少统计抖动）
-            const size_t max_sample = 6000;
-            const size_t sample_count = std::min(nz.size(), max_sample);
-
-            // 随机抽样（每帧局部 seed，避免静态共享副作用）
-            std::vector<size_t> indices(nz.size());
-            for (size_t i = 0; i < nz.size(); ++i) indices[i] = i;
-            std::mt19937 rng(static_cast<unsigned int>(stamp.nanoseconds()));  // 每帧不同 seed
-            std::shuffle(indices.begin(), indices.end(), rng);
-
-            // 计算 valid 深度采样数（用于 valid_ratio 门禁）
-            int valid_sampled = 0;
-            int sampled_total = 0;
-
-            pcl::PointCloud<pcl::PointXYZ>::Ptr raw_cloud(new pcl::PointCloud<pcl::PointXYZ>());
-            raw_cloud->reserve(sample_count);
-
+            pcl::PointCloud<pcl::PointXYZ>::Ptr raw_cloud;
             std::vector<float> z_vals;
-            z_vals.reserve(sample_count);
-
+            size_t mask_nz = 0;
             int zero_depth = 0;
             int out_of_range = 0;
-
-            for (size_t idx = 0; idx < sample_count; ++idx)
-            {
-                const size_t i = indices[idx];
-                const int x = nz[i].x;
-                const int y = nz[i].y;
-
-                if (x < 0 || y < 0 || x >= depth_local.cols || y >= depth_local.rows) continue;
-
-                float Z = 0.0f;
-                if (depth_local.type() == CV_16UC1)
-                {
-                    const uint16_t d = depth_local.at<uint16_t>(y, x);
-                    if (d == 0) { zero_depth++; continue; }
-                    Z = static_cast<float>(d) * static_cast<float>(depth_scale_);
-                }
-                else // CV_32FC1
-                {
-                    const float d = depth_local.at<float>(y, x);
-                    if (!std::isfinite(d) || d < 1e-6f) { zero_depth++; continue; }
-                    Z = d;
-                }
-
-                if (Z < 0.1f || Z > 2.0f) { out_of_range++; continue; }
-
-                const float X = (static_cast<float>(x) - static_cast<float>(cx_)) * Z / static_cast<float>(fx_);
-                const float Y = (static_cast<float>(y) - static_cast<float>(cy_)) * Z / static_cast<float>(fy_);
-
-                sampled_total++;  // 只统计坐标合法的抽样点
-                raw_cloud->push_back(pcl::PointXYZ(X, Y, Z));
-                z_vals.push_back(Z);
-                valid_sampled++;
+            float valid_ratio = 0.0f;
+            size_t sampled_total = 0;
+            if (!buildRawCloudFromMask(
+                    obj.mask, depth_local, stamp,
+                    raw_cloud, z_vals, mask_nz,
+                    zero_depth, out_of_range,
+                    valid_ratio, sampled_total)) {
+                skip = true;
+                break;
             }
-
-            if (raw_cloud->empty()) continue;
 
             // -------------------- Step 0.5: valid_ratio 两级门禁 --------------------
             // 改动2：两级门禁（HOLD / DEGRADED / 正常）
-            const float valid_ratio = (sampled_total > 0) ? static_cast<float>(valid_sampled) / sampled_total : 0.0f;
             const float min_valid_ratio_hold = 0.15f;   // HOLD 阈值
             const float min_valid_ratio_normal = 0.30f;  // 正常阈值
 
             if (valid_ratio < min_valid_ratio_hold) {
                 // HOLD：不更新，但别让整帧直接无效（留给其他对象）
                 RCLCPP_WARN(get_logger(), "Class %d valid_ratio=%.2f < %.2f, HOLD (no update)",
-                            obj.classId, valid_ratio, min_valid_ratio_hold);
-                continue;
+                            obj.class_id, valid_ratio, min_valid_ratio_hold);
+                skip = true;
+                break;
             }
 
             // DEGRADED 模式：继续处理，但只更新 center，不更新轴
             const bool is_degraded = (valid_ratio < min_valid_ratio_normal);
             if (is_degraded) {
                 RCLCPP_WARN(get_logger(), "Class %d valid_ratio=%.2f [DEGRADED], continue with lower confidence",
-                            obj.classId, valid_ratio);
+                            obj.class_id, valid_ratio);
             }
 
             const size_t n_raw = raw_cloud->size();
 
             // -------------------- Step 2: 深度分位数带通（距离自适应 margin） --------------------
-            std::vector<float> z_tmp = z_vals;
-            const float z25 = quantile_inplace(z_tmp, 0.25f);
-
-            z_tmp = z_vals;
-            const float z75 = quantile_inplace(z_tmp, 0.75f);
-
-            z_tmp = z_vals;
-            const float z50 = quantile_inplace(z_tmp, 0.50f);
-
-            // 距离自适应 margin：至少 3cm，远距离再放大
-            const float margin = std::max(0.03f, 0.03f * z50);
-            float z_lo = z25 - margin;
-            float z_hi = z75 + margin;
-
-            const float min_band = 0.02f;
-            if (z_hi - z_lo < min_band) {
-                z_lo = z50 - 0.03f;
-                z_hi = z50 + 0.03f;
-            }
-
-            pcl::PointCloud<pcl::PointXYZ>::Ptr depth_cloud(new pcl::PointCloud<pcl::PointXYZ>());
-            depth_cloud->reserve(raw_cloud->size());
-
-            for (const auto& pt : raw_cloud->points) {
-                if (pt.z >= z_lo && pt.z <= z_hi) depth_cloud->push_back(pt);
-            }
-
-            if (depth_cloud->empty()) continue;
+            pcl::PointCloud<pcl::PointXYZ>::Ptr depth_cloud;
+            float z_lo = 0.0f;
+            float z_hi = 0.0f;
+            if (!depthBandPass(raw_cloud, z_vals, depth_cloud, z_lo, z_hi)) { skip = true; break; }
 
             const size_t n_depth = depth_cloud->size();
 
@@ -454,14 +478,15 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
 
             RCLCPP_INFO(get_logger(),
                 "Class %d conf=%.2f mask_nz=%zu raw=%zu depth=%zu final=%zu valid_ratio=%.2f z=[%.3f,%.3f] zero=%d oor=%d",
-                obj.classId, obj.conf, nz.size(), n_raw, n_depth, n_final, valid_ratio, z_lo, z_hi, zero_depth, out_of_range);
+                obj.class_id, obj.conf, mask_nz, n_raw, n_depth, n_final, valid_ratio, z_lo, z_hi, zero_depth, out_of_range);
 
-            if (depth_cloud->empty()) continue;
+            if (depth_cloud->empty()) { skip = true; break; }
 
             // 改动3：降低点数门禁（200 → 100）
             if (n_final < 100) {
-                RCLCPP_WARN(get_logger(), "Class %d final points=%zu < 100, skip", obj.classId, n_final);
-                continue;
+                RCLCPP_WARN(get_logger(), "Class %d final points=%zu < 100, skip", obj.class_id, n_final);
+                skip = true;
+                break;
             }
 
             // DEGRADED 模式：只更新 center，跳过轴估计和发布
@@ -472,428 +497,37 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
                     center += Eigen::Vector3f(pt.x, pt.y, pt.z);
                 }
                 center /= static_cast<float>(depth_cloud->size());
-                center_ = center;  // 仅更新 center
+
+                // 改动: DEGRADED 模式也应用平滑，防止跳变
+                const float alpha = 0.65f;
+                if (has_valid_pose_) {
+                    center_ = alpha * center + (1.0f - alpha) * center_;
+                } else {
+                    center_ = center;
+                }
                 frame_valid = true;
                 RCLCPP_INFO(get_logger(), "Class %d DEGRADED: updated center only [%.3f,%.3f,%.3f]",
-                            obj.classId, center.x(), center.y(), center.z());
-                continue;
+                            obj.class_id, center.x(), center.y(), center.z());
+                break;
             }
 
             // 正常模式：完整处理
             frame_valid = true;
-
-            // -------------------- Step 3A-1: PCA 主成分分析（得到 v_max/v_min） --------------------
-            Eigen::Vector3f centroid(0.0f, 0.0f, 0.0f);
-            for (const auto& pt : depth_cloud->points) {
-                centroid += Eigen::Vector3f(pt.x, pt.y, pt.z);
-            }
-            centroid /= static_cast<float>(depth_cloud->size());
-
-            Eigen::Matrix3f cov = Eigen::Matrix3f::Zero();
-            for (const auto& pt : depth_cloud->points) {
-                Eigen::Vector3f d(pt.x - centroid.x(), pt.y - centroid.y(), pt.z - centroid.z());
-                cov += d * d.transpose();
-            }
-            const float denom = std::max<size_t>(depth_cloud->size() - 1, 1);
-            cov /= denom;
-
-            Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigensolver(cov);
-            if (eigensolver.info() != Eigen::Success) {
-                RCLCPP_WARN(get_logger(), "Class %d PCA eigen decomposition failed", obj.classId);
-                continue;
-            }
-
-            const Eigen::Vector3f eigenvalues = eigensolver.eigenvalues();
-            const Eigen::Matrix3f eigenvectors = eigensolver.eigenvectors();
-
-            Eigen::Vector3f v_min = eigenvectors.col(0);
-            Eigen::Vector3f v_max = eigenvectors.col(2);
-
-            v_max.normalize();
-            v_min.normalize();
-
-            if (v_max.z() < 0.0f) v_max = -v_max;
-            if (v_min.z() < 0.0f) v_min = -v_min;
-
-            // 跨帧方向一致（防止遮挡时主轴偶尔翻转）
-            if (has_valid_pose_ && v_max.dot(v_max_) < 0.0f) v_max = -v_max;
-
-            RCLCPP_INFO(get_logger(),
-                "Class %d PCA: centroid=[%.3f,%.3f,%.3f] eigenvalues=[%.3f,%.3f,%.3f] v_max=[%.3f,%.3f,%.3f] v_min=[%.3f,%.3f,%.3f]",
-                obj.classId,
-                centroid.x(), centroid.y(), centroid.z(),
-                eigenvalues[0], eigenvalues[1], eigenvalues[2],
-                v_max.x(), v_max.y(), v_max.z(),
-                v_min.x(), v_min.y(), v_min.z());
-
-            // -------------------- Step 3B: 侧壁筛选（用 r_mode 选主体直段） --------------------
-            std::vector<float> radii;
-            radii.reserve(depth_cloud->size());
-            for (const auto& pt : depth_cloud->points) {
-                Eigen::Vector3f p(pt.x, pt.y, pt.z);
-                Eigen::Vector3f d = p - centroid;
-                float projection = d.dot(v_max);
-                Eigen::Vector3f axial = projection * v_max;
-                float r = (d - axial).norm();
-                radii.push_back(r);
-            }
-
-            const float bin_size = 0.002f;
-            const float r_min = radii.empty() ? 0.0f : *std::min_element(radii.begin(), radii.end());
-            const float r_max = radii.empty() ? 0.1f : *std::max_element(radii.begin(), radii.end());
-            const float r_max_clamped = std::min(r_max, r_min + 0.08f);
-
-            // 改动5：修复 side_points 变量遮蔽（只声明一次）
-            pcl::PointCloud<pcl::PointXYZ>::Ptr side_points;
-
-            const int num_bins = static_cast<int>(std::ceil((r_max_clamped - r_min) / bin_size));
-            if (num_bins > 0) {
-                std::vector<int> histogram(num_bins, 0);
-                for (float r : radii) {
-                    if (r > r_max_clamped) continue;
-                    int bin_idx = static_cast<int>((r - r_min) / bin_size);
-                    if (bin_idx >= 0 && bin_idx < num_bins) {
-                        histogram[bin_idx]++;
-                    }
-                }
-
-                int max_bin_idx = 0;
-                int max_count = histogram[0];
-                for (int i = 1; i < num_bins; ++i) {
-                    if (histogram[i] > max_count) {
-                        max_count = histogram[i];
-                        max_bin_idx = i;
-                    }
-                }
-
-                const float r_mode = r_min + (max_bin_idx + 0.5f) * bin_size;
-                const float delta_r = std::max(0.002f, 0.08f * r_mode);
-                const float r_lo = r_mode - delta_r;
-                const float r_hi = r_mode + delta_r;
-
-                // 改动5：修复 - 使用 reset 而不是重新声明
-                side_points.reset(new pcl::PointCloud<pcl::PointXYZ>());
-                side_points->reserve(depth_cloud->size());
-                for (size_t i = 0; i < depth_cloud->size(); ++i) {
-                    if (radii[i] >= r_lo && radii[i] <= r_hi) {
-                        side_points->push_back(depth_cloud->points[i]);
-                    }
-                }
-
-                const float side_ratio = static_cast<float>(side_points->size()) / depth_cloud->size();
-                const bool use_refined = (side_ratio >= 0.2f && side_points->size() >= 100);
-
-                RCLCPP_INFO(get_logger(),
-                    "Class %d Step3B: r_mode=%.3f ±%.3f [%d in peak] side_n=%zu ratio=%.2f %s",
-                    obj.classId, r_mode, delta_r, max_count,
-                    side_points->size(), side_ratio,
-                    use_refined ? "REFINE" : "FALLBACK");
-
-                if (use_refined) {
-                    Eigen::Vector3f centroid_refined(0.0f, 0.0f, 0.0f);
-                    for (const auto& pt : side_points->points) {
-                        centroid_refined += Eigen::Vector3f(pt.x, pt.y, pt.z);
-                    }
-                    centroid_refined /= static_cast<float>(side_points->size());
-
-                    Eigen::Matrix3f cov_refined = Eigen::Matrix3f::Zero();
-                    for (const auto& pt : side_points->points) {
-                        Eigen::Vector3f d(pt.x - centroid_refined.x(), pt.y - centroid_refined.y(), pt.z - centroid_refined.z());
-                        cov_refined += d * d.transpose();
-                    }
-                    const float denom_refined = std::max<size_t>(side_points->size() - 1, 1);
-                    cov_refined /= denom_refined;
-
-                    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eig_refined(cov_refined);
-                    if (eig_refined.info() == Eigen::Success) {
-                        Eigen::Vector3f refined_axis = eig_refined.eigenvectors().col(2);
-                        refined_axis.normalize();
-                        if (refined_axis.z() < 0.0f) refined_axis = -refined_axis;
-
-                        if (refined_axis.dot(v_max) < 0.7f) {
-                            RCLCPP_WARN(get_logger(),
-                                "Class %d refined_axis deviates (dot=%.2f), reject refine", obj.classId, refined_axis.dot(v_max));
-                        } else {
-                            RCLCPP_INFO(get_logger(),
-                                "Class %d refined_axis: refined=[%.3f,%.3f,%.3f] centroid=[%.3f,%.3f,%.3f]",
-                                obj.classId,
-                                refined_axis.x(), refined_axis.y(), refined_axis.z(),
-                                centroid_refined.x(), centroid_refined.y(), centroid_refined.z());
-                            v_max = refined_axis;
-                            // centroid = centroid_refined;  // 删掉：会造成轴向原点漂移 → center 上下跳
-                        }
-                    }
-                }
-            }
-
-            // -------------------- Step 3D: 中心估计（trimmed median） --------------------
-            // 轴向参考原点：优先用上一帧 center_ 作为稳定锚点，防止遮挡导致 centroid 沿轴漂移
-            Eigen::Vector3f p0 = centroid;
-            if (has_valid_pose_) p0 = center_;
-
-            const bool has_valid_side = (side_points && !side_points->empty() && side_points->size() >= 100);
-            const auto& pts_for_center = has_valid_side ? side_points->points : depth_cloud->points;
-
-            std::vector<float> t_values;
-            t_values.reserve(pts_for_center.size());
-            for (const auto& pt : pts_for_center) {
-                Eigen::Vector3f p(pt.x, pt.y, pt.z);
-                float t = (p - p0).dot(v_max);
-                t_values.push_back(t);
-            }
-
-            const float trim_ratio = 0.15f;
-
-            Eigen::Vector3f center = p0;
-
-            if (t_values.size() < 50) {
-                RCLCPP_WARN(get_logger(), "Class %d too few points (%zu) for trimmed median, use centroid", obj.classId, t_values.size());
-            } else {
-                std::sort(t_values.begin(), t_values.end());
-
-                const size_t n = t_values.size();
-                const size_t lo = static_cast<size_t>(trim_ratio * n);
-                const size_t hi = n - lo - 1;
-
-                if (lo >= hi) {
-                    RCLCPP_WARN(get_logger(), "Class %d trimmed range invalid, use median", obj.classId);
-                    const float t_center = t_values[n / 2];
-                    center = p0 + t_center * v_max;
-                } else {
-                    const size_t mid = (lo + hi) / 2;
-                    const float t_center = t_values[mid];
-                    center = p0 + t_center * v_max;
-                }
-
-                RCLCPP_INFO(get_logger(),
-                    "Class %d Step3D: t_range=[%.3f,%.3f] t_center=%.3f center=[%.3f,%.3f,%.3f] use_side=%d",
-                    obj.classId, t_values[lo], t_values[hi], t_values[(lo + hi) / 2],
-                    center.x(), center.y(), center.z(), has_valid_side);
-            }
-
-            // 3D-5: 5DoF 结果已就绪
-
-            // -------------------- 保护：v_max 非零检查 --------------------
-            if (v_max.norm() < 1e-6f)
-            {
-                RCLCPP_WARN(get_logger(), "Class %d v_max is zero, skip Step4C/4D", obj.classId);
-                continue;
-            }
-
-            // -------------------- Step 4C: 构造 R_init（向量到向量旋转） --------------------
-            Eigen::Vector3d cad_axis(0, 0, 1);
-            Eigen::Vector3d obj_axis(v_max.cast<double>().normalized());
-
-            Eigen::Quaterniond q = Eigen::Quaterniond::FromTwoVectors(cad_axis, obj_axis);
-            Eigen::Matrix3d R_init = q.toRotationMatrix();
-
-            Eigen::Vector3d test = R_init * cad_axis;
-            std::cout << "R_init * [0,0,1] = [" << test.transpose() << "]" << std::endl;
-            std::cout << "v_max (normalized) = [" << obj_axis.transpose() << "]" << std::endl;
-            std::cout << "Difference norm: " << (test - obj_axis).norm() << std::endl;
-
-            RCLCPP_INFO(get_logger(),
-                "Class %d Step4C: R_init constructed (yaw留给ICP)",
-                obj.classId);
-
-            // -------------------- Step 4D: 拼接 T_init（CAD → 相机） --------------------
-            Eigen::Vector3d t_init = center.cast<double>();
-            Eigen::Matrix4d T_init = Eigen::Matrix4d::Identity();
-            T_init.block<3, 3>(0, 0) = R_init;
-            T_init.block<3, 1>(0, 3) = t_init;
-
-            RCLCPP_INFO(get_logger(),
-                "Class %d Step4D: T_init constructed, t=[%.3f,%.3f,%.3f]",
-                obj.classId, t_init.x(), t_init.y(), t_init.z());
-
-            // -------------------- Step 6: point-to-plane ICP (multi-res + trim) --------------------
             bool icp_success = false;
-            float fit1 = 0.f, fit2 = 0.f;
-
-            // 初值（CAD->cam）
-            Eigen::Matrix4f T_level1 = T_init.cast<float>();
-            Eigen::Matrix4f T_level2 = T_init.cast<float>();
-
-            if (cad_cloud_ && !cad_cloud_->empty())
-            {
-                // Level1：4mm, 10mm, iter15
-                {
-                    Eigen::Matrix4f T_out;
-                    float fitness = 0.f;
-                    const bool ok = icpPointToPlaneOneLevel(
-                        cad_cloud_, depth_cloud,     // source CAD, target obs(cam)
-                        T_level1,                    // 初值 CAD->cam
-                        0.004f,                      // voxel 4mm
-                        0.010f,                      // max corr 10mm
-                        15,                          // iter
-                        0.012f,                      // normal radius 12mm (>= ~3*leaf)
-                        0.95f,                       // trim_ratio（鲁棒 trim 比例）
-                        T_out, fitness);
-
-                    if (ok) { T_level1 = T_out; fit1 = fitness; }
-                    else {
-                        RCLCPP_WARN(get_logger(), "Class %d Step6 L1 ICP FAIL, fallback init", obj.classId);
-                        T_level1 = T_init.cast<float>();
-                        fit1 = 1e9f;
-                    }
-                }
-
-                // Level2：2mm, 5mm, iter15（用 Level1 输出作为初值）
-                {
-                    Eigen::Matrix4f T_out;
-                    float fitness = 0.f;
-                    const bool ok = icpPointToPlaneOneLevel(
-                        cad_cloud_, depth_cloud,
-                        T_level1,                    // L1 输出作为初值
-                        0.002f,                      // voxel 2mm
-                        0.005f,                      // max corr 5mm
-                        15,
-                        0.008f,                      // normal radius 8mm
-                        0.95f,                       // trim_ratio（鲁棒 trim 比例）
-                        T_out, fitness);
-
-                    if (ok) { T_level2 = T_out; fit2 = fitness; icp_success = true; }
-                    else {
-                        RCLCPP_WARN(get_logger(), "Class %d Step6 L2 ICP FAIL, use L1", obj.classId);
-                        T_level2 = T_level1;
-                        fit2 = 1e9f;
-                        // 这里可以选择：L2失败但L1成功也算 success（我建议算）
-                        icp_success = (fit1 < 1e8f);
-                    }
-                }
-            }
-            else
-            {
-                RCLCPP_WARN(get_logger(), "Class %d CAD cloud not loaded, skip Step6 ICP", obj.classId);
-            }
-
-            // ICP 门禁（建议保守一点，避免抖动）
-            if (icp_success)
-            {
-                // 允许 L2 或 L1 的结果
-                const Eigen::Matrix4d T_icp = T_level2.cast<double>();
-
-                // 与初值的平移差（防止 ICP 跳到别的物体）
-                const Eigen::Vector3d t_init_val = T_init.block<3,1>(0,3);
-                const Eigen::Vector3d t_icp_val  = T_icp.block<3,1>(0,3);
-                const double dt = (t_icp_val - t_init_val).norm();
-
-                // fitness 门禁（按你物体/点数可能要调，但先给一个能用的）
-                const bool pass = (fit2 < 0.003f) && (dt < 0.05);  // 5cm 以内
-
-                if (pass)
-                {
-                    // ==================== Yaw 可观测性判定：±5° 扰动测试 ====================
-                    Eigen::Vector3d obj_axis(v_max.cast<double>().normalized());
-
-                    auto evalYaw = [&](double deg)
-                    {
-                        // 构造绕 obj_axis 旋转 deg 度的旋转矩阵
-                        Eigen::AngleAxisd aa(deg * M_PI / 180.0, obj_axis);
-                        Eigen::Matrix4d T_test = T_icp;
-                        // 只修改旋转部分，保持平移不变
-                        T_test.block<3,3>(0,0) = aa.toRotationMatrix() * T_icp.block<3,3>(0,0);
-
-                        // 运行 ICP 评估 fitness（扰动评估：5次迭代足够）
-                        Eigen::Matrix4f T_f = T_test.cast<float>();
-                        Eigen::Matrix4f dummy;
-                        float fit;
-                        icpPointToPlaneOneLevel(
-                            cad_cloud_, depth_cloud,
-                            T_f,
-                            0.002f, 0.005f, 5,  // 迭代次数降至 5
-                            0.008f,
-                            0.95f,              // trim_ratio
-                            dummy, fit);
-                        return fit;
-                    };
-
-                    const float f0 = fit2;
-                    const float f_plus  = evalYaw(+5.0);
-                    const float f_minus = evalYaw(-5.0);
-
-                    // 阈值：fitness 变化 > 0.001 认为可观测
-                    const float fitness_threshold = 0.001f;
-                    const bool yaw_observable =
-                        (fabs(f_plus - f0) > fitness_threshold) ||
-                        (fabs(f_minus - f0) > fitness_threshold);
-
-                    if (yaw_observable)
-                    {
-                        // 6DoF：使用 ICP 的完整位姿
-                        T_init = T_icp;
-                        R_init = T_icp.block<3,3>(0,0);
-                        center = t_icp_val.cast<float>();
-                        pose_quality_ = PoseQuality::FULL_6DOF;
-
-                        RCLCPP_INFO(get_logger(),
-                            "Class %d Step6 ICP OK [FULL_6DoF]: fit1=%.4f fit2=%.4f yaw_test=[%.4f,%.4f,%.4f] dt=%.2fcm t=[%.3f,%.3f,%.3f]",
-                            obj.classId, fit1, fit2, f_minus, f0, f_plus, dt * 100.0,
-                            center.x(), center.y(), center.z());
-                    }
-                    else
-                    {
-                        // 5DoF：使用 ICP 的位置，保留初始 yaw（只更新平移，不更新旋转）
-                        center = t_icp_val.cast<float>();
-                        // R_init 保持不变（保留 FromTwoVectors 的轴对齐结果，不使用 ICP 的 yaw）
-                        pose_quality_ = PoseQuality::DEGRADED_5DOF;
-
-                        RCLCPP_WARN(get_logger(),
-                            "Class %d Step6 ICP OK [DEGRADED_5DoF]: fit1=%.4f fit2=%.4f yaw_test=[%.4f,%.4f,%.4f] -> yaw NOT observable, use initial yaw dt=%.2fcm t=[%.3f,%.3f,%.3f]",
-                            obj.classId, fit1, fit2, f_minus, f0, f_plus, dt * 100.0,
-                            center.x(), center.y(), center.z());
-                    }
-                }
-                else
-                {
-                    RCLCPP_WARN(get_logger(),
-                        "Class %d Step6 ICP REJECT: fit2=%.4f dt=%.2fcm -> fallback T_init",
-                        obj.classId, fit2, dt * 100.0);
-                    icp_success = false; // 让后面走 fallback 发布
-                }
-            }
-
-            // -------------------- 保存到成员变量 --------------------
-            center_ = center;
-            v_max_ = v_max;
-            R_init_ = R_init;
-            T_init_ = T_init;
-            has_valid_pose_ = true;
-
-            // -------------------- 发布 pose（ICP 成功发布 ICP，失败发布 T_init）--------------------
-            {
-                auto pose_msg = geometry_msgs::msg::PoseStamped();
-                pose_msg.header.stamp = now();
-                pose_msg.header.frame_id = "camera_color_optical_frame";
-
-                Eigen::Quaterniond q_final(R_init_);
-                pose_msg.pose.orientation.x = q_final.x();
-                pose_msg.pose.orientation.y = q_final.y();
-                pose_msg.pose.orientation.z = q_final.z();
-                pose_msg.pose.orientation.w = q_final.w();
-
-                pose_msg.pose.position.x = center_.x();
-                pose_msg.pose.position.y = center_.y();
-                pose_msg.pose.position.z = center_.z();
-
-                pose_pub_->publish(pose_msg);
-
-                if (icp_success) {
-                    RCLCPP_INFO(get_logger(), "Class %d Published ICP pose to /detect/cad_initial_pose", obj.classId);
-                } else {
-                    RCLCPP_INFO(get_logger(), "Class %d Published T_init pose to /detect/cad_initial_pose", obj.classId);
-                }
+            if (!estimatePoseAndPublish(depth_cloud, obj.mask, obj.class_id, stamp, icp_success)) {
+                skip = true;
+                break;
             }
 
             // -------------------- 可视化：中心点和中心轴 --------------------
-            if (center.z() > 1e-6f)
+            if (center_.z() > 1e-6f)
             {
-                const float depth_center = center.z();
+                const float depth_center = center_.z();
                 const float arrow_length_3d = std::clamp(0.15f * (depth_center / 1.0f), 0.05f, 0.20f);
-                const Eigen::Vector3f arrow_end_3d = center + v_max * arrow_length_3d;
+                const Eigen::Vector3f arrow_end_3d = center_ + v_max_ * arrow_length_3d;
 
-                const int u_center = static_cast<int>(fx_ * center.x() / center.z() + cx_);
-                const int v_center = static_cast<int>(fy_ * center.y() / center.z() + cy_);
+                const int u_center = static_cast<int>(fx_ * center_.x() / center_.z() + cx_);
+                const int v_center = static_cast<int>(fy_ * center_.y() / center_.z() + cy_);
                 const int u_arrow = static_cast<int>(fx_ * arrow_end_3d.x() / arrow_end_3d.z() + cx_);
                 const int v_arrow = static_cast<int>(fy_ * arrow_end_3d.y() / arrow_end_3d.z() + cy_);
 
@@ -906,12 +540,12 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
                              cv::Scalar(0, 0, 255), 3);
 
                     char axis_text[64];
-                    snprintf(axis_text, sizeof(axis_text), "Z: [%.2f,%.2f,%.2f]", v_max.x(), v_max.y(), v_max.z());
+                    snprintf(axis_text, sizeof(axis_text), "Z: [%.2f,%.2f,%.2f]", v_max_.x(), v_max_.y(), v_max_.z());
                     cv::putText(vis, axis_text, cv::Point(u_center + 20, v_center - 20),
                                 cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 2);
 
                     char pos_text[64];
-                    snprintf(pos_text, sizeof(pos_text), "Pos: [%.3f,%.3f,%.3f]", center.x(), center.y(), center.z());
+                    snprintf(pos_text, sizeof(pos_text), "Pos: [%.3f,%.3f,%.3f]", center_.x(), center_.y(), center_.z());
                     cv::putText(vis, pos_text, cv::Point(u_center + 20, v_center + 10),
                                 cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 255), 2);
                 }
@@ -932,6 +566,20 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
                 if (u >= 0 && v >= 0 && u < vis.cols && v < vis.rows) {
                     vis.at<cv::Vec3b>(v, u) = cv::Vec3b(0, 255, 0);
                 }
+            }
+        } while (false);
+
+        (void)skip;
+    }
+    else
+    {
+        if (has_lock_) {
+            bad_track_count_++;
+            if (bad_track_count_ >= bad_track_max_) {
+                has_lock_ = false;
+                bad_track_count_ = 0;
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 500,
+                    "[detect_node] Track lost: no candidates");
             }
         }
     }
@@ -967,70 +615,6 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
 
     cv::imshow("segmentation", vis);
     cv::waitKey(1);
-}
-
-void DetectNode::filterPointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
-{
-    if (!cloud || cloud->empty()) return;
-
-    // -------------------- 1) VoxelGrid 下采样 --------------------
-    // 改动3：放宽参数（4mm → 3mm）
-    {
-        pcl::VoxelGrid<pcl::PointXYZ> voxel;
-        voxel.setInputCloud(cloud);
-        voxel.setLeafSize(0.003f, 0.003f, 0.003f);  // 3mm
-        pcl::PointCloud<pcl::PointXYZ>::Ptr tmp(new pcl::PointCloud<pcl::PointXYZ>());
-        voxel.filter(*tmp);
-        cloud = tmp;
-        if (cloud->empty()) return;
-    }
-
-    // -------------------- 2) 欧式聚类：只保留最大簇 --------------------
-    // 改动3：放宽参数（min_cluster_size: 200 → 100），保持 tolerance=10mm（防止夹具点粘连）
-    {
-        pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>());
-        tree->setInputCloud(cloud);
-
-        std::vector<pcl::PointIndices> clusters;
-        pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-        ec.setSearchMethod(tree);
-
-        ec.setClusterTolerance(0.010f);   // 10mm（保持不变，防止夹具点粘连）
-        ec.setMinClusterSize(100);         // 100（放宽）
-        ec.setMaxClusterSize(200000);
-        ec.setInputCloud(cloud);
-        ec.extract(clusters);
-
-        if (!clusters.empty()) {
-            size_t best_i = 0;
-            size_t best_n = clusters[0].indices.size();
-            for (size_t i = 1; i < clusters.size(); ++i) {
-                if (clusters[i].indices.size() > best_n) {
-                    best_n = clusters[i].indices.size();
-                    best_i = i;
-                }
-            }
-
-            pcl::PointCloud<pcl::PointXYZ>::Ptr keep(new pcl::PointCloud<pcl::PointXYZ>());
-            keep->reserve(best_n);
-            for (int idx : clusters[best_i].indices) keep->push_back((*cloud)[idx]);
-            cloud = keep;
-        }
-        if (cloud->empty()) return;
-    }
-
-    // -------------------- 3) RadiusOutlierRemoval：最后再清理碎点 --------------------
-    // 改动3：略微放宽（radius: 12mm → 10mm, minNeighbors: 5 → 3）
-    {
-        pcl::RadiusOutlierRemoval<pcl::PointXYZ> ror;
-        ror.setInputCloud(cloud);
-        ror.setRadiusSearch(0.010f);      // 10mm
-        ror.setMinNeighborsInRadius(3);
-
-        pcl::PointCloud<pcl::PointXYZ>::Ptr tmp(new pcl::PointCloud<pcl::PointXYZ>());
-        ror.filter(*tmp);
-        cloud = tmp;
-    }
 }
 
 } // namespace arm_controller

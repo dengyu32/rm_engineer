@@ -306,7 +306,7 @@ bool SolveExecutor::plan_cartesian(const SolveRequest& req, solve_executor::Traj
   }
   start_state.update();
 
-  if (!std::isfinite(req.target_length) || req.target_length <= 0.0F)
+  if (!std::isfinite(req.target_length) || req.target_length <= 0.0)
   {
     err = "target_length is invalid";
     LOGE("[solve_executor] {}", err);

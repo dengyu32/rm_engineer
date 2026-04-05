@@ -22,7 +22,8 @@ namespace task_orchestrator {
     X(AUTO_GET,       4) \
     X(FIXED_GRAB,     5) \
     X(TEST_SOLVE,     6) \
-    X(TEST_CARTESIAN, 7)
+    X(TEST_CARTESIAN, 7) \
+    X(TEST_NOMAL,     8)
 
 // 任务ID枚举
 enum class TaskId : uint8_t {
@@ -57,36 +58,6 @@ inline const char* task_name(TaskId id) {
 }
 
 } // namespace task_orchestrator
-
-namespace task_orchestrator::preset {
-
-// ============================================================================
-//  Preset
-// ----------------------------------------------------------------------------
-//  - 机器人预置位姿 / 槽位关节
-// ============================================================================
-
-// Robot state presets
-// HOME 准确 其他待验证
-inline constexpr std::array<float, 6> ZERO{{
-    0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
-}};
-
-inline constexpr std::array<float, 6> HOME{{
-    0.f, -0.6109f, -2.1293f, 0.f, 0.f, 0.f,
-}};
-
-inline constexpr std::array<float, 6> SLOTS[] = {
-    {-0.9250f, -0.1396f, 1.9722f, -3.0718f, -1.2741f,  0.7679f},
-    { 0.4363f, -0.1047f, 1.9024f,  0.0175f,  1.3265f, -0.9774f},
-};
-
-inline constexpr std::array<float, 6> DESCEND_SLOTS[] = {
-    {-0.8901f, -0.0175f, 2.0944f, 0.0175f, 1.0821f, -2.3213f},
-    { 0.4014f, -0.0524f, 2.1642f, 0.0175f, 1.0123f, -1.0297f},
-};
-
-} // namespace task_orchestrator::preset
 
 namespace task_orchestrator::protocol {
 

@@ -28,7 +28,7 @@ struct Binding {
   ContextKey from{};  // 绑定着一个 value
   std::string to_param{};   // 注入到 command.param 的参数名 , 同时也绑定着一个 value
   BindingOp op{BindingOp::Direct};
-  const std::array<float, 6> *joints_table{nullptr};
+  const std::array<double, 6> *joints_table{nullptr};
   size_t joints_table_size{0};
 };
 

@@ -13,12 +13,21 @@ set -euo pipefail
 SCRIPT_FILE="$(realpath "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SCRIPT_FILE")"
 SHLIB_DIR="$SCRIPT_DIR/shlib"
+if [[ ! -d "$SHLIB_DIR" && -d "$SCRIPT_DIR/.script/shlib" ]]; then
+    SHLIB_DIR="$SCRIPT_DIR/.script/shlib"
+fi
 
 # 确保所有依赖脚本都能被正确 source
+[[ -d "$SHLIB_DIR" ]] || {
+    echo "[FATAL] 找不到 shlib 目录: $SHLIB_DIR" >&2
+    exit 1
+}
+
 source "$SHLIB_DIR/common.sh"
 source "$SHLIB_DIR/paths.sh"
 source "$SHLIB_DIR/logging.sh"
 source "$SHLIB_DIR/term_launch.sh"
+source "$SHLIB_DIR/managed_processes.sh"
 
 # ------------------------------------------------------------------------------
 # 2. 帮助信息 (Usage)
@@ -114,7 +123,8 @@ fi
 # 7. 环境与依赖校验
 # ------------------------------------------------------------------------------
 # 只有真正要构建/运行新会话时，才进入较重的环境校验与依赖准备流程。
-require_cmd gnome-terminal colcon ros2 python3 realpath
+# gnome-terminal 不是硬依赖；无界面或缺失时 open_term 会退回后台模式。
+require_cmd colcon ros2 python3 realpath
 [[ ! -f "$ROS_SETUP" ]] && die "错误: 找不到 ROS 环境配置文件: $ROS_SETUP"
 
 # 检查第三方依赖环境 (ONNX/RealSense)
@@ -197,24 +207,12 @@ print_color cyan " 运行模式: $SYSTEM"
 print_color cyan " 运行 ID  : $RUN_ID"
 print_color cyan "=============================================="
 
-# --- A. 基础公共节点 ---
-
-# 启动底层硬件代理 (如果是真实机器人，先给 bringup 一点启动时间)
-launch_term "engineer bringup" "ros2 launch engineer_bringup base_bringup.launch.py"
-sleep 1.0 
-
-launch_term "auto node"       "ros2 launch auto_node start_auto_node.launch.py"
-launch_term "teleop node"     "ros2 launch teleop_node start_teleop_node.launch.py"
-launch_term "vision"          "ros2 launch detect_node detect.launch.py"
-launch_term "foxglove bridge" "ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=${FOXGLOVE_PORT}"
-
-# --- B. 环境差异化节点 ---
-
-if [[ "$SYSTEM" == "fakesystem" ]]; then
-    launch_term "fake system" "ros2 launch fake_system fake_system_node.launch.py"
-else
-    # realsystem 模式下启动串口通讯
-    launch_term "usb cdc" "ros2 launch usb_cdc usb_cdc_node.launch.py"
-fi
+while IFS='|' read -r title cmd delay_after; do
+    [[ -n "${title:-}" && -n "${cmd:-}" ]] || continue
+    launch_term "$title" "$cmd"
+    if [[ -n "${delay_after:-}" && "$delay_after" != "0" ]]; then
+        sleep "$delay_after"
+    fi
+done < <(rerun_emit_launch_specs "$SYSTEM")
 
 print_color green "所有节点已尝试启动。日志记录于: $RUN_DIR"

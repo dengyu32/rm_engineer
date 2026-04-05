@@ -6,6 +6,8 @@
 
 #include <opencv2/opencv.hpp>
 #include <iostream>
+#include <fstream>
+#include <iomanip>
 #include <chrono>
 #include <filesystem>
 #include <vector>
@@ -27,6 +29,12 @@ int main(int argc, char* argv[]) {
     if (argc > 1) modelPath = argv[1];
     if (argc > 2) inputPath = argv[2];
     if (argc > 3) labelsPath = argv[3];
+    if (argc > 4) outputDir = argv[4];
+    if (const char* outEnv = std::getenv("YOLOS_CPP_OUTPUT_DIR")) {
+        if (std::string(outEnv).size() > 0) {
+            outputDir = outEnv;
+        }
+    }
     
     // Print usage information
     utils::printUsage(argv[0], "Segmentation", modelPath, inputPath, labelsPath);
@@ -90,6 +98,29 @@ int main(int argc, char* argv[]) {
             // Draw segmentations with boxes and masks
             cv::Mat resultImage = image.clone();
             detector.drawSegmentations(resultImage, results);
+
+            // Save per-instance masks for debugging
+            {
+                fs::create_directories(outputDir);
+                const std::string stem = fs::path(imgPath).stem().string();
+                const std::string txtPath = (fs::path(outputDir) / (stem + "_yolos_cpp.txt")).string();
+                std::ofstream ofs(txtPath);
+                if (ofs.is_open()) {
+                    for (size_t i = 0; i < results.size(); ++i) {
+                        ofs << i
+                            << " class=" << results[i].classId
+                            << " conf=" << std::fixed << std::setprecision(4) << results[i].conf
+                            << " box=" << results[i].box.x << "," << results[i].box.y << ","
+                            << results[i].box.width << "x" << results[i].box.height
+                            << "\n";
+                        if (!results[i].mask.empty()) {
+                            const std::string maskPath = (fs::path(outputDir) /
+                                (stem + "_yolos_cpp_mask_" + std::to_string(i) + ".png")).string();
+                            cv::imwrite(maskPath, results[i].mask);
+                        }
+                    }
+                }
+            }
             
             // Save output with timestamp
             std::string outputPath = utils::saveImage(resultImage, imgPath, outputDir);
@@ -98,13 +129,18 @@ int main(int argc, char* argv[]) {
             // Display metrics
             utils::printMetrics("Segmentation", duration.count());
             
-            // Display result
-            cv::imshow("YOLO Segmentation", resultImage);
-            std::cout << "Press any key to continue..." << std::endl;
-            cv::waitKey(0);
+            // Display result (skip in headless mode)
+            const bool headless = (std::getenv("YOLOS_CPP_HEADLESS") != nullptr);
+            if (!headless) {
+                cv::imshow("YOLO Segmentation", resultImage);
+                std::cout << "Press any key to continue..." << std::endl;
+                cv::waitKey(0);
+            }
         }
         
-        cv::destroyAllWindows();
+        if (std::getenv("YOLOS_CPP_HEADLESS") == nullptr) {
+            cv::destroyAllWindows();
+        }
         std::cout << "\n✅ All images processed successfully!" << std::endl;
         
     } catch (const std::exception& e) {

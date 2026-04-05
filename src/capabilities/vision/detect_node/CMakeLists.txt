@@ -32,6 +32,10 @@ find_package(message_filters REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(ament_index_cpp REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
+find_package(engineer_interfaces REQUIRED)
 
 # ---------------------------------------------------------
 # PCL (关键修复：加 registration)
@@ -52,10 +56,13 @@ find_package(PCL REQUIRED COMPONENTS
 )
 
 # =========================
-# YOLOs-CPP paths (relative to this package)
+# YOLOs-CPP paths
 # =========================
 set(YOLOS_CPP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../YOLOs-CPP)
-set(YOLOS_CPP_BUILD_DIR ${YOLOS_CPP_DIR}/build)
+# Colcon builds each package into build/<pkg>. The YOLOs-CPP static lib is there.
+get_filename_component(WORKSPACE_BUILD_DIR "${CMAKE_BINARY_DIR}" DIRECTORY)
+set(YOLOS_CPP_BUILD_DIR ${WORKSPACE_BUILD_DIR}/YOLOs-CPP)
+set(YOLOS_CPP_LIB ${YOLOS_CPP_LIB})
 set(ONNXRUNTIME_DIR ${YOLOS_CPP_DIR}/onnxruntime-linux-x64-1.20.1)
 
 # =========================
@@ -63,6 +70,10 @@ set(ONNXRUNTIME_DIR ${YOLOS_CPP_DIR}/onnxruntime-linux-x64-1.20.1)
 # =========================
 ament_auto_add_library(${PROJECT_NAME} SHARED
   src/detect_node.cpp
+  src/segmentation.cpp
+  src/pointcloud_processor.cpp
+  src/pose_estimator.cpp
+  src/pose_from_axis_node.cpp
 )
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -106,6 +117,10 @@ ament_target_dependencies(${PROJECT_NAME}
   OpenCV
   message_filters
   ament_index_cpp
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+  engineer_interfaces
 )
 
 # =========================
@@ -115,7 +130,7 @@ target_link_libraries(${PROJECT_NAME}
   yaml-cpp
   Eigen3::Eigen
   ${PCL_LIBRARIES}
-  ${YOLOS_CPP_BUILD_DIR}/libyolos_cpp.a
+  ${YOLOS_CPP_LIB}
   ${ONNXRUNTIME_DIR}/lib/libonnxruntime.so
 )
 
@@ -132,6 +147,10 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # =========================
 rclcpp_components_register_nodes(${PROJECT_NAME}
   PLUGIN "arm_controller::DetectNode"
+)
+
+rclcpp_components_register_nodes(${PROJECT_NAME}
+  PLUGIN "arm_controller::PoseFromAxisNode"
 )
 
 # =========================
@@ -152,6 +171,14 @@ install(
 )
 
 # =========================
+# Install config files
+# =========================
+install(
+  FILES ${CMAKE_CURRENT_SOURCE_DIR}/../detect_node.yaml
+  DESTINATION share/${PROJECT_NAME}/config
+)
+
+# =========================
 # Install YOLO models
 # =========================
 install(
@@ -160,6 +187,25 @@ install(
   FILES_MATCHING
     PATTERN "yolo11s-seg.onnx"
     PATTERN "coco.names"
+    PATTERN "target.names"
+)
+
+# =========================
+# Install custom ONNX model
+# =========================
+install(
+  FILES ${CMAKE_CURRENT_SOURCE_DIR}/../models/best.onnx
+  DESTINATION share/${PROJECT_NAME}/models
+)
+
+# =========================
+# Install CAD point cloud models
+# =========================
+install(
+  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../models/
+  DESTINATION share/${PROJECT_NAME}/models
+  FILES_MATCHING
+    PATTERN "*.pcd"
 )
 
 ament_package()

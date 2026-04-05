@@ -26,6 +26,7 @@ const char *scopeName(ContextScope scope) {
   return scope == ContextScope::Persist ? "persist" : "task";
 }
 
+// 格式化输入输出列表为字符串，格式为 "key@scope,key@scope,..."
 std::string formatKeyList(const std::vector<ContextKey> &keys) {
   std::string out;
   for (std::size_t i = 0; i < keys.size(); ++i) {
@@ -128,6 +129,9 @@ void StepExecutor::tick(const rclcpp::Time &now) {
         RCLCPP_WARN(logger_, "[STEP_EXECUTOR] timeout retry step=%s left=%d",
                     step.id.c_str(), retries_left_);
         return;
+      }
+      if (bridge_) {
+        bridge_->cancel();
       }
       fail(TaskStatus::Timeout, "step timeout: " + step.id);
       return;
@@ -278,7 +282,7 @@ bool StepExecutor::applyBindings(const Step &step, Command &cmd, std::string &er
           return false;
         }
         const auto &row = binding.joints_table[*slot_id];
-        cmd.params[binding.to_param] = std::vector<float>(row.begin(), row.end());
+        cmd.params[binding.to_param] = std::vector<double>(row.begin(), row.end());
         break;
       }
       default:

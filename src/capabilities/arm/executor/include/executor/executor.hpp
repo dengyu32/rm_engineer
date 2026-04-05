@@ -63,7 +63,7 @@ struct SolveRequest
   PlanOption option{ PlanOption::NORMAL };
   Pose target_pose{};
   Eigen::Vector3d target_vector{ { 0.0, 0.0, 0.0 } };
-  float target_length{ 0.0 };
+  double target_length{ 0.0 };
   std::vector<double> target_joints;
   JointState current_joints;
 };

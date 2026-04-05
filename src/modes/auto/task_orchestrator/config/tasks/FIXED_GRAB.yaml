@@ -1,0 +1,45 @@
+version: 1
+
+FIXED_GRAB:
+  steps:
+    - id: open_gripper
+      kind: gripper.cmd
+      post_delay_ms: 300
+      params:
+        action: open
+
+    - id: move_fixed_joints_1
+      kind: arm.move
+      timeout_ms: 8000
+      max_retries: 1
+      params:
+        target_joints:
+          type: double_array
+          value: [-0.0563895777, 0.183680534, -1.25949967, 0.603695154, -0.151254654, -0.378172457]
+
+    - id: move_fixed_joints_2
+      kind: arm.move
+      timeout_ms: 8000
+      max_retries: 1
+      params:
+        target_joints:
+          type: double_array
+          value: [-0.00333404541, -0.364118576, -0.594209731, 0.612900198, -0.221446991, -0.376638293]
+
+    - id: move_fixed_joints_3
+      kind: arm.move
+      timeout_ms: 8000
+      max_retries: 1
+      params:
+        target_joints:
+          type: double_array
+          value: [-0.324277222, -0.578888893, -0.0442333445, 0.747139871, -0.393873215, -0.754043639]
+
+    - id: move_home
+      kind: arm.move
+      timeout_ms: 8000
+      max_retries: 1
+      params:
+        target_joints:
+          type: double_array
+          preset: HOME

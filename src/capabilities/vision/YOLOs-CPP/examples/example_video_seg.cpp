@@ -26,6 +26,12 @@ int main(int argc, char* argv[]) {
     if (argc > 1) modelPath = argv[1];
     if (argc > 2) videoPath = argv[2];
     if (argc > 3) labelsPath = argv[3];
+    if (argc > 4) outputDir = argv[4];
+    if (const char* outEnv = std::getenv("YOLOS_CPP_OUTPUT_DIR")) {
+        if (std::string(outEnv).size() > 0) {
+            outputDir = outEnv;
+        }
+    }
     
     // Print usage information
     utils::printUsage(argv[0], "Video Segmentation", modelPath, videoPath, labelsPath);
@@ -71,6 +77,7 @@ int main(int argc, char* argv[]) {
         int frameCount = 0;
         auto startTime = std::chrono::high_resolution_clock::now();
         
+        const bool headless = (std::getenv("YOLOS_CPP_HEADLESS") != nullptr);
         while (cap.read(frame)) {
             frameCount++;
             
@@ -94,9 +101,11 @@ int main(int argc, char* argv[]) {
                 std::cout << "📊 Processed " << frameCount << "/" << totalFrames << " frames" << std::endl;
             }
             
-            // Display frame
-            cv::imshow("YOLO Video Segmentation", frame);
-            if (cv::waitKey(1) == 'q') break;
+            // Display frame (skip in headless mode)
+            if (!headless) {
+                cv::imshow("YOLO Video Segmentation", frame);
+                if (cv::waitKey(1) == 'q') break;
+            }
         }
         
         auto endTime = std::chrono::high_resolution_clock::now();
@@ -105,7 +114,9 @@ int main(int argc, char* argv[]) {
         
         cap.release();
         writer.release();
-        cv::destroyAllWindows();
+        if (!headless) {
+            cv::destroyAllWindows();
+        }
         
         // Display metrics
         utils::printMetrics("Video Segmentation", duration.count(), avgFps);

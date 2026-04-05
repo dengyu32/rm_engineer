@@ -34,7 +34,7 @@ public:
                   const collision::SelfCollisionDetector* self_collision_detector = nullptr);
 
   std::optional<Trajectory> plan(moveit::core::RobotState& start_state, const Eigen::Vector3d& target_vector,
-                                 const float target_length, const calculator::CostOptions& cost_opt);
+                                 double target_length, const calculator::CostOptions& cost_opt);
 
 private:
   moveit::core::RobotModelConstPtr robot_model_;

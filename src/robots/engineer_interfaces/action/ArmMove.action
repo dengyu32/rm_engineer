@@ -1,0 +1,23 @@
+# ArmMove.action
+
+# Goal
+
+## pose
+engineer_interfaces/Pose target_pose
+## joints
+float64[6] target_joints
+## vector
+geometry_msgs/Vector3 target_vector
+float64 target_length
+## Options 选择普通方式还是笛卡尔方式 # 0 代表普通方式 1 代表笛卡尔方式 2 代表关节方式
+uint8 option_id
+---
+# Result
+
+bool success
+uint8 error_code
+string error_msg
+---
+# Feedback
+
+float32 progress

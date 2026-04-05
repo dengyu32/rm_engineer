@@ -4,7 +4,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "step_executor/types/capability_bridge.hpp"
+#include "step_executor/registry_bridge.hpp"
 
 namespace engineer_auto::auto_node {
 

@@ -31,7 +31,7 @@ open_term() {
     local run_dir="${5:?未指定运行目录}"
     local log_base="${6:?未指定日志目录}"
 
-    require_cmd gnome-terminal tee mkfifo setsid ps
+    require_cmd tee mkfifo setsid ps
 
     # 清理标题以适配文件名
     local safe_title
@@ -139,8 +139,11 @@ EOF
         sleep "$term_delay"
     fi
 
-    # 尝试启动 GNOME 终端
-    if ! gnome-terminal --window --title="$title" -- bash -ic "RERUN_KEEP_SHELL_ON_EXIT=1 bash '$runner_file'"; then
+    # 尝试启动 GNOME 终端；若不可用则退回后台模式。
+    if ! command -v gnome-terminal >/dev/null 2>&1; then
+        print_color yellow "[open_term] 未发现 gnome-terminal，退回到后台模式: $title"
+        RERUN_KEEP_SHELL_ON_EXIT=0 bash "$runner_file" >/dev/null 2>&1 &
+    elif ! gnome-terminal --window --title="$title" -- bash -ic "RERUN_KEEP_SHELL_ON_EXIT=1 bash '$runner_file'"; then
         print_color red "[open_term] gnome-terminal 启动失败，退回到后台模式: $title"
         RERUN_KEEP_SHELL_ON_EXIT=0 bash "$runner_file" >/dev/null 2>&1 &
     fi

@@ -19,8 +19,7 @@ using Value = std::variant<
     int64_t,
     double,
     std::string,
-    std::vector<double>,
-    std::vector<float>
+    std::vector<double>
     >;
 
 // 统一访问接口，减少业务层重复 std::get_if.

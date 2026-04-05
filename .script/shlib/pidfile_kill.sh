@@ -17,6 +17,7 @@ SHLIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SHLIB_DIR/common.sh"
 # shellcheck source=paths.sh
 source "$SHLIB_DIR/paths.sh"
+source "$SHLIB_DIR/managed_processes.sh"
 
 require_cmd ps kill realpath
 
@@ -286,7 +287,8 @@ kill_port_fallbacks() {
 }
 
 kill_process_fallbacks() {
-    local rules="${RERUN_PROCESS_CLEANUP_RULES:-engineer_bringup:ros2 launch engineer_bringup base_bringup.launch.py;auto_node_launch:ros2 launch auto_node start_auto_node.launch.py;teleop_launch:ros2 launch teleop_node start_teleop_node.launch.py;vision_launch:ros2 launch detect_node detect.launch.py;foxglove_launch:ros2 launch foxglove_bridge foxglove_bridge_launch.xml;fake_system_launch:ros2 launch fake_system fake_system_node.launch.py;usb_cdc_launch:ros2 launch usb_cdc usb_cdc_node.launch.py;arm_solve_server:/arm_solve_server_node --ros-args;move_group:/move_group --ros-args;object_load:/object_load --ros-args;robot_state_publisher:/robot_state_publisher --ros-args;static_tf:/static_transform_publisher --ros-args;auto_node_exec:/auto_node_main --ros-args;teleop_exec:/teleop_node --ros-args;fake_system_exec:/fake_system_node --ros-args;usb_cdc_exec:/usb_cdc_node --ros-args;vision_container:/component_container_mt --ros-args}"
+    local rules
+    rules="${RERUN_PROCESS_CLEANUP_RULES:-$(rerun_emit_cleanup_rules | paste -sd ';' -)}"
     local rule label pattern
     local -a pgids=()
 
