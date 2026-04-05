@@ -1,0 +1,2 @@
+/usr/bin/ar qc libyolos_cpp.a CMakeFiles/yolos_cpp.dir/src/image_inference.cpp.o
+/usr/bin/ranlib libyolos_cpp.a
