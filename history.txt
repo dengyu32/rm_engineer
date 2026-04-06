@@ -1,0 +1,171 @@
+2026-04-04 Discussion Summary
+
+1. motion 目录复杂度评估
+- src/motion/executor 是当前复杂度最高的区域之一。
+- SolveExecutor 同时承担了 MoveIt 初始化、规划方式分发、碰撞检查、时间参数化等多种职责。
+- src/motion/executor 目录中存在旧实现残留（如 plan.cpp / joints.cpp / plan_joints.cpp），增加了理解成本。
+- planner/straight_planner.cpp 的算法链较复杂：方向判定、分段路点、多 seed IK、去重、候选裁剪、DP 选路。
+
+2. CHOMP 相关编译问题
+- 最初 executor/CMakeLists.txt 中显式依赖了 moveit_chomp_optimizer_adapter。
+- 直接 include:
+  <moveit/chomp_optimizer_adapter/chomp_optimizer_adapter.h>
+  在 ROS 2 Humble 中不可用。
+- moveit_chomp_optimizer_adapter 在当前环境中是插件包，不提供这种直接实例化的公开 API。
+- 因此去掉了 executor.cpp 中错误的 CHOMP 直调代码，恢复为直接返回 MoveGroup 的 OMPL 规划结果。
+- 同时移除了 executor 包中不再需要的 CHOMP 直接依赖。
+
+3. 正确接入“先 OMPL，再 CHOMP 优化”的方式
+- 采用 MoveIt request_adapters 机制，而不是在 executor.cpp 中手动调 CHOMP。
+- 已在 src/robots/engineer_bringup/config/ompl_planning.yaml 中把 chomp/OptimizerAdapter 插入 request_adapters 链。
+- 新增 src/robots/engineer_bringup/config/chomp_planning.yaml。
+- 更新了两个 launch:
+  - src/robots/engineer_bringup/launch/base_bringup.launch.py
+  - src/robots/engineer_bringup/launch/robot_bringup.launch.py
+- 这两个 launch 现在都会向 move_group 传入 {"chomp": load_yaml(chomp_path)}。
+- 当前链路应为：
+  OMPL -> chomp/OptimizerAdapter -> AddTimeOptimalParameterization
+
+4. 运行期现象
+- move_group 日志显示：
+  Using planning pipeline 'ompl'
+- 随后出现：
+  [chomp_planner]: Start state violates joint limits
+- 这说明 CHOMP adapter 已经被调用到，链路不是未打通。
+
+5. start_state_max_bounds_error 讨论
+- MoveIt/CHOMP 默认配置常见值是 0.1。
+- 已尝试把 start_state_max_bounds_error 提高到 1.0。
+- 即便如此仍报：
+  Start state violates joint limits
+- 结论：问题大概率不是“容差太小”，而是更底层的状态合法性或 CHOMP 接口阶段状态处理问题。
+
+6. 在 executor 中新增的诊断逻辑
+- 已在 src/motion/executor/src/executor.cpp 的 plan_normal() 中加入：
+  - start_state.update()
+  - start_state.satisfiesBounds(jmg) 检查
+  - 越界 joint 的日志输出（joint 名、当前值、上下限）
+  - start_state.enforceBounds(jmg)
+  - enforceBounds 后再次校验
+- 这些日志会打到 arm_solve_server 所在终端，因为 SolveExecutor 运行在该进程中。
+
+7. 关于“位置限位”和“速度/力矩限制”的结论
+- 新增的 bounds 检查主要针对关节位置范围，不是速度限制，也不是力矩限制。
+- 当前 URDF 中 6 个 arm joint 的 limit 如下：
+  - joint1: lower=-3.14, upper=3.14, effort=0, velocity=0
+  - joint2: lower=-0.9888, upper=1.2000, effort=0, velocity=0
+  - joint3: lower=-2.8624, upper=2.6543, effort=0, velocity=0
+  - joint4: lower=-3.14, upper=3.14, effort=0, velocity=0
+  - joint5: lower=-1.6828, upper=1.6828, effort=0, velocity=0
+  - joint6: lower=-3.14, upper=3.14, effort=0, velocity=0
+- 速度 velocity=0、力矩 effort=0 本身不合理。
+- 这与日志中的 warning 一致：
+  - Joint velocity limits are not defined. Using the default 1 rad/s.
+  - Joint acceleration limits are not defined. Using the default 1 rad/s^2.
+- 这些 warning 不是当前 CHOMP 报 Start state violates joint limits 的直接证据。
+
+8. 用户提供的运行时关节状态
+- 用户贴出的当前 joints 为：
+  - joint1 = 0.0
+  - joint2 = 0.715499997138977
+  - joint3 = -2.2339999675750732
+  - joint4 = 0.0
+  - joint5 = 0.0
+  - joint6 = 1.5707000494003296
+- 将这 6 个值与 URDF 的位置上下限逐一对照后，没有明显越界。
+
+9. 当前阶段的结论
+- 动作请求中的 6 轴起始位置看起来合法。
+- 如果 executor 中新增的 start_state 检查没有打出越界日志，那么送进 MoveGroup 的这组 arm joint 很可能也是合法的。
+- 因此 CHOMP 报错更可能发生在 OMPL -> CHOMP 交接阶段，或者发生在 full robot state / 其他 joint / CHOMP 内部状态检查上，而不只是用户动作请求本身。
+
+10. 当前建议的后续排查方向
+- 确认是否已经重新编译并重启 arm_solve_server，以确保新的日志代码生效。
+- 继续打印送入 MoveGroup 的完整 start state。
+- 必要时比较：
+  - 只走 OMPL
+  - OMPL + CHOMP adapter
+  做 A/B 对比。
+- 后续也建议修正 URDF 和 joint_limits.yaml 中的 velocity / acceleration / effort 配置，不要继续使用 0。
+
+11. 关于“先把 URDF 中速度和力矩限制改成 1 是否可行”的讨论
+- 结论：这个测试是可行的，可以作为排除法的一步。
+- 其作用主要是验证：
+  1) MoveIt 关于 velocity/acceleration 未定义的 warning 是否消失；
+  2) CHOMP 失败是否和动态约束参数异常有关。
+- 但这一步不能直接证明 Start state violates joint limits 的根因就在 velocity/effort。
+- 另外，warning 的核心其实是 velocity / acceleration，不是 effort。
+
+12. 关于用户修改 URDF 后的现象
+- 用户把 URDF 中 arm 关节的 velocity 和 effort 改成了 1。
+- 之后日志中关于：
+  - Joint velocity limits are not defined
+  - Joint acceleration limits are not defined
+  的 warning 仍然存在。
+- 由此判断，仅修改 URDF 不足以让 MoveIt 采纳有效动态约束。
+- 原因是 engineer_moveit_config/config/joint_limits.yaml 里仍然把 has_velocity_limits 和
+  has_acceleration_limits 设为 false。
+
+13. engineer_moveit_config 功能包排查结论
+- 已检查：
+  - config/engineer_v4.srdf
+  - config/kinematics.yaml
+  - config/joint_limits.yaml
+  - config/moveit_controllers.yaml
+  - config/initial_positions.yaml
+  - config/engineer_v4.urdf.xacro
+  - config/engineer_v4.ros2_control.xacro
+- 结论如下：
+  - SRDF 中 engineer_arm 组只包含 joint1-joint6，与 SolveExecutor 的规划组一致。
+  - kinematics.yaml 只配置了 engineer_arm 的 KDL IK，这与当前 CHOMP 报错关系不大。
+  - engineer_v4.urdf.xacro 只是 include 真实 URDF，因此 MoveIt 使用的关节位置限位就是 engineer_description
+    里的那一套。
+  - joint_limits.yaml 中动态约束被关闭，明确会导致 velocity/acceleration warning。
+  - ros2_control 只声明了 left_finger_joint，而 SRDF 中 engineer_hand 包含 left/right 两个手指关节。
+  - right_finger_joint 在真实 URDF 中是 mimic left_finger_joint。
+  - right_finger_joint 的 URDF limit 为 [-3.14, 3.14]，而 left_finger_joint 的 limit 为 [0.0, 0.0470]，
+    这一点建模质量较差，值得后续修，但不像当前 arm normal plan 失败的直接主因。
+
+14. 用户提供的运行时 joint 状态与 URDF 限位对照
+- 用户贴出的当前 joints:
+  - joint1 = 0.0
+  - joint2 = 0.715499997138977
+  - joint3 = -2.2339999675750732
+  - joint4 = 0.0
+  - joint5 = 0.0
+  - joint6 = 1.5707000494003296
+- 将其与 engineer_v4.urdf 中 arm 6 轴位置上下限逐一对照后，没有明显越界。
+- 因此可以基本排除“用户动作请求里的 arm 起点位置本身越界”这一可能。
+
+15. 对当前 CHOMP 报错的进一步判断
+- 如果 executor 中新增的 start_state.satisfiesBounds(jmg) 检查未打出越界日志，
+  并且用户提供的 arm 6 轴状态也都在位置上下限内，那么：
+  - 问题更可能发生在 OMPL -> CHOMP 的交接阶段；
+  - 或者 CHOMP 校验的是 full robot state；
+  - 或者某个非 arm joint / mimic joint / 内部同步状态被判非法。
+- 也就是说，当前更像是 CHOMP 内部或 adapter 阶段的状态问题，而不只是动作请求入口状态问题。
+
+16. 对 joint_limits.yaml 的修改
+- 已按“先消掉 warning，减少噪音”的目标，将 engineer_moveit_config/config/joint_limits.yaml 中
+  joint1-joint6 以及 finger joints 的动态约束统一修改为：
+  - has_velocity_limits: true
+  - max_velocity: 1.0
+  - has_acceleration_limits: true
+  - max_acceleration: 1.0
+- 用户随后重新运行后，velocity/acceleration 相关 warning 已消失。
+- 但 CHOMP 仍然报：
+  Start state violates joint limits
+- 这说明动态约束配置问题已被清理，但不是当前 CHOMP 失败的根因。
+
+17. 当前最推荐的后续排查方向
+- 重点检查“输入到 move_group，再交给 CHOMP 的状态”，而不是继续盯 velocity/effort。
+- 建议顺序：
+  1) 确认 executor 里新增的日志代码已重新编译并生效；
+  2) 在 plan_normal() 中无条件打印 engineer_arm 的 6 个 joint 起始值及上下限；
+  3) 同时额外打印 left_finger_joint / right_finger_joint 的当前值；
+  4) 必要时做 A/B 测试：
+     - 只走 OMPL
+     - OMPL + chomp/OptimizerAdapter
+- 目标是确认：
+  - 送入 MoveGroup 的 start state 是否与外部 topic 一致；
+  - CHOMP 报错是发生在 full robot state 还是 arm group 之外的其他 joint 上。
