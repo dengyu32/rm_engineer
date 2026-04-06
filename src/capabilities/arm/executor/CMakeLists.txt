@@ -26,7 +26,6 @@ find_package(types REQUIRED)
 add_library(${PROJECT_NAME} SHARED
   src/executor.cpp
   src/detail.cpp
-  src/test.cpp
   src/time_params.cpp
 )
 

@@ -1,0 +1,54 @@
+version: 1
+
+TEST_LINE:
+  steps:
+
+    - id: move_start_pose
+      kind: arm.move_pose
+      timeout_ms: 8000
+      max_retries: 1
+      post_delay_ms: 200
+      params:
+        target_pose:
+          type: double_array
+          preset: CARTESIAN_START_POSE
+
+    - id: move_z_axis
+      kind: arm.move_pose
+      timeout_ms: 8000
+      max_retries: 1
+      post_delay_ms: 200
+      params: 
+        target_pose:
+          type: double_array
+          preset: Z_AXIS_POSE
+
+    - id: move_y_axis
+      kind: arm.move_pose
+      timeout_ms: 8000
+      max_retries: 1
+      post_delay_ms: 200
+      params: 
+        target_pose:
+          type: double_array
+          preset: Y_AXIS_POSE
+
+    - id: move_x_axis
+      kind: arm.move_pose
+      timeout_ms: 8000
+      max_retries: 1
+      post_delay_ms: 200
+      params: 
+        target_pose:
+          type: double_array
+          preset: X_AXIS_POSE
+
+    - id: move_home
+      kind: arm.move_joints
+      timeout_ms: 8000
+      max_retries: 1
+      params:
+        target_joints:
+          type: double_array
+          preset: HOME
+

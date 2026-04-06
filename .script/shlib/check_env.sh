@@ -108,12 +108,14 @@ ensure_onnxruntime() {
 find_realsense_config() {
     local -a candidates=()
     local cfg
-    # 优先搜索环境变量指定的路径，然后搜索系统标准路径
+    # 优先使用工作区本地安装，再考虑显式环境变量和系统标准路径
+    candidates+=(
+        "$WS_ROOT/third_party/realsense-ros/librealsense_sdk/install/lib/cmake/realsense2/realsense2Config.cmake"
+    )
     [[ -n "${realsense2_DIR:-}" ]] && candidates+=("$realsense2_DIR/realsense2Config.cmake")
     candidates+=(
         "/usr/lib/x86_64-linux-gnu/cmake/realsense2/realsense2Config.cmake"
         "/usr/local/lib/cmake/realsense2/realsense2Config.cmake"
-        "$WS_ROOT/third_party/realsense-ros/librealsense_sdk/install/lib/cmake/realsense2/realsense2Config.cmake"
     )
 
     for cfg in "${candidates[@]}"; do
@@ -137,7 +139,7 @@ ensure_realsense_sdk() {
     local rs_root="$WS_ROOT/$rs_rel_root"
     local rs_install="$rs_root/install"
     
-    # 策略: 优先查找系统中是否已安装 RealSense
+    # 策略: 优先复用已存在的本地或系统 RealSense SDK
     if verify_realsense_sdk; then
         print_color green "发现 RealSense SDK: $(relpath_ws "$realsense2_DIR")"
         return 0
@@ -165,6 +167,7 @@ ensure_realsense_sdk() {
     cmake -S "$rs_root" -B "$rs_root/build" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$rs_install" \
+        -DLRS_RUN_LDCONFIG=OFF \
         -DBUILD_EXAMPLES=OFF -DBUILD_GRAPHICAL_EXAMPLES=OFF \
         -DBUILD_PYTHON_BINDINGS=OFF -DBUILD_WITH_CUDA=OFF
 

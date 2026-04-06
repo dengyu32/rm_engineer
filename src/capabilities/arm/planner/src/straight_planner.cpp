@@ -46,7 +46,7 @@ static double distance_l2(const std::vector<double>& q, const std::vector<double
 {
   const size_t n = std::min(q.size(), q_ref.size());
   if (n == 0)
-    return std::numeric_limits<double>::infinity();  //代价无穷大
+    return std::numeric_limits<double>::infinity();    //代价无穷大
   double sum = 0.0;
   for (size_t i = 0; i < n; ++i)
   {
@@ -70,7 +70,7 @@ static double max_joint_delta(const std::vector<double>& q, const std::vector<do
   return max_delta;
 }
 
-}  // namespace
+}    // namespace
 
 StraightPlanner::StraightPlanner(const moveit::core::RobotModelConstPtr& model, const std::string& group_name,
                                  const std::string& ee_link, const StraightPlannerSettings& settings,
@@ -83,10 +83,8 @@ StraightPlanner::StraightPlanner(const moveit::core::RobotModelConstPtr& model, 
 {
 }
 
-std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_state,
-                                                const Eigen::Vector3d& target_vector,
-                                                double target_length,
-                                                const calculator::CostOptions& cost_opt)
+std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_state, Eigen::Vector3d& target_vector,
+                                                double target_length, const calculator::CostOptions& cost_opt)
 {
   LOGI("Start Plan Cartesian!");
 
@@ -95,37 +93,41 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
   const auto* ref_link = robot_model_->getLinkModel(settings_.reference_link);
   if (!jmg || !ee_link || !ref_link)
   {
-    LOGE("[solve_executor][straight_planner] Invalid model handles: jmg={}, ee_link={}, ref_link={}",
-         jmg != nullptr, ee_link != nullptr, ref_link != nullptr);
+    LOGE("[solve_executor][straight_planner] Invalid model handles: jmg={}, ee_link={}, ref_link={}", jmg != nullptr,
+         ee_link != nullptr, ref_link != nullptr);
     return std::nullopt;
   }
 
   calculator::HybridIK ik(robot_model_, group_name_, ee_link_);
   calculator::IKOptions ik_opt;
 
-  const Eigen::Vector3d normalized_target = target_vector.normalized();
-  const Eigen::Isometry3d T_ref = start_state.getGlobalLinkTransform(ref_link);
-  Eigen::Isometry3d T0 = start_state.getGlobalLinkTransform(ee_link);  // 起始末端位姿
-  const Eigen::Matrix3d R_ref_ee = T_ref.linear().transpose() * T0.linear();
-  const Eigen::Vector3d ee_x_in_ref = R_ref_ee.col(0).normalized();
-  const double direction_dot = ee_x_in_ref.dot(normalized_target);
-  const double abs_direction_dot = std::abs(direction_dot);
-  if (!std::isfinite(abs_direction_dot) || abs_direction_dot < settings_.alignment_dot_threshold)
-  {
-    LOGE("[solve_executor][straight_planner] Alignment check failed: abs(dot)={}, threshold={}",
-         abs_direction_dot, settings_.alignment_dot_threshold);
-    return std::nullopt;
-  }
+  // {
+  // 如果视觉不传方向直接使用link6的x轴方向的话，采用这部分代码
+  // const Eigen::Vector3d normalized_target = target_vector.normalized();
+  // const Eigen::Isometry3d T_ref = start_state.getGlobalLinkTransform(ref_link);
+  Eigen::Isometry3d T0 = start_state.getGlobalLinkTransform(ee_link);    // 起始末端位姿
+  // const Eigen::Matrix3d R_ref_ee = T_ref.linear().transpose() * T0.linear();
+  // const Eigen::Vector3d ee_x_in_ref = R_ref_ee.col(0).normalized();
+  // const double direction_dot = ee_x_in_ref.dot(normalized_target);
+  // const double abs_direction_dot = std::abs(direction_dot);
+  // if (!std::isfinite(abs_direction_dot) || abs_direction_dot < settings_.alignment_dot_threshold)
+  // {
+  //   LOGE("[solve_executor][straight_planner] Alignment check failed: abs(dot)={}, threshold={}", abs_direction_dot,
+  //        settings_.alignment_dot_threshold);
+  //   return std::nullopt;
+  // }
 
-  const Eigen::Vector3d straight_dir = (direction_dot >= 0.0 ? 1.0 : -1.0) * ee_x_in_ref;
+  // const Eigen::Vector3d straight_dir = (direction_dot >= 0.0 ? 1.0 : -1.0) * ee_x_in_ref;
+  // target_vector = straight_dir;
+  // }
+  const Eigen::Vector3d line_delta = target_vector * target_length;
   const int num_waypoints = std::max(1, static_cast<int>(std::ceil(target_length / settings_.sample_step_m)));
-  const Eigen::Vector3d line_delta = straight_dir * target_length;
 
-  const int cap_sols_per_waypoint = 10;                             // 每路点候选解上限
-  std::vector<std::vector<std::vector<double>>> sols_all_waypoint;  // 所有路点的候选解集合
+  const int cap_sols_per_waypoint = 10;                               // 每路点候选解上限
+  std::vector<std::vector<std::vector<double>>> sols_all_waypoint;    // 所有路点的候选解集合
   sols_all_waypoint.reserve(num_waypoints);
 
-  std::vector<std::vector<double>> prev_solutions;  // prev = previous 上一个的
+  std::vector<std::vector<double>> prev_solutions;    // prev = previous 上一个的
   {
     std::vector<double> q0;
     start_state.copyJointGroupPositions(jmg, q0);
@@ -135,12 +137,12 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
   for (int i = 1; i <= num_waypoints; ++i)
   {
     double r = double(i) / num_waypoints;
-    Eigen::Isometry3d Ti = Eigen::Isometry3d::Identity();  //用单位矩阵初始化路点
+    Eigen::Isometry3d Ti = Eigen::Isometry3d::Identity();    //用单位矩阵初始化路点
     Ti.translation() = T0.translation() + line_delta * r;
-    Ti.linear() = T0.linear();  // linear 旋转矩阵
+    Ti.linear() = T0.linear();    // linear 旋转矩阵
 
-    std::vector<std::vector<double>> sols_per_waypoint;  // 收集该路点所有候选解
-    std::unordered_set<std::string> seen_keys;           // 去重哈希表
+    std::vector<std::vector<double>> sols_per_waypoint;    // 收集该路点所有候选解
+    std::unordered_set<std::string> seen_keys;             // 去重哈希表
 
     for (const auto& prev_q : prev_solutions)
     {
@@ -192,7 +194,7 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
       double max_delta;
       std::vector<double> q;
     };
-    std::vector<ScoredSolution> scored;  //解及其连续性评分
+    std::vector<ScoredSolution> scored;    //解及其连续性评分
     scored.reserve(sols_per_waypoint.size());
     constexpr double kScoreEps = 1e-12;
     for (auto& q : sols_per_waypoint)
@@ -235,8 +237,8 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
   }
 
   const size_t N = sols_all_waypoint.size();
-  std::vector<std::vector<double>> dp_costs(N);  //代价
-  std::vector<std::vector<int>> prev_idx(N);     //
+  std::vector<std::vector<double>> dp_costs(N);    //代价
+  std::vector<std::vector<int>> prev_idx(N);       //
 
   calculator::CostFunc cost_func(start_state, jmg, ee_link, cost_opt);
 
@@ -265,18 +267,18 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
     prev_idx[i].assign(cur_layer.size(), -1);
 
     for (size_t j = 0; j < cur_layer.size(); ++j)
-    {  //遍历当前路点的所有解
+    {    //遍历当前路点的所有解
       const auto& qj = cur_layer[j];
 
       for (size_t k = 0; k < prev_layer.size(); ++k)
-      {  //遍历前一点的所有解
+      {    //遍历前一点的所有解
         if (!std::isfinite(dp_costs[i - 1][k]))
           continue;
         const auto& qk = prev_layer[k];
 
         double total =
             dp_costs[i - 1][k] +
-            cost_func.compute(qk, qj);  //前一个路点第k个解的代价加上当前点与前一个点第k个解的代价为此路径的总代价
+            cost_func.compute(qk, qj);    //前一个路点第k个解的代价加上当前点与前一个点第k个解的代价为此路径的总代价
 
         if (total < dp_costs[i][j])
         {
@@ -286,7 +288,7 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
       }
     }
 
-    bool any_ok = false;  // 如果本层所有 dp_costs 都是 inf（没有可连通的候选），直接失败
+    bool any_ok = false;    // 如果本层所有 dp_costs 都是 inf（没有可连通的候选），直接失败
     for (double v : dp_costs[i])
     {
       if (std::isfinite(v))
@@ -354,4 +356,4 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
   return traj;
 }
 
-}  // namespace planner
+}    // namespace planner

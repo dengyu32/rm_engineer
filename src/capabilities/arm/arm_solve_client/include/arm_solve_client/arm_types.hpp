@@ -18,6 +18,7 @@ struct ArmMoveSpec {
   engineer_interfaces::msg::Pose pose{};
   std::array<double, 6> joints{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
   geometry_msgs::msg::Vector3 vector{};
+  double target_length{0.0};
 
   PlanOption plan_option{PlanOption::NORMAL};
 };

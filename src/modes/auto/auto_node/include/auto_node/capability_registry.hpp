@@ -4,6 +4,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
+#include "auto_library/method.hpp"
 #include "step_executor/registry_bridge.hpp"
 
 namespace engineer_auto::auto_node {
@@ -11,10 +12,11 @@ namespace engineer_auto::auto_node {
 // ============================================================================
 //  Capability Registry
 // ----------------------------------------------------------------------------
-//  - 将 kind 映射到具体 capability bridge
+//  - 将 auto kind 同时注册到 capability bridge 和 kind_specs
 // ============================================================================
 
-std::shared_ptr<step_executor::ICapabilityBridge> createAutoCapabilityBridge(
-    rclcpp::Node &node);
+void registerAutoCapabilities(step_executor::RegistryBridge &bridge,
+                              core::KindSpecMap &kind_specs,
+                              rclcpp::Node &node);
 
 } // namespace engineer_auto::auto_node

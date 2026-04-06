@@ -3,6 +3,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include <array>
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cstdlib>
@@ -12,6 +13,7 @@
 #include <vector>
 
 #include "auto_library/context.hpp"
+#include "auto_library/method.hpp"
 #include "auto_library/step.hpp"
 
 namespace task_orchestrator::detail {
@@ -212,6 +214,66 @@ Value parseParamValue(const YAML::Node &node, const std::string &field,
   throw std::runtime_error("unsupported param node for: " + field);
 }
 
+bool containsName(const std::vector<std::string> &names, const std::string &name) {
+  return std::find(names.begin(), names.end(), name) != names.end();
+}
+
+std::vector<std::string> collectProvidedParams(const Step &step) {
+  std::vector<std::string> params;
+  params.reserve(step.command.params.size() + step.bindings.size());
+  for (const auto &entry : step.command.params) {
+    params.push_back(entry.first);
+  }
+  for (const auto &binding : step.bindings) {
+    if (!containsName(params, binding.to_param)) {
+      params.push_back(binding.to_param);
+    }
+  }
+  return params;
+}
+
+void validateStepKindSpec(const Step &step,
+                          const core::KindSpecMap &kind_specs,
+                            const std::string &field_prefix) {
+  const auto spec_it = kind_specs.find(step.command.kind);
+  if (spec_it == kind_specs.end()) {
+    throw std::runtime_error("unknown kind: " + step.command.kind +
+                             " at " + field_prefix + ".kind");
+  }
+  const core::KindSpec &spec = spec_it->second;
+
+  const std::vector<std::string> provided_params = collectProvidedParams(step);
+  for (const auto &name : provided_params) {
+    if (!containsName(spec.allowed_params, name)) {
+      throw std::runtime_error("unexpected param for " + step.command.kind + ": " + name);
+    }
+  }
+
+  for (const auto &name : spec.required_params) {
+    if (!containsName(provided_params, name)) {
+      throw std::runtime_error("missing required param for " + step.command.kind + ": " + name);
+    }
+  }
+
+  std::vector<std::string> declared_outputs;
+  declared_outputs.reserve(step.outputs.size());
+  for (const auto &output : step.outputs) {
+    declared_outputs.push_back(output.name);
+  }
+
+  for (const auto &name : declared_outputs) {
+    if (!containsName(spec.required_outputs, name)) {
+      throw std::runtime_error("unexpected output for " + step.command.kind + ": " + name);
+    }
+  }
+
+  for (const auto &name : spec.required_outputs) {
+    if (!containsName(declared_outputs, name)) {
+      throw std::runtime_error("missing required output for " + step.command.kind + ": " + name);
+    }
+  }
+}
+
 void parsePresetDoubleArrays(const YAML::Node &node, TaskCatalog &catalog) {
   if (!node) {
     return;
@@ -284,6 +346,7 @@ Binding parseBinding(const YAML::Node &node, const TaskCatalog &catalog,
 }
 
 Step parseStep(const YAML::Node &node, const TaskCatalog &catalog,
+               const core::KindSpecMap &kind_specs,
                const std::string &task_name, std::size_t step_index) {
   if (!node || !node.IsMap()) {
     throw std::runtime_error("step must be a map: " + task_name);
@@ -350,10 +413,14 @@ Step parseStep(const YAML::Node &node, const TaskCatalog &catalog,
     }
   }
 
+  validateStepKindSpec(step, kind_specs, step_prefix);
+
   return step;
 }
 
-void parseTasks(const YAML::Node &node, TaskCatalog &catalog) {
+void parseTasks(const YAML::Node &node,
+                TaskCatalog &catalog,
+                const core::KindSpecMap &kind_specs) {
   if (!node || !node.IsMap()) {
     throw std::runtime_error("tasks root must be a map");
   }
@@ -379,7 +446,7 @@ void parseTasks(const YAML::Node &node, TaskCatalog &catalog) {
 
     core::TaskPlan plan = makeTaskPlan(static_cast<core::TaskId>(task_id));
     for (std::size_t i = 0; i < steps_node.size(); ++i) {
-      addStep(plan, parseStep(steps_node[i], catalog, task_name, i));
+      addStep(plan, parseStep(steps_node[i], catalog, kind_specs, task_name, i));
     }
 
     catalog.plans[static_cast<std::size_t>(task_id)] = std::move(plan);
@@ -414,6 +481,7 @@ YAML::Node extractTasksNode(const YAML::Node &root) {
 
 TaskCatalog parseTaskCatalogNodes(const YAML::Node &presets_root,
                                   const std::vector<YAML::Node> &task_roots,
+                                  const core::KindSpecMap &kind_specs,
                                   std::string source_path) {
   TaskCatalog catalog{};
   catalog.source_path = source_path;
@@ -430,7 +498,7 @@ TaskCatalog parseTaskCatalogNodes(const YAML::Node &presets_root,
       if (task_root["version"] && task_root["version"].as<int>() != 1) {
         throw std::runtime_error("unsupported task plan version");
       }
-      parseTasks(extractTasksNode(task_root), catalog);
+      parseTasks(extractTasksNode(task_root), catalog, kind_specs);
     }
 
     catalog.loaded = true;
@@ -442,9 +510,10 @@ TaskCatalog parseTaskCatalogNodes(const YAML::Node &presets_root,
   return catalog;
 }
 
-TaskCatalog parseTaskCatalogFile(const std::string &source_path) {
+TaskCatalog parseTaskCatalogFile(const std::string &source_path,
+                                 const core::KindSpecMap &kind_specs) {
   const YAML::Node root = YAML::LoadFile(source_path);
-  return parseTaskCatalogNodes(root["presets"], {root}, source_path);
+  return parseTaskCatalogNodes(root["presets"], {root}, kind_specs, source_path);
 }
 
 } // namespace task_orchestrator::detail

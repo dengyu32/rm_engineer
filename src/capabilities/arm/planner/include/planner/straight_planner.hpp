@@ -33,7 +33,7 @@ public:
                   const std::string& ee_link, const StraightPlannerSettings& settings,
                   const collision::SelfCollisionDetector* self_collision_detector = nullptr);
 
-  std::optional<Trajectory> plan(moveit::core::RobotState& start_state, const Eigen::Vector3d& target_vector,
+  std::optional<Trajectory> plan(moveit::core::RobotState& start_state, Eigen::Vector3d& target_vector,
                                  double target_length, const calculator::CostOptions& cost_opt);
 
 private:

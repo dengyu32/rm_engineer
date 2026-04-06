@@ -3,7 +3,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-
 namespace task_orchestrator {
 
 // ============================================================================
@@ -14,6 +13,7 @@ namespace task_orchestrator {
 // ============================================================================
 
 // 任务LIST宏 X-MACRO 
+// 可供测试的有 1 3 4 6 7 8 
 #define TASK_LIST(X) \
     X(IDLE,           0) \
     X(AUTO_INIT,      1) \
@@ -21,10 +21,10 @@ namespace task_orchestrator {
     X(AUTO_STORE,     3) \
     X(AUTO_GET,       4) \
     X(FIXED_GRAB,     5) \
-    X(TEST_SOLVE,     6) \
+    X(TEST_NOMAL,     6) \
     X(TEST_CARTESIAN, 7) \
-    X(TEST_NOMAL,     8)
-
+    X(TEST_LINE,      8) \
+    X(TEST_VISION,    9) 
 // 任务ID枚举
 enum class TaskId : uint8_t {
 
@@ -58,26 +58,3 @@ inline const char* task_name(TaskId id) {
 }
 
 } // namespace task_orchestrator
-
-namespace task_orchestrator::protocol {
-
-// ============================================================================
-//  Protocol
-// ----------------------------------------------------------------------------
-//  - Context keys / Command kinds
-// ============================================================================
-
-// Context keys
-inline constexpr const char *kVisionPose = "VisionPose";
-inline constexpr const char *kVisionVector = "VisionVector";
-inline constexpr const char *kSlotId = "SlotID";
-
-// Command kinds
-inline constexpr const char *kArmMoveKind = "arm.move";
-inline constexpr const char *kGripperKind = "gripper.cmd";
-inline constexpr const char *kVisionKind = "vision.detect";
-inline constexpr const char *kSlotSelectKind = "slot.select";
-inline constexpr const char *kSlotLockKind = "slot.lock";
-inline constexpr const char *kSlotUnlockKind = "slot.unlock";
-
-} // namespace task_orchestrator::protocol

@@ -3,12 +3,10 @@ version: 1
 AUTO_INIT:
   steps:
     - id: gripper_open
-      kind: gripper.cmd
-      params:
-        action: open
+      kind: gripper.open
 
     - id: move_home_joints
-      kind: arm.move
+      kind: arm.move_joints
       timeout_ms: 8000
       max_retries: 1
       params:

@@ -4,11 +4,8 @@
 
 namespace engineer_auto::gripper_control_node {
 
-using core::Command;
 using core::ExecuteResult;
-using core::makeFailed;
 using core::makeSucceeded;
-using core::requireParam;
 
 GripperControlNode::GripperControlNode(rclcpp::Node &node,
                                        const GripperPresetConfig &config)
@@ -25,23 +22,13 @@ GripperControlNode::GripperControlNode(rclcpp::Node &node,
               config_.gripper_cmd_topic.c_str());
 }
 
-ExecuteResult GripperControlNode::execute(const Command &cmd) {
-  std::string err;
-  const auto *action = requireParam<std::string>(cmd, "action", err);
-  if (!action) {
-    return makeFailed(err, false);
-  }
+ExecuteResult GripperControlNode::executeOpen() {
+  setCommand(GripperCommand::OPEN);
+  return makeSucceeded();
+}
 
-  GripperCommand command = GripperCommand::OPEN;
-  if (*action == "open") {
-    command = GripperCommand::OPEN;
-  } else if (*action == "close") {
-    command = GripperCommand::CLOSE;
-  } else {
-    return makeFailed("gripper action invalid", false);
-  }
-
-  setCommand(command);
+ExecuteResult GripperControlNode::executeClose() {
+  setCommand(GripperCommand::CLOSE);
   return makeSucceeded();
 }
 

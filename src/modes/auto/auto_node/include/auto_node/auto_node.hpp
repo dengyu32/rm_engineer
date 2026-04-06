@@ -16,6 +16,8 @@
 #include <engineer_interfaces/msg/intent.hpp>
 
 //< Other Modules
+#include "auto_library/method.hpp"
+#include "step_executor/registry_bridge.hpp"
 #include "step_executor/step_executor.hpp"
 #include "task_orchestrator/task_orchestrator.hpp"
 #include "task_orchestrator/protocol.hpp"
@@ -104,6 +106,8 @@ private:
   AutoNodeConfig config_;
   rclcpp::Logger logger_;
 
+  core::KindSpecMap kind_specs_{};
+  std::shared_ptr<step_executor::RegistryBridge> bridge_;
   task_orchestrator::TaskOrchestrator orchestrator_;
   step_executor::StepExecutor executor_;
 

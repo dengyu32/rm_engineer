@@ -59,7 +59,7 @@ src/capabilities/
 **Command（唯一执行对象）**
 ```c++
 struct Command {
-  std::string kind;                     // "arm.move" / "gripper.cmd" / ...
+  std::string kind;                     // "arm.move_pose" / "gripper.open" / ...
   std::unordered_map<std::string,Value> params; // 具体参数（variant）
 };
 ```
@@ -140,10 +140,14 @@ struct ErrorInfo {
 ```
 
 #### Command kind 约定
-- arm.move
-- gripper.cmd
+- arm.move_pose
+- arm.move_joints
+- arm.move_vector
+- gripper.open
+- gripper.close
 - vision.detect
-- slot.select
+- slot.select_put
+- slot.select_take
 - slot.lock
 - slot.unlock
 
@@ -165,12 +169,10 @@ version: 1
 AUTO_INIT:
   steps:
     - id: gripper_open
-      kind: gripper.cmd
-      params:
-        action: open
+      kind: gripper.open
 
     - id: move_home_joints
-      kind: arm.move
+      kind: arm.move_joints
       timeout_ms: 8000
       max_retries: 1
       params:
@@ -199,7 +201,6 @@ AUTO_INIT:
 
 ```yaml
 params:
-  action: open
   enable: true
   speed: 0.2
   target_pose: [-0.5, 0.1, 0.6, 0.0, 0.0, 0.0, 1.0]
@@ -265,36 +266,42 @@ bindings:
 - `direct` 表示把上下文值直接写入 `command.params[to_param]`
 - `index_to_joints_table` 表示把上下文中的索引映射到 `double_tables`
 
+#### 轻量方法契约
+- 固定业务分支直接写进 `kind`，例如 `gripper.open`、`slot.select_put`
+- `params` 只保留真正动态的数据，例如 `target_pose`、`target_joints`、`slot_id`
+- YAML 加载时会按方法契约做最小校验：
+  - `kind` 是否存在
+  - 是否写了多余 param
+  - 必需 param 是否齐全
+  - 必需 outputs 是否声明
+
 #### 任务编排示例
 **AUTO_GRAB（显式）**
 1. vision.detect
    - outputs: VisionPose@task, VisionVector@task
-2. arm.move
+2. arm.move_pose
    - inputs: VisionPose@task
    - bindings: VisionPose -> params.target_pose
-3. gripper.cmd
-   - params: {action: "close"}
-4. arm.move
+3. gripper.close
+4. arm.move_vector
    - inputs: VisionVector@task
    - bindings: VisionVector -> params.target_vector
-5. arm.move
+5. arm.move_joints
    - params: {target_joints: HOME}
 
 **AUTO_STORE（显式）**
-1. slot.select
-   - params: {strategy: "put"}
+1. slot.select_put
    - outputs: SlotID@task
-2. arm.move
+2. arm.move_joints
    - inputs: SlotID@task
    - bindings: SlotID -> preset.SLOTS -> params.target_joints
-3. gripper.cmd
-   - params: {action: "open"}
+3. gripper.open
 4. slot.lock
    - inputs: SlotID@task
    - bindings: SlotID -> params.slot_id
 
 #### Slot 链路
-1. TaskOrchestrator 插入 slot.select + 后续 slot.lock/unlock
+1. TaskOrchestrator 插入 slot.select_put / slot.select_take + 后续 slot.lock/unlock
 2. StepExecutor 执行 command，按 outputs 写入 Context
 3. SlotSelectNode 返回 SlotID
 4. StepExecutor 依据 bindings 将 SlotID 显式映射到 preset.SLOTS，再注入 target_joints

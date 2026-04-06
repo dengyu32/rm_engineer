@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-#include "task_orchestrator/protocol.hpp"
+#include "auto_library/context_keys.hpp"
 
 namespace engineer_auto::slot_select_node {
 
@@ -31,25 +31,12 @@ SlotSelectNode::SlotSelectNode(rclcpp::Node &node, const SlotSelectConfig &confi
               config_.slot_state_topic.c_str(), slots_[0] ? 1 : 0, slots_[1] ? 1 : 0);
 }
 
-ExecuteResult SlotSelectNode::executeSelect(const Command &cmd) {
-  std::string err;
-  const auto *strategy = requireParam<std::string>(cmd, "strategy", err);
-  if (!strategy) {
-    return makeFailed(err, false);
-  }
+namespace {
 
-  SlotStrategy slot_strategy = SlotStrategy::SelectSlotToPut;
-  if (*strategy == "put") {
-    slot_strategy = SlotStrategy::SelectSlotToPut;
-  } else if (*strategy == "take") {
-    slot_strategy = SlotStrategy::SelectSlotToTake;
-  } else {
-    return makeFailed("slot.select invalid strategy", false);
-  }
-
+ExecuteResult executeSelectByStrategy(SlotSelectNode &node, SlotStrategy slot_strategy) {
   int selected_slot = -1;
-  if (!selectSlot(slot_strategy, selected_slot)) {
-    std::string err = lastError();
+  if (!node.selectSlot(slot_strategy, selected_slot)) {
+    std::string err = node.lastError();
     if (err.empty()) {
       err = "slot selection failed";
     }
@@ -57,21 +44,22 @@ ExecuteResult SlotSelectNode::executeSelect(const Command &cmd) {
   }
 
   auto result = makeSucceeded();
-  result.outputs[task_orchestrator::protocol::kSlotId] =
+  result.outputs[core::keys::kSlotId] =
       static_cast<int64_t>(selected_slot);
   return result;
 }
 
-ExecuteResult SlotSelectNode::executeLockUnlock(const Command &cmd,
-                                                SlotStrategy strategy) {
+ExecuteResult executeLockUnlockByStrategy(SlotSelectNode &node,
+                                          const Command &cmd,
+                                          SlotStrategy strategy) {
   std::string err;
   const auto *slot_id = requireParam<int64_t>(cmd, "slot_id", err);
   if (!slot_id) {
     return makeFailed(err, false);
   }
 
-  if (!applySlotCommand(strategy, static_cast<int>(*slot_id))) {
-    std::string err = lastError();
+  if (!node.applySlotCommand(strategy, static_cast<int>(*slot_id))) {
+    std::string err = node.lastError();
     if (err.empty()) {
       err = "slot command failed";
     }
@@ -79,6 +67,24 @@ ExecuteResult SlotSelectNode::executeLockUnlock(const Command &cmd,
   }
 
   return makeSucceeded();
+}
+
+} // namespace
+
+ExecuteResult SlotSelectNode::executeSelectPut() {
+  return executeSelectByStrategy(*this, SlotStrategy::SelectSlotToPut);
+}
+
+ExecuteResult SlotSelectNode::executeSelectTake() {
+  return executeSelectByStrategy(*this, SlotStrategy::SelectSlotToTake);
+}
+
+ExecuteResult SlotSelectNode::executeLock(const Command &cmd) {
+  return executeLockUnlockByStrategy(*this, cmd, SlotStrategy::LockSlot);
+}
+
+ExecuteResult SlotSelectNode::executeUnlock(const Command &cmd) {
+  return executeLockUnlockByStrategy(*this, cmd, SlotStrategy::UnlockSlot);
 }
 
 bool SlotSelectNode::selectSlot(SlotStrategy strategy, int &selected_slot) {
@@ -155,10 +161,16 @@ void SlotSelectNode::publishSlotCommand(int slot_id, bool lock) {
 
   engineer_interfaces::msg::Slots cmd;
   cmd.header.stamp = node_.now();
-  cmd.slots.resize(slots_.size());
+  std::array<bool, 2> slot_snapshot{};
+  {
+    std::scoped_lock lock_guard(mutex_);
+    slot_snapshot = slots_;
+  }
+
+  cmd.slots.resize(slot_snapshot.size());
   for (std::size_t i = 0; i < slots_.size(); ++i) {
-    cmd.slots[i].status = slots_[i];
-    cmd.slots[i].command = false;
+    cmd.slots[i].status = slot_snapshot[i];
+    cmd.slots[i].command = slot_snapshot[i];
   }
 
   if (isValidSlotId(slot_id)) {

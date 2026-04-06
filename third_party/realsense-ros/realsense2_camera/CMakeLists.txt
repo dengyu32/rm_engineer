@@ -154,28 +154,28 @@ endif()
 
 get_filename_component(_local_realsense2_dir
     "${CMAKE_CURRENT_SOURCE_DIR}/../librealsense_sdk/install/lib/cmake/realsense2" ABSOLUTE)
-if(NOT EXISTS "${_local_realsense2_dir}/realsense2Config.cmake")
-  message(FATAL_ERROR
-    "\n\n Workspace-local RealSense SDK is missing.\n"
-    " Expected: ${_local_realsense2_dir}/realsense2Config.cmake\n"
-    " Build or prepare third_party/realsense-ros/librealsense_sdk/install first.\n\n")
+
+set(_realsense2_hints "")
+if(DEFINED realsense2_DIR AND NOT "${realsense2_DIR}" STREQUAL "")
+  list(APPEND _realsense2_hints "${realsense2_DIR}")
 endif()
-set(realsense2_DIR "${_local_realsense2_dir}" CACHE PATH "Path to realsense2Config.cmake" FORCE)
-find_package(realsense2 2.56.4 REQUIRED CONFIG
-  PATHS "${realsense2_DIR}"
-  NO_DEFAULT_PATH)
+if(DEFINED ENV{realsense2_DIR} AND NOT "$ENV{realsense2_DIR}" STREQUAL "")
+  list(APPEND _realsense2_hints "$ENV{realsense2_DIR}")
+endif()
+if(EXISTS "${_local_realsense2_dir}/realsense2Config.cmake")
+  list(APPEND _realsense2_hints "${_local_realsense2_dir}")
+endif()
+
+find_package(realsense2 2.56.4 REQUIRED CONFIG HINTS ${_realsense2_hints})
 if (BUILD_ACCELERATE_GPU_WITH_GLSL)
   get_filename_component(_local_realsense2_gl_dir
       "${CMAKE_CURRENT_SOURCE_DIR}/../librealsense_sdk/install/lib/cmake/realsense2-gl" ABSOLUTE)
-  if(NOT EXISTS "${_local_realsense2_gl_dir}/realsense2-glConfig.cmake")
-    message(FATAL_ERROR
-      "\n\n Workspace-local RealSense GLSL package is missing.\n"
-      " Expected: ${_local_realsense2_gl_dir}/realsense2-glConfig.cmake\n"
-      " Rebuild librealsense_sdk with GLSL support, or disable BUILD_ACCELERATE_GPU_WITH_GLSL.\n\n")
+  if(EXISTS "${_local_realsense2_gl_dir}/realsense2-glConfig.cmake")
+    find_package(realsense2-gl 2.56.4 REQUIRED CONFIG
+      HINTS "${_local_realsense2_gl_dir}")
+  else()
+    find_package(realsense2-gl 2.56.4 REQUIRED CONFIG)
   endif()
-  find_package(realsense2-gl 2.56.4 REQUIRED CONFIG
-    PATHS "${_local_realsense2_gl_dir}"
-    NO_DEFAULT_PATH)
 endif()
 
 #set(CMAKE_NO_SYSTEM_FROM_IMPORTED true)

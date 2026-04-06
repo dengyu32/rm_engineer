@@ -73,9 +73,15 @@ class ArmSolveClient {
 public:
   explicit ArmSolveClient(rclcpp::Node &node, const ArmSolveClientConfig &config);
 
-  bool buildSpec(const core::Command &cmd,
-                 ArmMoveSpec &out,
-                 std::string &error) const;
+  bool buildPoseSpec(const core::Command &cmd,
+                     ArmMoveSpec &out,
+                     std::string &error) const;
+  bool buildJointsSpec(const core::Command &cmd,
+                       ArmMoveSpec &out,
+                       std::string &error) const;
+  bool buildVectorSpec(const core::Command &cmd,
+                       ArmMoveSpec &out,
+                       std::string &error) const;
   core::ExecuteResult execute(const ArmMoveSpec &spec);
   void cancel();
   std::string lastError() const;

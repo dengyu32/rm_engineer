@@ -2,8 +2,8 @@
 
 #include <optional>
 
+#include "task_orchestrator/task_catalog.hpp"
 #include "auto_library/task.hpp"
-#include "task_orchestrator/protocol.hpp"
 
 namespace task_orchestrator {
 
@@ -16,7 +16,12 @@ namespace task_orchestrator {
 
 class TaskOrchestrator {
 public:
+  explicit TaskOrchestrator(const core::KindSpecMap &kind_specs);
+
   std::optional<core::TaskPlan> plan(TaskId request) const;
+
+private:
+  detail::TaskCatalog catalog_{};
 };
 
 } // namespace task_orchestrator

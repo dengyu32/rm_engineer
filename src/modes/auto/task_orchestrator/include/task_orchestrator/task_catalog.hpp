@@ -9,6 +9,7 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include "auto_library/method.hpp"
 #include "auto_library/task.hpp"
 #include "task_orchestrator/protocol.hpp"
 
@@ -28,12 +29,13 @@ struct TaskCatalog {
   bool loaded{false};
 };
 
-TaskCatalog parseTaskCatalogFile(const std::string &source_path);
+TaskCatalog parseTaskCatalogFile(const std::string &source_path,
+                                 const core::KindSpecMap &kind_specs);
 TaskCatalog parseTaskCatalogNodes(const YAML::Node &presets_root,
                                   const std::vector<YAML::Node> &task_roots,
+                                  const core::KindSpecMap &kind_specs,
                                   std::string source_path);
-TaskCatalog loadTaskCatalog();
-const TaskCatalog &taskCatalog();
+TaskCatalog loadTaskCatalog(const core::KindSpecMap &kind_specs);
 void reportCatalogErrorOnce(const TaskCatalog &catalog);
 
 } // namespace task_orchestrator::detail

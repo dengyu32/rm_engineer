@@ -2,27 +2,66 @@ version: 1
 
 TEST_CARTESIAN:
   steps:
-    - id: approach_normal
-      kind: arm.move
+    - id: move_start_pose
+      kind: arm.move_pose
       timeout_ms: 8000
       max_retries: 1
-      params:
-        target_pose: [-0.63131, -0.052031, 0.67485, -0.18348, -0.64249, 0.27727, 0.6904]
-
-    - id: gripper_close
-      kind: gripper.cmd
       post_delay_ms: 200
       params:
-        action: close
+        target_pose:
+          type: double_array
+          preset: CARTESIAN_START_POSE
 
-    - id: take_out_cartesian
-      kind: arm.move
+    - id: move_z_axis
+      kind: arm.move_vector
       timeout_ms: 8000
       max_retries: 1
+      post_delay_ms: 200
       params:
-        target_vector: [0.10315, 0.122381, -0.09803]
+        target_vector:
+          type: double_array
+          preset: LINE_START_TO_Z_VECTOR
+        target_length: 0.316108
 
-    - id: gripper_open
-      kind: gripper.cmd
+    - id: move_y_axis
+      kind: arm.move_vector
+      timeout_ms: 8000
+      max_retries: 1
+      post_delay_ms: 200
       params:
-        action: open
+        target_vector:
+          type: double_array
+          preset: LINE_Z_TO_Y_VECTOR
+        target_length: 0.380275
+
+    - id: move_x_axis
+      kind: arm.move_vector
+      timeout_ms: 8000
+      max_retries: 1
+      post_delay_ms: 200
+      params:
+        target_vector:
+          type: double_array
+          preset: LINE_Y_TO_X_VECTOR
+        target_length: 0.237432
+
+    - id: move_start_pose
+      kind: arm.move_pose
+      timeout_ms: 8000
+      max_retries: 1
+      post_delay_ms: 200
+      params:
+        target_pose:
+          type: double_array
+          preset: CARTESIAN_START_POSE
+
+    - id: move_random
+      kind: arm.move_vector
+      timeout_ms: 8000
+      max_retries: 1
+      post_delay_ms: 200
+      params:
+        target_vector:
+          type: double_array
+          preset: LINE_START_TO_RANDOM_VECTOR
+        target_length: 0.31752

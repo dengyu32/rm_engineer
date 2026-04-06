@@ -3,7 +3,7 @@
 #include <chrono>
 #include <exception>
 
-#include "task_orchestrator/protocol.hpp"
+#include "auto_library/context_keys.hpp"
 
 namespace engineer_auto::vision_detect_client {
 
@@ -139,7 +139,7 @@ ExecuteResult VisionDetectClient::consumePendingRequest(PendingRequest request) 
 
     // 构建成功的 ExecuteResult
     auto result = makeSucceeded();
-    result.outputs[task_orchestrator::protocol::kVisionPose] = std::vector<double>{
+    result.outputs[core::keys::kVisionPose] = std::vector<double>{
         detection.pose.x,
         detection.pose.y,
         detection.pose.z,
@@ -148,7 +148,7 @@ ExecuteResult VisionDetectClient::consumePendingRequest(PendingRequest request) 
         detection.pose.qz,
         detection.pose.qw,
     };
-    result.outputs[task_orchestrator::protocol::kVisionVector] = std::vector<double>{
+    result.outputs[core::keys::kVisionVector] = std::vector<double>{
         detection.vector.x,
         detection.vector.y,
         detection.vector.z,

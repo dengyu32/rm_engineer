@@ -45,7 +45,7 @@ std::vector<std::string> collectTaskFiles(const fs::path &tasks_dir) {
 
 } // namespace
 
-TaskCatalog loadTaskCatalog() {
+TaskCatalog loadTaskCatalog(const core::KindSpecMap &kind_specs) {
   TaskCatalog catalog{};
 
   try {
@@ -64,7 +64,7 @@ TaskCatalog loadTaskCatalog() {
     }
 
     catalog = parseTaskCatalogNodes(
-        presets_root, task_roots,
+        presets_root, task_roots, kind_specs,
         presets_path.string() + " + " + tasks_dir.string());
   } catch (const std::exception &ex) {
     catalog.loaded = false;
@@ -74,11 +74,6 @@ TaskCatalog loadTaskCatalog() {
     catalog.error = ex.what();
   }
 
-  return catalog;
-}
-
-const TaskCatalog &taskCatalog() {
-  static const TaskCatalog catalog = loadTaskCatalog();
   return catalog;
 }
 

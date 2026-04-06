@@ -7,6 +7,10 @@ cmake_minimum_required(VERSION 3.8)
 # 声明接口包名，保持与 package.xml 一致
 project(engineer_interfaces)
 
+if(POLICY CMP0148)
+  cmake_policy(SET CMP0148 OLD)
+endif()
+
 # ----------------------------------------------------------------------------
 #  编译选项
 # ----------------------------------------------------------------------------

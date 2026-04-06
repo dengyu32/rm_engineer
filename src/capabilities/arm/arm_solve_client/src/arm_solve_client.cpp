@@ -1,6 +1,7 @@
 #include "arm_solve_client/arm_solve_client.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <mutex>
 #include <rclcpp_action/client.hpp>
 #include <rcutils/error_handling.h>
@@ -23,7 +24,8 @@ bool sameVector(const geometry_msgs::msg::Vector3 &lhs,
 
 bool sameRequest(const ArmMoveSpec &lhs, const ArmMoveSpec &rhs) {
   return lhs.plan_option == rhs.plan_option && lhs.joints == rhs.joints &&
-         sameTarget(lhs.pose, rhs.pose) && sameVector(lhs.vector, rhs.vector);
+         sameTarget(lhs.pose, rhs.pose) && sameVector(lhs.vector, rhs.vector) &&
+         lhs.target_length == rhs.target_length;
 }
 } // namespace
 
@@ -42,51 +44,79 @@ ArmSolveClient::ArmSolveClient(rclcpp::Node &node,
 //  buildSpec -- 解析 Command 参数，生成 ArmMoveSpec
 // ============================================================================
 
-bool ArmSolveClient::buildSpec(const core::Command &cmd,
-                               ArmMoveSpec &out,
-                               std::string &error) const {
-  if (const auto *pose = core::paramAs<std::vector<double>>(cmd, "target_pose")) {
-    if (pose->size() != 7) {
-      error = "arm target_pose must have 7 elements";
-      return false;
-    }
-    out.plan_option = PlanOption::NORMAL;
-    out.pose.x = (*pose)[0];
-    out.pose.y = (*pose)[1];
-    out.pose.z = (*pose)[2];
-    out.pose.qx = (*pose)[3];
-    out.pose.qy = (*pose)[4];
-    out.pose.qz = (*pose)[5];
-    out.pose.qw = (*pose)[6];
-    error.clear();
-    return true;
+bool ArmSolveClient::buildPoseSpec(const core::Command &cmd,
+                                   ArmMoveSpec &out,
+                                   std::string &error) const {
+  const auto *pose = core::paramAs<std::vector<double>>(cmd, "target_pose");
+  if (!pose) {
+    error = "arm command missing target_pose";
+    return false;
   }
-  if (const auto *joints = core::paramAs<std::vector<double>>(cmd, "target_joints")) {
-    if (joints->size() != 6) {
-      error = "arm target_joints must have 6 elements";
-      return false;
-    }
-    out.plan_option = PlanOption::JOINTS;
-    out.joints = {(*joints)[0], (*joints)[1], (*joints)[2],
-                  (*joints)[3], (*joints)[4], (*joints)[5]};
-    error.clear();
-    return true;
+  if (pose->size() != 7) {
+    error = "arm target_pose must have 7 elements";
+    return false;
   }
-  if (const auto *vec = core::paramAs<std::vector<double>>(cmd, "target_vector")) {
-    if (vec->size() != 3) {
-      error = "arm target_vector must have 3 elements";
-      return false;
-    }
-    out.plan_option = PlanOption::CARTESIAN;
-    out.vector.x = (*vec)[0];
-    out.vector.y = (*vec)[1];
-    out.vector.z = (*vec)[2];
-    error.clear();
-    return true;
-  }
+  out.plan_option = PlanOption::NORMAL;
+  out.pose.x = (*pose)[0];
+  out.pose.y = (*pose)[1];
+  out.pose.z = (*pose)[2];
+  out.pose.qx = (*pose)[3];
+  out.pose.qy = (*pose)[4];
+  out.pose.qz = (*pose)[5];
+  out.pose.qw = (*pose)[6];
+  error.clear();
+  return true;
+}
 
-  error = "arm command missing target";
-  return false;
+bool ArmSolveClient::buildJointsSpec(const core::Command &cmd,
+                                     ArmMoveSpec &out,
+                                     std::string &error) const {
+  const auto *joints = core::paramAs<std::vector<double>>(cmd, "target_joints");
+  if (!joints) {
+    error = "arm command missing target_joints";
+    return false;
+  }
+  if (joints->size() != 6) {
+    error = "arm target_joints must have 6 elements";
+    return false;
+  }
+  out.plan_option = PlanOption::JOINTS;
+  out.joints = {(*joints)[0], (*joints)[1], (*joints)[2],
+                (*joints)[3], (*joints)[4], (*joints)[5]};
+  error.clear();
+  return true;
+}
+
+bool ArmSolveClient::buildVectorSpec(const core::Command &cmd,
+                                     ArmMoveSpec &out,
+                                     std::string &error) const {
+  const auto *vec = core::paramAs<std::vector<double>>(cmd, "target_vector");
+  if (!vec) {
+    error = "arm command missing target_vector";
+    return false;
+  }
+  if (vec->size() != 3) {
+    error = "arm target_vector must have 3 elements";
+    return false;
+  }
+  out.plan_option = PlanOption::CARTESIAN;
+  out.vector.x = (*vec)[0];
+  out.vector.y = (*vec)[1];
+  out.vector.z = (*vec)[2];
+  if (const auto *length = core::paramAs<double>(cmd, "target_length")) {
+    out.target_length = *length;
+  } else if (const auto *length = core::paramAs<int64_t>(cmd, "target_length")) {
+    out.target_length = static_cast<double>(*length);
+  } else {
+    error = "arm command missing target_length";
+    return false;
+  }
+  if (!std::isfinite(out.target_length) || out.target_length <= 0.0) {
+    error = "arm target_length must be > 0";
+    return false;
+  }
+  error.clear();
+  return true;
 }
 
 // ============================================================================
@@ -225,6 +255,7 @@ bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
   goal.target_pose = command.pose;
   goal.target_joints = command.joints;
   goal.target_vector = command.vector;
+  goal.target_length = command.target_length;
 
   // 回调
   rclcpp_action::Client<ArmMove>::SendGoalOptions opts;

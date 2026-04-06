@@ -20,7 +20,7 @@ namespace solve_executor
 {
 namespace
 {
-const moveit::core::JointModelGroup* get_jmg(moveit::core::RobotModelConstPtr robot_model,const std::string& group_name)
+const moveit::core::JointModelGroup* get_jmg(moveit::core::RobotModelConstPtr robot_model, const std::string& group_name)
 {
   const auto jmg = robot_model->getJointModelGroup(group_name);
   if (!jmg)
@@ -36,7 +36,7 @@ bool is_finite_pose(const Pose& pose)
          std::isfinite(pose.qy) && std::isfinite(pose.qz) && std::isfinite(pose.qw);
 }
 
-}
+}    // namespace
 SolveExecutor::SolveExecutor(rclcpp::Node& node)
   : node_(node)
   , clock_(node.get_clock())
@@ -188,7 +188,7 @@ bool SolveExecutor::plan_normal(const SolveRequest& req, solve_executor::Traject
   move_group_->setStartState(start_state);
   move_group_->clearPoseTargets();
   move_group_->setPoseReferenceFrame(config_.planning_frame_id);
-  move_group_->setPoseTarget(resolveTargetPose(config_,req).pose, ee_link_name);
+  move_group_->setPoseTarget(resolveTargetPose(config_, req).pose, ee_link_name);
 
   moveit::planning_interface::MoveGroupInterface::Plan plan_msg;
   const bool ok = (move_group_->plan(plan_msg) == moveit::core::MoveItErrorCode::SUCCESS);
@@ -294,10 +294,14 @@ bool SolveExecutor::plan_cartesian(const SolveRequest& req, solve_executor::Traj
 {
   constexpr double kEps = 1e-9;
   const auto group_name = config_.group_name;
-  const auto ee_link = config_.ee_link_name;
   const auto jmg = get_jmg(robot_model_, group_name);
   const auto* ref_link = robot_model_->getLinkModel(config_.reference_link);
-  const auto* ee_link_model = robot_model_->getLinkModel(ee_link);
+  const auto* ee_link = robot_model_->getLinkModel(config_.ee_link_name);
+
+  planner::StraightPlannerSettings settings;
+  settings.sample_step_m = config_.sample_step_m;
+  settings.alignment_dot_threshold = config_.alignment_dot_threshold;
+  settings.reference_link = config_.reference_link;
 
   moveit::core::RobotState start_state(robot_model_);
   if (!fill_joint_state_require_all(req.current_joints, jmg, start_state, err))
@@ -314,35 +318,43 @@ bool SolveExecutor::plan_cartesian(const SolveRequest& req, solve_executor::Traj
   }
 
   Eigen::Vector3d target_vector = req.target_vector;
+  if (!target_vector.allFinite())
+  {
+    err = "target_vector contains non-finite values";
+    LOGE("[solve_executor] {}", err);
+    return false;
+  }
   if (config_.use_vision_target_vector)
   {
-    if (!target_vector.allFinite())
-    {
-      err = "target_vector contains non-finite values";
-      LOGE("[solve_executor] {}", err);
-      return false;
-    }
     if (target_vector.norm() <= kEps)
     {
       err = "target_vector is a zero vector";
       LOGE("[solve_executor] {}", err);
       return false;
     }
-  }
-  else
-  {
-    if (!set_vector_with_current(start_state, ref_link, ee_link_model, target_vector, err))
+    const Eigen::Vector3d normalized_target = target_vector.normalized();
+    const Eigen::Isometry3d T_ref = start_state.getGlobalLinkTransform(ref_link);
+    Eigen::Isometry3d T0 = start_state.getGlobalLinkTransform(ee_link);    // 起始末端位姿
+    const Eigen::Matrix3d R_ref_ee = T_ref.linear().transpose() * T0.linear();
+    const Eigen::Vector3d ee_x_in_ref = R_ref_ee.col(0).normalized();
+    const double direction_dot = ee_x_in_ref.dot(normalized_target);
+    const double abs_direction_dot = std::abs(direction_dot);
+    if (!std::isfinite(abs_direction_dot) || abs_direction_dot < settings.alignment_dot_threshold)
     {
-      LOGE("[solve_executor] {}", err);
+      LOGE("[solve_executor][straight_planner] Alignment check failed: abs(dot)={}, threshold={}", abs_direction_dot,
+           settings.alignment_dot_threshold);
       return false;
     }
+
+    const Eigen::Vector3d straight_dir = (direction_dot >= 0.0 ? 1.0 : -1.0) * ee_x_in_ref;
+    target_vector = straight_dir;
   }
 
-  planner::StraightPlannerSettings settings;
-  settings.sample_step_m = config_.sample_step_m;
-  settings.alignment_dot_threshold = config_.alignment_dot_threshold;
-  settings.reference_link = config_.reference_link;
-  planner::StraightPlanner planner(robot_model_, group_name, ee_link, settings, self_collision_detector);
+  // planner::StraightPlannerSettings settings;
+  // settings.sample_step_m = config_.sample_step_m;
+  // settings.alignment_dot_threshold = config_.alignment_dot_threshold;
+  // settings.reference_link = config_.reference_link;
+  planner::StraightPlanner planner(robot_model_, group_name, config_.ee_link_name, settings, self_collision_detector);
 
   calculator::CostOptions cost_opt;
   auto raw_traj = planner.plan(start_state, target_vector, req.target_length, cost_opt);
@@ -361,4 +373,4 @@ bool SolveExecutor::plan_cartesian(const SolveRequest& req, solve_executor::Traj
   return true;
 }
 
-}  // namespace solve_executor
+}    // namespace solve_executor

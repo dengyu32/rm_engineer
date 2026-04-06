@@ -9,6 +9,18 @@ namespace engineer_auto {
 
 using namespace task_orchestrator;
 
+namespace {
+
+std::shared_ptr<step_executor::RegistryBridge> makeAutoBridge(
+    rclcpp::Node &node,
+    core::KindSpecMap &kind_specs) {
+  auto bridge = std::make_shared<step_executor::RegistryBridge>();
+  auto_node::registerAutoCapabilities(*bridge, kind_specs, node);
+  return bridge;
+}
+
+} // namespace
+
 // ============================================================================
 //  CTOR
 // ============================================================================
@@ -17,7 +29,10 @@ AutoNode::AutoNode(const rclcpp::NodeOptions &options)
     : rclcpp::Node("auto_node", options),
       config_(AutoNodeConfig::load(*this)),
       logger_(this->get_logger()),
-      executor_(this->get_logger(), auto_node::createAutoCapabilityBridge(*this)) {
+      kind_specs_{},
+      bridge_(makeAutoBridge(*this, kind_specs_)),
+      orchestrator_(kind_specs_),
+      executor_(this->get_logger(), bridge_) {
   latest_task_id_.store(TaskId::IDLE, std::memory_order_relaxed);
 
   initRosInterfaces();

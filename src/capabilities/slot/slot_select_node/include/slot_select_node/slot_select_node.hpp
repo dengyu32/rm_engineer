@@ -57,9 +57,10 @@ class SlotSelectNode {
 public:
   explicit SlotSelectNode(rclcpp::Node &node, const SlotSelectConfig &config);
 
-  core::ExecuteResult executeSelect(const core::Command &cmd);
-  core::ExecuteResult executeLockUnlock(const core::Command &cmd,
-                                                 SlotStrategy strategy);
+  core::ExecuteResult executeSelectPut();
+  core::ExecuteResult executeSelectTake();
+  core::ExecuteResult executeLock(const core::Command &cmd);
+  core::ExecuteResult executeUnlock(const core::Command &cmd);
   bool selectSlot(SlotStrategy strategy, int &selected_slot);
   bool applySlotCommand(SlotStrategy strategy, int slot_id);
   std::string lastError() const { return last_error_; }

@@ -1,13 +1,16 @@
 #include "auto_node/capability_registry.hpp"
 
+#include "auto_library/context_keys.hpp"
 #include "step_executor/registry_bridge.hpp"
 #include "auto_library/execute_result.hpp"
-#include "task_orchestrator/protocol.hpp"
 
 #include "arm_solve_client/arm_solve_client.hpp"
 #include "gripper_control_node/gripper_control_node.hpp"
 #include "slot_select_node/slot_select_node.hpp"
 #include "vision_detect_client/vision_detect_client.hpp"
+
+#include <stdexcept>
+#include <utility>
 
 namespace engineer_auto::auto_node {
 
@@ -16,51 +19,148 @@ namespace gripc = engineer_auto::gripper_control_node;
 namespace slotc = engineer_auto::slot_select_node;
 namespace visc = engineer_auto::vision_detect_client;
 
-namespace protocol = task_orchestrator::protocol;
-
 using core::makeFailed;
+using core::KindSpec;
 
-std::shared_ptr<step_executor::ICapabilityBridge> createAutoCapabilityBridge(rclcpp::Node &node) {
-    auto registry = std::make_shared<step_executor::RegistryBridge>();
+namespace {
 
-    // 定义一个通用的绑定辅助 Lambda，进一步压缩代码
-    auto bind = [&](const std::string& kind,
-                    step_executor::RegistryBridge::HandlerFn run_fn,
-                    step_executor::RegistryBridge::CancelFn cancel_fn = {}) {
-        registry->registerHandler(kind, std::move(run_fn), std::move(cancel_fn));
-    };
+void addKind(step_executor::RegistryBridge &bridge,
+             core::KindSpecMap &kind_specs,
+             KindSpec spec,
+             step_executor::RegistryBridge::HandlerFn run_fn,
+             step_executor::RegistryBridge::CancelFn cancel_fn = {}) {
+  const std::string kind = spec.kind;
+  if (!bridge.registerHandler(kind, std::move(run_fn), std::move(cancel_fn))) {
+    throw std::runtime_error("duplicate auto handler registration: " + kind);
+  }
+  if (!kind_specs.emplace(kind, std::move(spec)).second) {
+    throw std::runtime_error("duplicate auto kind spec registration: " + kind);
+  }
+}
 
-    // 1. Arm Solve Client
-    {
-        auto a = std::make_shared<armc::ArmSolveClient>(node, armc::ArmSolveClientConfig::load(node));
-        bind(protocol::kArmMoveKind, 
-             [a](const auto& c) { armc::ArmMoveSpec s; std::string e; return a->buildSpec(c, s, e) ? a->execute(s) : makeFailed(e, false); },
-             [a]() { a->cancel(); });
-    }
+void registerArmCapabilities(step_executor::RegistryBridge &bridge,
+                             core::KindSpecMap &kind_specs,
+                             rclcpp::Node &node) {
+  auto arm = std::make_shared<armc::ArmSolveClient>(
+      node, armc::ArmSolveClientConfig::load(node));
 
-    // 2. Gripper Node
-    {
-        auto g = std::make_shared<gripc::GripperControlNode>(node, gripc::GripperPresetConfig::load(node));
-        bind(protocol::kGripperKind, [g](const auto& c) { return g->execute(c); }, [g]() { g->cancel(); });
-    }
+  addKind(
+      bridge,
+      kind_specs,
+      KindSpec{"arm.move_pose", {"target_pose"}, {"target_pose"}, {}},
+      [arm](const auto &cmd) {
+        armc::ArmMoveSpec spec;
+        std::string error;
+        return arm->buildPoseSpec(cmd, spec, error) ? arm->execute(spec)
+                                                    : makeFailed(error, false);
+      },
+      [arm]() { arm->cancel(); });
 
-    // 3. Slot Select (一个对象，多个绑定, 对应多个动作)
-    {
-        auto s = std::make_shared<slotc::SlotSelectNode>(node, slotc::SlotSelectConfig::load(node));
-        bind(protocol::kSlotSelectKind, [s](const auto& c) { return s->executeSelect(c); });
-        bind(protocol::kSlotLockKind,   [s](const auto& c) { return s->executeLockUnlock(c, slotc::SlotStrategy::LockSlot); });
-        bind(protocol::kSlotUnlockKind, [s](const auto& c) { return s->executeLockUnlock(c, slotc::SlotStrategy::UnlockSlot); });
-    }
+  addKind(
+      bridge,
+      kind_specs,
+      KindSpec{"arm.move_joints", {"target_joints"}, {"target_joints"}, {}},
+      [arm](const auto &cmd) {
+        armc::ArmMoveSpec spec;
+        std::string error;
+        return arm->buildJointsSpec(cmd, spec, error) ? arm->execute(spec)
+                                                      : makeFailed(error, false);
+      },
+      [arm]() { arm->cancel(); });
 
-    // 4. Vision
-    {
-        auto v = std::make_shared<visc::VisionDetectClient>(node);
-        bind(protocol::kVisionKind,
-             [v](const auto& c) { return v->execute(c); },
-             [v]() { v->cancel(); });
-    }
+  addKind(
+      bridge,
+      kind_specs,
+      KindSpec{"arm.move_vector",
+               {"target_vector", "target_length"},
+               {"target_vector", "target_length"},
+               {}},
+      [arm](const auto &cmd) {
+        armc::ArmMoveSpec spec;
+        std::string error;
+        return arm->buildVectorSpec(cmd, spec, error) ? arm->execute(spec)
+                                                      : makeFailed(error, false);
+      },
+      [arm]() { arm->cancel(); });
+}
 
-    return registry;
+void registerGripperCapabilities(step_executor::RegistryBridge &bridge,
+                                 core::KindSpecMap &kind_specs,
+                                 rclcpp::Node &node) {
+  auto gripper = std::make_shared<gripc::GripperControlNode>(
+      node, gripc::GripperPresetConfig::load(node));
+
+  addKind(
+      bridge,
+      kind_specs,
+      KindSpec{"gripper.open", {}, {}, {}},
+      [gripper](const auto &) { return gripper->executeOpen(); },
+      [gripper]() { gripper->cancel(); });
+
+  addKind(
+      bridge,
+      kind_specs,
+      KindSpec{"gripper.close", {}, {}, {}},
+      [gripper](const auto &) { return gripper->executeClose(); },
+      [gripper]() { gripper->cancel(); });
+}
+
+void registerSlotCapabilities(step_executor::RegistryBridge &bridge,
+                              core::KindSpecMap &kind_specs,
+                              rclcpp::Node &node) {
+  auto slot = std::make_shared<slotc::SlotSelectNode>(
+      node, slotc::SlotSelectConfig::load(node));
+
+  addKind(
+      bridge,
+      kind_specs,
+      KindSpec{"slot.select_put", {}, {}, {core::keys::kSlotId}},
+      [slot](const auto &) { return slot->executeSelectPut(); });
+
+  addKind(
+      bridge,
+      kind_specs,
+      KindSpec{"slot.select_take", {}, {}, {core::keys::kSlotId}},
+      [slot](const auto &) { return slot->executeSelectTake(); });
+
+  addKind(
+      bridge,
+      kind_specs,
+      KindSpec{"slot.lock", {"slot_id"}, {"slot_id"}, {}},
+      [slot](const auto &cmd) { return slot->executeLock(cmd); });
+
+  addKind(
+      bridge,
+      kind_specs,
+      KindSpec{"slot.unlock", {"slot_id"}, {"slot_id"}, {}},
+      [slot](const auto &cmd) { return slot->executeUnlock(cmd); });
+}
+
+void registerVisionCapabilities(step_executor::RegistryBridge &bridge,
+                                core::KindSpecMap &kind_specs,
+                                rclcpp::Node &node) {
+  auto vision = std::make_shared<visc::VisionDetectClient>(node);
+
+  addKind(
+      bridge,
+      kind_specs,
+      KindSpec{"vision.detect",
+               {"enable"},
+               {},
+               {core::keys::kVisionPose, core::keys::kVisionVector}},
+      [vision](const auto &cmd) { return vision->execute(cmd); },
+      [vision]() { vision->cancel(); });
+}
+
+} // namespace
+
+void registerAutoCapabilities(step_executor::RegistryBridge &bridge,
+                              core::KindSpecMap &kind_specs,
+                              rclcpp::Node &node) {
+  registerArmCapabilities(bridge, kind_specs, node);
+  registerGripperCapabilities(bridge, kind_specs, node);
+  registerSlotCapabilities(bridge, kind_specs, node);
+  registerVisionCapabilities(bridge, kind_specs, node);
 }
 
 } // namespace engineer_auto::auto_node
