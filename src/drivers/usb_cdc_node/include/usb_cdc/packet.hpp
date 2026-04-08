@@ -68,7 +68,7 @@ struct EngineerTransmitData {
   struct {
     float targetJointPosition[6];  ///< 目标关节位置
     float targetJointVelocity[6];  ///< 目标关节速度
-    float targetGripperPosition;   ///< 夹爪目标位置
+    uint8_t targetGripperCommand;  ///< 夹爪开合命令: open=0, close=1
     uint8_t targetSlotStatus[2];
     uint8_t IntentFinish;          ///< 完成请求并返回Finish
   } data;
@@ -209,9 +209,9 @@ inline void engineer_print_transmit_data(const EngineerTransmitData &tx_data) {
               << '\n';
   }
 
-  std::cout << "  Target Gripper Position:\n";
-  std::cout << "    Value   : " << std::fixed << std::setprecision(6)
-            << tx_data.data.targetGripperPosition << '\n';
+  std::cout << "  Target Gripper Command:\n";
+  std::cout << "    Value   : "
+            << static_cast<unsigned>(tx_data.data.targetGripperCommand) << '\n';
 
   std::cout << "  Target Slot Status:\n";
   for (size_t i = 0; i < 2; ++i) {

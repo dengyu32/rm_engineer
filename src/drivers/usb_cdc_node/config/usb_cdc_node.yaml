@@ -6,5 +6,9 @@ usb_cdc:
     send_period_ms: 20
     servo_teleop_mode: false # 设置为true时，发布的消息只有custom_joint_state，其余消息不发送 需同时打开fake_system
                             # 这里先设置为true覆盖
+    debug_override_intent_enabled: false
+    debug_intent_id: 0
+    startup_joint_targets_enabled: false
+    startup_joint_targets: [0.0, -0.6109, -2.1293, 0.0, 0.0, 0.0]
     slot_state_topic: "/slot_states"
     slot_cmd_topic: "/slot_cmds"

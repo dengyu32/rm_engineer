@@ -10,11 +10,13 @@
 #include <engineer_interfaces/msg/intent.hpp>
 #include <engineer_interfaces/msg/joints.hpp>
 #include <engineer_interfaces/msg/slots.hpp>
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
 // ROS2
 #include <rclcpp/callback_group.hpp>
 #include <rclcpp/node_options.hpp>
+#include <rclcpp/parameter.hpp>
 #include <rclcpp/publisher.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -36,6 +38,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace usb_cdc {
 
@@ -58,8 +61,12 @@ struct UsbCdcConfig : public params_utils::JointResetConfig,
 
   //  Mode
   bool servo_teleop_mode{false};
+  bool debug_override_intent_enabled{false};
+  int debug_intent_id{0};
   std::string slot_state_topic{"/slot_states"};
   std::string slot_cmd_topic{"/slot_cmds"};
+  bool startup_joint_targets_enabled{false};
+  std::vector<double> startup_joint_targets{};
 
   //  API
   static UsbCdcConfig Load(rclcpp::Node &node) {
@@ -96,8 +103,15 @@ struct UsbCdcConfig : public params_utils::JointResetConfig,
 
     //  Mode
     declare_get(node, "servo_teleop_mode", cfg.servo_teleop_mode);
+    declare_get(node, "debug_override_intent_enabled", cfg.debug_override_intent_enabled);
+    declare_get_checked(
+        node, "debug_intent_id", cfg.debug_intent_id,
+        in_range(0, 255),
+        "must be in [0, 255]");
     declare_get(node, "slot_state_topic", cfg.slot_state_topic);
     declare_get(node, "slot_cmd_topic", cfg.slot_cmd_topic);
+    declare_get(node, "startup_joint_targets_enabled", cfg.startup_joint_targets_enabled);
+    declare_get(node, "startup_joint_targets", cfg.startup_joint_targets);
 
     //  Finalize
     if (cfg.joint_count < 1 || cfg.joint_count > 6) {
@@ -114,6 +128,11 @@ inline void UsbCdcConfig::validate() const {
   params_utils::JointResetConfig::validate();
   params_utils::IntentResetConfig::validate();
   params_utils::GripperResetConfig::validate();
+  if (startup_joint_targets_enabled &&
+      startup_joint_targets.size() != static_cast<std::size_t>(joint_count)) {
+    throw std::runtime_error(
+        "UsbCdcConfig: startup_joint_targets size must match joint_count when enabled");
+  }
 }
 
 inline std::string UsbCdcConfig::summary() const {
@@ -131,7 +150,21 @@ inline std::string UsbCdcConfig::summary() const {
   oss << "   - send_period_ms      : " << send_period_ms << "\n\n";
 
   oss << " Mode:\n";
-  oss << "   - servo_teleop_mode   : " << (servo_teleop_mode ? "true" : "false") << "\n\n";
+  oss << "   - servo_teleop_mode           : " << (servo_teleop_mode ? "true" : "false") << "\n";
+  oss << "   - debug_override_intent_enabled : "
+      << (debug_override_intent_enabled ? "true" : "false") << "\n";
+  oss << "   - debug_intent_id             : " << debug_intent_id << "\n\n";
+  oss << " Startup:\n";
+  oss << "   - startup_joint_targets_enabled : "
+      << (startup_joint_targets_enabled ? "true" : "false") << "\n";
+  oss << "   - startup_joint_targets         : [";
+  for (std::size_t i = 0; i < startup_joint_targets.size(); ++i) {
+    oss << startup_joint_targets[i];
+    if (i + 1 < startup_joint_targets.size()) {
+      oss << ", ";
+    }
+  }
+  oss << "]\n\n";
   oss << " Slot:\n";
   oss << "   - slot_state_topic    : " << slot_state_topic << "\n";
   oss << "   - slot_cmd_topic      : " << slot_cmd_topic << "\n\n";
@@ -188,6 +221,8 @@ private:
   // -----------------------------------------------------------------------
   void publish_timer_callback();
   void send_timer_callback();
+  rcl_interfaces::msg::SetParametersResult on_set_parameters(
+      const std::vector<rclcpp::Parameter> &params);
 
   void IntentCallback(const engineer_interfaces::msg::Intent::SharedPtr msg);
   void jointCommandCallback(const engineer_interfaces::msg::Joints::SharedPtr msg);
@@ -226,10 +261,16 @@ private:
   // Runtime state
   std::atomic_bool running_;
   std::atomic_bool last_device_open_{false};
+  std::atomic_bool joint_targets_seeded_for_session_{false};
+  std::atomic_bool tx_enabled_{false};
+  std::atomic_bool debug_override_intent_enabled_{false};
+  std::atomic<uint8_t> debug_intent_id_{0};
   std::thread thread_; // 底层读写循环线程
 
   // Config
   UsbCdcConfig config_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr
+      param_callback_handle_;
 };
 
 } // namespace usb_cdc

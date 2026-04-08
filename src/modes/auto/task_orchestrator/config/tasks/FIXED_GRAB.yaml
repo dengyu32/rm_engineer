@@ -13,16 +13,21 @@ FIXED_GRAB:
       params:
         target_joints:
           type: double_array
-          value: [-0.0563895777, 0.183680534, -1.25949967, 0.603695154, -0.151254654, -0.378172457]
+          value: [-0.282818377, -0.41981411, -1.39450085, 0.974976182, -0.647554398, 0.440306246]
 
     - id: move_fixed_joints_2
       kind: arm.move_joints
       timeout_ms: 8000
       max_retries: 1
+      post_delay_ms: 500
       params:
         target_joints:
           type: double_array
-          value: [-0.00333404541, -0.364118576, -0.594209731, 0.612900198, -0.221446991, -0.376638293]
+          value: [-0.142496377, -0.141717911, -1.10327661, 0.977361202, -0.585373678, 0.348256171]
+
+    - id: gripper_close
+      kind: gripper.close
+      post_delay_ms: 600
 
     - id: move_fixed_joints_3
       kind: arm.move_joints
@@ -31,8 +36,17 @@ FIXED_GRAB:
       params:
         target_joints:
           type: double_array
-          value: [-0.324277222, -0.578888893, -0.0442333445, 0.747139871, -0.393873215, -0.754043639]
+          value: [-0.26426369, 0.00476837158, -0.680119574, 0.74677211, -0.533112526, 0.464852959]
 
+    - id: move_fixed_joints_4
+      kind: arm.move_joints
+      timeout_ms: 8000
+      max_retries: 1
+      params:
+        target_joints:
+          type: double_array
+          value: [-0.4440144, -0.284771919, -0.896683931, 0.372109234, -0.675784111, 0.562272608]
+   
     - id: move_home
       kind: arm.move_joints
       timeout_ms: 8000

@@ -2,64 +2,85 @@ version: 1
 
 TEST_CARTESIAN:
   steps:
-    - id: move_start_pose
-      kind: arm.move_pose
+
+    - id: move_home_joints
+      kind: arm.move_joints
       timeout_ms: 8000
       max_retries: 1
       post_delay_ms: 200
       params:
-        target_pose:
+        target_joints:
           type: double_array
-          preset: CARTESIAN_START_POSE
+          preset: HOME
 
     - id: move_z_axis
       kind: arm.move_vector
-      timeout_ms: 8000
+      timeout_ms: 80000
       max_retries: 1
-      post_delay_ms: 200
+      post_delay_ms: 1000
       params:
         target_vector:
           type: double_array
           preset: LINE_START_TO_Z_VECTOR
         target_length: 0.316108
 
-    - id: move_y_axis
-      kind: arm.move_vector
+    - id: move_home_joints
+      kind: arm.move_joints
       timeout_ms: 8000
       max_retries: 1
       post_delay_ms: 200
       params:
+        target_joints:
+          type: double_array
+          preset: HOME
+
+    - id: move_y_axis
+      kind: arm.move_vector
+      timeout_ms: 80000
+      max_retries: 1
+      post_delay_ms: 1000
+      params:
         target_vector:
           type: double_array
-          preset: LINE_Z_TO_Y_VECTOR
-        target_length: 0.380275
+          preset: LINE_START_TO_Y_VECTOR
+        target_length: 0.211458
+
+    - id: move_home_joints
+      kind: arm.move_joints
+      timeout_ms: 8000
+      max_retries: 1
+      post_delay_ms: 200
+      params:
+        target_joints:
+          type: double_array
+          preset: HOME  
 
     - id: move_x_axis
       kind: arm.move_vector
-      timeout_ms: 8000
+      timeout_ms: 80000
       max_retries: 1
-      post_delay_ms: 200
+      post_delay_ms: 1000
       params:
         target_vector:
           type: double_array
-          preset: LINE_Y_TO_X_VECTOR
-        target_length: 0.237432
+          preset: LINE_START_TO_X_VECTOR
+        target_length: 0.108122
 
-    - id: move_start_pose
-      kind: arm.move_pose
+    - id: move_home_joints
+      kind: arm.move_joints
       timeout_ms: 8000
       max_retries: 1
       post_delay_ms: 200
       params:
-        target_pose:
+        target_joints:
           type: double_array
-          preset: CARTESIAN_START_POSE
+          preset: HOME
 
     - id: move_random
       kind: arm.move_vector
-      timeout_ms: 8000
+      timeout_ms: 80000
       max_retries: 1
-      post_delay_ms: 200
+      post_delay_ms: 1000
       params:
         target_vector:
           type: double_array

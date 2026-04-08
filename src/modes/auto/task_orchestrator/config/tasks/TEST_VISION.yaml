@@ -4,7 +4,7 @@ TEST_VISION:
   steps:
     - id: vision_detect
       kind: vision.detect
-      timeout_ms: 3000
+      timeout_ms: 100000
       max_retries: 0
       outputs: [VisionPose, VisionVector]
 

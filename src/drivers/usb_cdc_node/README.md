@@ -63,7 +63,7 @@ IntentStatus
 ```text
 targetJointPosition[6]
 targetJointVelocity[6]
-targetGripperPosition
+targetGripperCommand
 targetSlotStatus[2]
 IntentFinish
 ```

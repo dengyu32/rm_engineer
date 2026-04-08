@@ -128,7 +128,23 @@ bool SolveExecutor::execute(const SolveRequest& req, solve_executor::Trajectory&
   {
     return false;
   }
-
+  if (out_traj.points.empty()) {
+      LOGW("[solve_executor] Planning succeeded but trajectory is empty");
+    } else {
+      const auto &last_point = out_traj.points.back();
+      std::ostringstream oss;
+      oss << "[solve_executor] Last trajectory point joint positions:";
+      for (std::size_t i = 0; i < last_point.positions.size(); ++i) {
+        oss << ' ';
+        if (i < out_traj.joint_names.size()) {
+          oss << out_traj.joint_names[i] << '=';
+        } else {
+          oss << "joint_" << i << '=';
+        }
+        oss << last_point.positions[i];
+      }
+      LOGI("{}", oss.str());
+    }
   last_plan_time_ = now;
   return true;
 }

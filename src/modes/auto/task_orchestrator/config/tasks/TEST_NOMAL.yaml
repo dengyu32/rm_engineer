@@ -14,7 +14,7 @@ TEST_NOMAL:
 
     - id: gripper_close
       kind: gripper.close
-      post_delay_ms: 200
+      post_delay_ms: 10000
 
     - id: approach_normal_2
       kind: arm.move_pose

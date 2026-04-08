@@ -257,6 +257,14 @@ bool ArmSolveClient::sendGoal(const ArmMoveSpec &command) {
   goal.target_vector = command.vector;
   goal.target_length = command.target_length;
 
+  if (command.plan_option == PlanOption::NORMAL) {
+    RCLCPP_INFO(
+        logger_,
+        "[arm_solve_client] execute pose target=[x=%.5f, y=%.5f, z=%.5f, qx=%.5f, qy=%.5f, qz=%.5f, qw=%.5f]",
+        command.pose.x, command.pose.y, command.pose.z, command.pose.qx,
+        command.pose.qy, command.pose.qz, command.pose.qw);
+  }
+
   // 回调
   rclcpp_action::Client<ArmMove>::SendGoalOptions opts;
 

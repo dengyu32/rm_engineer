@@ -1,10 +1,25 @@
 moveit_setup_assistant_config:
   urdf:
-    package: engineer_v5
+    package: engineer_description
     relative_path: urdf/engineer_v5.urdf
   srdf:
     relative_path: config/engineer_v5.srdf
   package_settings:
     author_name: zc
     author_email: 2188755469@qq.com
-    generated_timestamp: 1775286875
+    generated_timestamp: 1775646010
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity

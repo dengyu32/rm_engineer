@@ -44,7 +44,7 @@ public:
         yaw_ref_axis_ = declare_parameter<std::vector<double>>("yaw_ref_axis", {0.0, 0.0, 1.0});
         world_up_ = declare_parameter<std::vector<double>>("world_up", {0.0, 0.0, 1.0});
         tf_timeout_sec_ = declare_parameter<double>("tf_timeout_sec", 0.05);
-        service_timeout_sec_ = declare_parameter<double>("service_timeout_sec", 0.3);
+        service_timeout_sec_ = declare_parameter<double>("service_timeout_sec", 1.0);
 
         mf_center_sub_ = std::make_shared<message_filters::Subscriber<geometry_msgs::msg::PointStamped>>(
             this, center_topic_, rmw_qos_profile_sensor_data);
