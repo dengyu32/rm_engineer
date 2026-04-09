@@ -9,6 +9,7 @@
 
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.h>
 
+#include "calculator/hybrid_ik.hpp"
 #include "calculator/cost_func.hpp"
 #include "collision/self_collision_detector.hpp"
 #include "executor/detail.hpp"
@@ -201,39 +202,48 @@ bool SolveExecutor::plan_normal(
     const SolveRequest &req, solve_executor::Trajectory &out_traj,
     std::string &err,
     const collision::SelfCollisionDetector *self_collision_detector) {
-  (void)self_collision_detector;
   if (!is_finite_pose(req.target_pose)) {
     err = "target_pose contains non-finite values";
     LOGE("[solve_executor] {}", err);
     return false;
   }
 
-  std::string group_name = config_.group_name;
-  std::string ee_link_name = config_.ee_link_name;
+  const auto group_name = config_.group_name;
+  const auto ee_link_name = config_.ee_link_name;
   const auto jmg = get_jmg(robot_model_, group_name);
+  if (!jmg) {
+    err = "JointModelGroup not found";
+    LOGE("[solve_executor] {}", err);
+    return false;
+  }
+
   moveit::core::RobotState start_state(robot_model_);
   if (!fill_joint_state_require_all(req.current_joints, jmg, start_state,
                                     err)) {
     return false;
   }
+  start_state.update();
 
-  move_group_->setStartState(start_state);
-  move_group_->clearPoseTargets();
-  move_group_->setPoseReferenceFrame(config_.planning_frame_id);
-  move_group_->setPoseTarget(resolveTargetPose(config_, req).pose,
-                             ee_link_name);
-
-  moveit::planning_interface::MoveGroupInterface::Plan plan_msg;
-  const bool ok =
-      (move_group_->plan(plan_msg) == moveit::core::MoveItErrorCode::SUCCESS);
-  if (!ok) {
-    err = "MoveGroup pose planning failed";
+  calculator::HybridIK hybrid_ik(robot_model_, group_name, ee_link_name);
+  calculator::IKOptions ik_options;
+  std::vector<std::vector<double>> ik_solutions;
+  if (!hybrid_ik.solveAll(start_state, poseToIsometry(req.target_pose),
+                          ik_options, ik_solutions)) {
+    err = "HybridIK failed for target_pose";
     LOGE("[solve_executor] {}", err);
     return false;
   }
 
-  out_traj = trajectory_from_plan_msg(plan_msg);
-  return true;
+  std::vector<double> target_pose = std::move(ik_solutions.front());
+  if (target_pose.size() != jmg->getVariableCount()) {
+    err = "IK joint result size mismatch";
+    LOGE("[solve_executor] {}", err);
+    return false;
+  }
+
+  SolveRequest joint_req = req;
+  joint_req.target_joints = std::move(target_pose);
+  return plan_joints(joint_req, out_traj, err, self_collision_detector);
 }
 
 bool SolveExecutor::plan_joints(
