@@ -450,11 +450,19 @@
       effort="0"
       velocity="0" />
 <<<<<<< HEAD
+<<<<<<< HEAD
     <mimic 
       joint="left_gripper_joint"
 =======
     <mimic joint="left_gripper_joint"
 >>>>>>> c87041f (solve-1.10:加入五自由度限制直线规划,调整计算次数)
+=======
+    <mimic joint="left_gripper_joint"
+=======
+    <mimic 
+      joint="left_gripper_joint"
+>>>>>>> d5a8bde (  feat: 增加 usb_cdc intent 调试覆盖并更新机器人与任务配置)
+>>>>>>> 13c3104 (rebase finish)
       multiplier="-1"
       offset="0" />
   </joint>

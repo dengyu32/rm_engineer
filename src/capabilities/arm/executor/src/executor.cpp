@@ -125,6 +125,7 @@ bool SolveExecutor::execute(const SolveRequest &req,
     return false;
   }
 <<<<<<< HEAD
+<<<<<<< HEAD
   if (out_traj.points.empty()) {
       LOGW("[solve_executor] Planning succeeded but trajectory is empty");
     } else {
@@ -144,25 +145,32 @@ bool SolveExecutor::execute(const SolveRequest &req,
     }
 =======
 
+=======
+>>>>>>> 13c3104 (rebase finish)
   if (out_traj.points.empty()) {
-    LOGW("[solve_executor] Planning succeeded but trajectory is empty");
-  } else {
-    const auto &last_point = out_traj.points.back();
-    std::ostringstream oss;
-    oss << "[solve_executor] Last trajectory point joint positions:";
-    for (std::size_t i = 0; i < last_point.positions.size(); ++i) {
-      oss << ' ';
-      if (i < out_traj.joint_names.size()) {
-        oss << out_traj.joint_names[i] << '=';
-      } else {
-        oss << "joint_" << i << '=';
+      LOGW("[solve_executor] Planning succeeded but trajectory is empty");
+    } else {
+      const auto &last_point = out_traj.points.back();
+      std::ostringstream oss;
+      oss << "[solve_executor] Last trajectory point joint positions:";
+      for (std::size_t i = 0; i < last_point.positions.size(); ++i) {
+        oss << ' ';
+        if (i < out_traj.joint_names.size()) {
+          oss << out_traj.joint_names[i] << '=';
+        } else {
+          oss << "joint_" << i << '=';
+        }
+        oss << last_point.positions[i];
       }
-      oss << last_point.positions[i];
+      LOGI("{}", oss.str());
     }
+<<<<<<< HEAD
     LOGT("{}", oss.str());
   }
 
 >>>>>>> c87041f (solve-1.10:加入五自由度限制直线规划,调整计算次数)
+=======
+>>>>>>> 13c3104 (rebase finish)
   last_plan_time_ = now;
   return true;
 }
