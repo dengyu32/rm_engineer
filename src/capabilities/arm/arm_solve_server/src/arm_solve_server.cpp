@@ -6,6 +6,7 @@
 #include <cmath>
 #include <exception>
 #include <memory>
+#include <rclcpp/logger.hpp>
 #include <string>
 #include <thread>
 
@@ -81,8 +82,12 @@ void finish_move_goal(const std::shared_ptr<GoalHandleArmMove>& gh, bool success
 }  // namespace
 
 ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions& options)
-  : Node("arm_solve_action_server", rclcpp::NodeOptions(options)), config_(ArmSolveConfig::Load(*this))
+  : Node("arm_solve_action_server", rclcpp::NodeOptions(options))
+  , logger_(this->get_logger())
+  , config_(ArmSolveConfig::Load(*this))
 {
+  log_tools::init_console_logger("core");
+
   solve_executor_ = std::make_unique<solve_executor::SolveExecutor>(*this);
 
   joint_states_verbose_sub_ = this->create_subscription<engineer_interfaces::msg::Joints>(
@@ -98,7 +103,7 @@ ArmSolveServer::ArmSolveServer(const rclcpp::NodeOptions& options)
       std::bind(&ArmSolveServer::handle_accepted, this, std::placeholders::_1));
 
   LOGI("[ARM_SOLVE_SERVER] started");
-  LOGI("\n{}", config_.summary());
+  RCLCPP_INFO(this->logger_, "%s", config_.summary().c_str());
 }
 
 void ArmSolveServer::jointCallBack(const engineer_interfaces::msg::Joints::SharedPtr msg)

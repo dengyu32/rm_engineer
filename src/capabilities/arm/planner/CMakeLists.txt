@@ -17,6 +17,7 @@ find_package(types REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
   src/straight_planner.cpp
+  src/straight_plan_with_5dof_constain.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

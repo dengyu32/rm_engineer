@@ -149,6 +149,7 @@ private:
   void parameterize_time_from_start(solve_executor::Trajectory &traj, double velocity_scaling);
 
   rclcpp::Node& node_;
+  rclcpp::Logger logger_;
   rclcpp::Clock::SharedPtr clock_;
   SolveExecutorConfig config_;
   rclcpp::Time last_plan_time_;

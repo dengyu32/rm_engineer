@@ -27,6 +27,7 @@ struct SolveExecutorResetConfig
   bool use_vision_target_vector{ true };
   double sample_step_m{ 0.005 };          // 每步位移（米）
   double alignment_dot_threshold{ 0.98 };
+  double max_joint_jump_rad{ 0.15 };
   std::string reference_link{ "base_link" };
   int max_contacts{ 8 };
   int max_contacts_per_pair{ 1 };
@@ -65,6 +66,9 @@ struct SolveExecutorResetConfig
         node, "sample_step_m", cfg.sample_step_m, [](const double v) { return v > 0; }, "must be a positive number");
     declare_get_checked(node, "alignment_dot_threshold", cfg.alignment_dot_threshold,
                         [](const double v) { return v >= 0.0 && v <= 1.0; }, "must be in [0, 1]");
+    declare_get_checked(
+        node, "max_joint_jump_rad", cfg.max_joint_jump_rad, [](const double v) { return v > 0.0; },
+        "must be a positive number");
     declare_get_checked(node, "reference_link", cfg.reference_link, [](const std::string& v) { return !v.empty(); },
                         "must be a non-empty string");
     declare_get_checked(
@@ -95,6 +99,7 @@ struct SolveExecutorResetConfig
     oss << "   - use_vision_target_vector        : " << use_vision_target_vector << "\n";
     oss << "   - sample_step_m                   : " << sample_step_m << "\n";
     oss << "   - alignment_dot_threshold         : " << alignment_dot_threshold << "\n";
+    oss << "   - max_joint_jump_rad              : " << max_joint_jump_rad << "\n";
     oss << "   - reference_link                  : " << reference_link << "\n";
     oss << "   - max_contacts                    : " << max_contacts << "\n";
     oss << "   - max_contacts_per_pair           : " << max_contacts_per_pair << "\n";

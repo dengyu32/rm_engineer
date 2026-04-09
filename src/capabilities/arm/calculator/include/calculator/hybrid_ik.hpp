@@ -23,7 +23,7 @@
 namespace calculator {
 
 struct IKOptions {
-  int max_attempts{50};    // 总尝试次数
+  int max_attempts{10};    // 总尝试次数
   int max_solutions{10};   // 最多收集多少个解
   double timeout{0.05};    // setFromIK timeout (seconds)
   double noise_sigma{0.2}; // 高斯噪声标准差

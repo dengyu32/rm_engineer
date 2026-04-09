@@ -449,8 +449,12 @@
       upper="0.029"
       effort="0"
       velocity="0" />
+<<<<<<< HEAD
     <mimic 
       joint="left_gripper_joint"
+=======
+    <mimic joint="left_gripper_joint"
+>>>>>>> c87041f (solve-1.10:加入五自由度限制直线规划,调整计算次数)
       multiplier="-1"
       offset="0" />
   </joint>

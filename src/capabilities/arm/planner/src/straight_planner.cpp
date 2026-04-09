@@ -154,7 +154,7 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
       std::vector<std::vector<double>> sols;
       if (!ik.solveAll(seed_state, Ti, ik_opt, sols))
       {
-        LOGI("[solve_executor][straight_planner] IK solveAll failed for waypoint with current seed,changing to next "
+        LOGE("[solve_executor][straight_planner] IK solveAll failed for waypoint with current seed,changing to next "
              "seed "
              "...");
         continue;
@@ -167,7 +167,7 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
           collision::SelfCollisionCheckResult collision_result;
           if (!self_collision_detector_->check(q, collision_result))
           {
-            LOGI("[solve_executor][straight_planner] Filter IK solution by self collision: {}",
+            LOGE("[solve_executor][straight_planner] Filter IK solution by self collision: {}",
                  collision_result.message);
             continue;
           }
@@ -246,14 +246,14 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
   dp_costs[0].assign(sols_all_waypoint[0].size(), std::numeric_limits<double>::infinity());
   prev_idx[0].assign(sols_all_waypoint[0].size(), -1);
 
+  std::vector<double> q0;
+  start_state.copyJointGroupPositions(jmg, q0);
+
   for (size_t j = 0; j < sols_all_waypoint[0].size(); ++j)
   {
     const auto& qj = sols_all_waypoint[0][j];
-
     // 代价 = continuity from start_state + condition penalty
-    std::vector<double> q0;
-    start_state.copyJointGroupPositions(jmg, q0);
-
+    // 首层起点剪枝暂时关闭，只保留代价初始化；如需恢复可重新启用 q0->qj 的 jump limit 检查。
     dp_costs[0][j] = cost_func.compute(q0, qj);
   }
 
@@ -265,6 +265,7 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
 
     dp_costs[i].assign(cur_layer.size(), std::numeric_limits<double>::infinity());
     prev_idx[i].assign(cur_layer.size(), -1);
+    bool all_edges_rejected_by_jump_limit = true;
 
     for (size_t j = 0; j < cur_layer.size(); ++j)
     {    //遍历当前路点的所有解
@@ -275,6 +276,12 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
         if (!std::isfinite(dp_costs[i - 1][k]))
           continue;
         const auto& qk = prev_layer[k];
+        const double delta = max_joint_delta(qk, qj);
+        if (!std::isfinite(delta) || delta > settings_.max_joint_jump_rad)
+        {
+          continue;
+        }
+        all_edges_rejected_by_jump_limit = false;
 
         double total =
             dp_costs[i - 1][k] +
@@ -299,6 +306,12 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
     }
     if (!any_ok)
     {
+      if (all_edges_rejected_by_jump_limit)
+      {
+        LOGE("[solve_executor][straight_planner] All transitions rejected by max_joint_jump_rad at layer {}: "
+             "threshold={}, prev_candidates={}, cur_candidates={}",
+             i, settings_.max_joint_jump_rad, prev_layer.size(), cur_layer.size());
+      }
       LOGE("[solve_executor][straight_planner] DP disconnected at layer {}", i);
       return std::nullopt;
     }
@@ -340,8 +353,37 @@ std::optional<Trajectory> StraightPlanner::plan(moveit::core::RobotState& start_
   for (auto it = best_path_rev.rbegin(); it != best_path_rev.rend(); ++it)
     q_path.push_back(*it);
 
-  // 关节角度线性插值：已移除，直接使用路径点
-  std::vector<std::vector<double>> q_path_interp = q_path;
+  // 将真实起始关节作为轨迹首点纳入后续 TOTG，避免首段未时间参数化导致突变。
+  std::vector<double> q_start;
+  start_state.copyJointGroupPositions(jmg, q_start);
+
+  std::vector<std::vector<double>> q_path_interp;
+  q_path_interp.reserve(q_path.size() + 8);
+  q_path_interp.push_back(q_start);
+  if (!q_path.empty())
+  {
+    const auto& q_first = q_path.front();
+    const double max_delta_to_first = max_joint_delta(q_start, q_first);
+    if (std::isfinite(max_delta_to_first) && settings_.max_joint_jump_rad > 1e-9)
+    {
+      const int start_segments =
+          std::max(1, static_cast<int>(std::ceil(max_delta_to_first / settings_.max_joint_jump_rad)));
+      for (int seg = 1; seg < start_segments; ++seg)
+      {
+        const double t = static_cast<double>(seg) / static_cast<double>(start_segments);
+        std::vector<double> q_mid(q_start.size(), 0.0);
+        for (std::size_t idx = 0; idx < q_mid.size(); ++idx)
+        {
+          q_mid[idx] = q_start[idx] + (q_first[idx] - q_start[idx]) * t;
+        }
+        q_path_interp.push_back(std::move(q_mid));
+      }
+    }
+  }
+  for (auto& q : q_path)
+  {
+    q_path_interp.push_back(std::move(q));
+  }
 
   Trajectory traj;
   traj.joint_names = jmg->getVariableNames();

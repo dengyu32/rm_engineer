@@ -22,7 +22,7 @@ TEST_CARTESIAN:
         target_vector:
           type: double_array
           preset: LINE_START_TO_Z_VECTOR
-        target_length: 0.316108
+        target_length: 0.50
 
     - id: move_home_joints
       kind: arm.move_joints
@@ -31,6 +31,31 @@ TEST_CARTESIAN:
       post_delay_ms: 200
       params:
         target_joints:
+          type: double_array
+          preset: HOME
+
+<<<<<<< HEAD
+=======
+    - id: move_y_axis
+      kind: arm.move_vector
+      timeout_ms: 80000
+      max_retries: 1
+      post_delay_ms: 1000
+      params:
+        target_vector:
+          type: double_array
+          preset: LINE_START_TO_Y_VECTOR
+        target_length: 0.50
+
+>>>>>>> c87041f (solve-1.10:加入五自由度限制直线规划,调整计算次数)
+    - id: move_home_joints
+      kind: arm.move_joints
+      timeout_ms: 8000
+      max_retries: 1
+      post_delay_ms: 200
+      params:
+        target_joints:
+<<<<<<< HEAD
           type: double_array
           preset: HOME
 
@@ -53,6 +78,9 @@ TEST_CARTESIAN:
       params:
         target_joints:
           type: double_array
+=======
+          type: double_array
+>>>>>>> c87041f (solve-1.10:加入五自由度限制直线规划,调整计算次数)
           preset: HOME  
 
     - id: move_x_axis
@@ -64,7 +92,11 @@ TEST_CARTESIAN:
         target_vector:
           type: double_array
           preset: LINE_START_TO_X_VECTOR
+<<<<<<< HEAD
         target_length: 0.108122
+=======
+        target_length: 0.50
+>>>>>>> c87041f (solve-1.10:加入五自由度限制直线规划,调整计算次数)
 
     - id: move_home_joints
       kind: arm.move_joints
@@ -85,4 +117,4 @@ TEST_CARTESIAN:
         target_vector:
           type: double_array
           preset: LINE_START_TO_RANDOM_VECTOR
-        target_length: 0.31752
+        target_length: 0.50

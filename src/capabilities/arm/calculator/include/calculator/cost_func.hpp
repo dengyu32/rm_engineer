@@ -1,9 +1,12 @@
 #pragma once
 
+#include <sstream>
+#include <string>
 #include <vector>
 
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
+
 
 /*
     规划层的代价函数设计
@@ -13,10 +16,21 @@
 namespace calculator {
 
 struct CostOptions {
-  double continuity_weight{0.3};            // 连续性权重
-  double condition_weight{0.5};             // 雅可比条件数权重（放宽）
+  double continuity_weight{0.7};            // 连续性权重
+  double condition_weight{0.4};             // 雅可比条件数权重（放宽）
   double hard_condition_threshold{2000.0};  // 雅可比条件数阈值（放宽）
   double hard_penalty{1e2};                 // 超阈值惩罚（放宽）
+
+  std::string summary() const
+  {
+    std::ostringstream oss;
+    oss << " MoveIt:\n";
+    oss << "   - continuity_weight               : " << continuity_weight << "\n";
+    oss << "   - condition_weight                : " << condition_weight << "\n";
+    oss << "   - hard_condition_threshold        : " << hard_condition_threshold << "\n";
+    oss << "   - hard_penalty                    : " << hard_penalty << "\n";
+    return oss.str();
+  }
 };
 
 class CostFunc {

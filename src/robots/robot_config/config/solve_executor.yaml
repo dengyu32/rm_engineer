@@ -20,8 +20,9 @@
 
     # cartesian_planner:
     use_vision_target_vector: false
-    sample_step_m: 0.005
+    sample_step_m: 0.01
     alignment_dot_threshold: 0.98
+    max_joint_jump_rad: 0.15
     reference_link: "base_link"
     max_contacts: 8
     max_contacts_per_pair: 1

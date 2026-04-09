@@ -18,21 +18,27 @@
 #include "types/types.hpp"
 #include "robot_config/robot_config.hpp"
 
-/**
- * @file arm_solve_server.hpp
- * @brief 规划服务端节点
- * @details 接收动作通信请求，处理取消逻辑，订阅当前关节角，发布规划后得到的关节指令
- */
+/*
+  服务端节点
+  - 接收动作通信请求
+  - 处理取消逻辑
+  - 订阅当前关节角
+  - 发布规划后得到的关节指令
+*/
 
 namespace arm_solve
 {
+
 using namespace types;
 
-/**
- * @struct ArmSolveConfig
- * @brief 服务端参数配置结构体
- * @details 包含了服务端所需的所有参数配置项，包括动作通信接口名称以及关节重置相关配置
- */
+// ============================================================================
+//  ArmSolveConfig
+// ----------------------------------------------------------------------------
+//  - 服务端参数配置，包括：
+//  - 动作通信接口名称
+//  - JointResetConfig
+// ============================================================================
+
 struct ArmSolveConfig : public params_utils::JointResetConfig
 {
   std::string arm_action_name{ "move_arm" };
@@ -79,11 +85,7 @@ struct ArmSolveConfig : public params_utils::JointResetConfig
 // - 存放目标字段，结果字段，取消请求
 // - 具有校验逻辑，检查添加的值是否有效
 // ============================================================================
-/**
- * @struct GoalContext
- * @brief 动作通信上下文结构体
- * @details 存放目标字段，结果字段，取消请求
- */
+
 struct GoalContext
 {
   solve_executor::SolveRequest req;
@@ -107,6 +109,8 @@ public:
   explicit ArmSolveServer(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
 private:
+  rclcpp::Logger logger_;
+
   // 参数
   ArmSolveConfig config_;
 
@@ -132,8 +136,7 @@ private:
   void jointCallBack(const engineer_interfaces::msg::Joints::SharedPtr msg);
 
   // 请求处理
-  rclcpp_action::GoalResponse handle_goal(const rclcpp_action::GoalUUID& uuid,
-                                          std::shared_ptr<const ArmMove::Goal> goal);
+  rclcpp_action::GoalResponse handle_goal(const rclcpp_action::GoalUUID& uuid, std::shared_ptr<const ArmMove::Goal> goal);
   rclcpp_action::CancelResponse handle_cancel(const std::shared_ptr<GoalHandleArmMove> gh);
   void handle_accepted(const std::shared_ptr<GoalHandleArmMove> gh);
 
@@ -150,4 +153,4 @@ private:
   }
 };
 
-}    // namespace arm_solve
+}  // namespace arm_solve
