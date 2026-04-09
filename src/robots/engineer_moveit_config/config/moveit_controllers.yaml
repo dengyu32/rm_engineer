@@ -4,22 +4,19 @@ moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControll
 
 moveit_simple_controller_manager:
   controller_names:
-  - engineer_arm_controller
-  - engineer_hand_controller
+    - engineer_arm_controller
+    - engineer_hand_controller
 
   engineer_arm_controller:
     type: FollowJointTrajectory
-    action_ns: follow_joint_trajectory
     joints:
-    - joint1
-    - joint2
-    - joint3
-    - joint4
-    - joint5
-    - joint6
+      - joint1
+      - joint2
+      - joint3
+      - joint4
+      - joint5
+      - joint6
   engineer_hand_controller:
     type: FollowJointTrajectory
-    action_ns: follow_joint_trajectory
     joints:
-    - left_gripper_joint
-    - right_gripper_joint
+      - left_gripper_joint

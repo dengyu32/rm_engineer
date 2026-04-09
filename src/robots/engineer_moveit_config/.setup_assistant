@@ -5,9 +5,9 @@ moveit_setup_assistant_config:
   srdf:
     relative_path: config/engineer_v5.srdf
   package_settings:
-    author_name: zc
-    author_email: 2188755469@qq.com
-    generated_timestamp: 1775646010
+    author_name: wrj
+    author_email: rainwaiting32@gmail.com
+    generated_timestamp: 1775742297
   control_xacro:
     command:
       - position
