@@ -21,10 +21,11 @@ namespace task_orchestrator {
     X(AUTO_STORE,     3) \
     X(AUTO_GET,       4) \
     X(FIXED_GRAB,     5) \
-    X(TEST_NOMAL,     6) \
+    X(TEST_NORMAL,    6) \
     X(TEST_CARTESIAN, 7) \
     X(TEST_LINE,      8) \
-    X(TEST_VISION,    9) 
+    X(TEST_VISION,    9) \
+    X(JOINT_SWING,    10) 
 // 任务ID枚举
 enum class TaskId : uint8_t {
 

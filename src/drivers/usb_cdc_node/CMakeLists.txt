@@ -9,7 +9,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # 共享接口头路径，供目标复用
 set(MY_ROBOT_INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/../../robots/engineer/engineer_interface")
-set(CRCPP_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../third_party/CRCpp/include")
 
 # ----------------------------------------------------------------------------
 #  编译选项
@@ -49,7 +48,7 @@ pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
 # 将节点实现编译为共享库
 add_library(${PROJECT_NAME} SHARED 
   src/usb_cdc_node.cpp
-  src/usb_cdc_driver.cpp
+  src/device.cpp
 )
 
 # 暴露工程与外部依赖头文件目录
@@ -57,7 +56,6 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   ${LIBUSB_INCLUDE_DIRS}  # libusb 头文件
   $<BUILD_INTERFACE:${MY_ROBOT_INTERFACE}>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  # 本项目 include
-  $<BUILD_INTERFACE:${CRCPP_INCLUDE_DIR}>                 # CRC++ headers
 )
 
 # 注入 libusb 库目录
@@ -69,9 +67,6 @@ target_link_directories(${PROJECT_NAME} PUBLIC
 target_link_libraries(${PROJECT_NAME}
   ${LIBUSB_LIBRARIES}
 )
-
-# Enable CRC++ esoteric definitions (needed for CRC_16_MODBUS)
-target_compile_definitions(${PROJECT_NAME} PRIVATE CRCPP_INCLUDE_ESOTERIC_CRC_DEFINITIONS)
 
 # 绑定 ROS 运行时依赖
 ament_target_dependencies(${PROJECT_NAME}
@@ -110,7 +105,7 @@ install(DIRECTORY  launch/
 
 # 分发配置文件
 install(DIRECTORY  config/
-    DESTINATION share/${PROJECT_NAME}/
+    DESTINATION share/${PROJECT_NAME}/config
 )
 
 # 生成包元数据

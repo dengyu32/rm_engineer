@@ -1,5 +1,6 @@
 /**:
   ros__parameters:
     slot_state_topic: "/slot_states"
+    slot_query_period_ms: 150
     slot0_occupied: false
     slot1_occupied: false

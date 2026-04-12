@@ -1,0 +1,157 @@
+version: 1
+
+JOINT_SWING:
+  steps:
+    - id: move_home_joints
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      post_delay_ms: 1000
+      params:
+        target_joints:
+          type: double_array
+          preset: HOME
+
+    - id: joint1_swing_pos
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      params:
+        target_joints: [1.2, -0.6109, -2.1293, 0.0, 0.0, 0.0]
+
+    - id: joint1_swing_neg
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      params:
+        target_joints: [-1.2, -0.6109, -2.1293, 0.0, 0.0, 0.0]
+
+    - id: joint1_return_home
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      post_delay_ms: 5000
+      params:
+        target_joints:
+          type: double_array
+          preset: HOME
+
+    - id: joint2_swing_pos
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      params:
+        target_joints: [0.0, 0.5, -2.1293, 0.0, 0.0, 0.0]
+
+    - id: joint2_swing_neg
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      params:
+        target_joints: [0.0, -0.8, -2.1293, 0.0, 0.0, 0.0]
+
+    - id: joint2_return_home
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      post_delay_ms: 5000
+      params:
+        target_joints:
+          type: double_array
+          preset: HOME
+
+    - id: joint3_swing_pos
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      params:
+        target_joints: [0.0, -0.6109, -0.9, 0.0, 0.0, 0.0]
+
+    - id: joint3_swing_neg
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      params:
+        target_joints: [0.0, -0.6109, -2.55, 0.0, 0.0, 0.0]
+
+    - id: joint3_return_home
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      post_delay_ms: 5000
+      params:
+        target_joints:
+          type: double_array
+          preset: HOME
+
+    - id: joint4_swing_pos
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      params:
+        target_joints: [0.0, -0.6109, -2.1293, 1.2, 0.0, 0.0]
+
+    - id: joint4_swing_neg
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      params:
+        target_joints: [0.0, -0.6109, -2.1293, -1.2, 0.0, 0.0]
+
+    - id: joint4_return_home
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      post_delay_ms: 5000
+      params:
+        target_joints:
+          type: double_array
+          preset: HOME
+
+    - id: joint5_swing_pos
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      params:
+        target_joints: [0.0, -0.6109, -2.1293, 0.0, 1.0, 0.0]
+
+    - id: joint5_swing_neg
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      params:
+        target_joints: [0.0, -0.6109, -2.1293, 0.0, -1.0, 0.0]
+
+    - id: joint5_return_home
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      post_delay_ms: 5000
+      params:
+        target_joints:
+          type: double_array
+          preset: HOME
+
+    - id: joint6_swing_pos
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      params:
+        target_joints: [0.0, -0.6109, -2.1293, 0.0, 0.0, 1.5]
+
+    - id: joint6_swing_neg
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      params:
+        target_joints: [0.0, -0.6109, -2.1293, 0.0, 0.0, -1.5]
+
+    - id: joint6_return_home
+      kind: arm.move_joints
+      timeout_ms: 12000
+      max_retries: 1
+      post_delay_ms: 5000
+      params:
+        target_joints:
+          type: double_array
+          preset: HOME

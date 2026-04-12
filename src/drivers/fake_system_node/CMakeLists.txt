@@ -81,8 +81,8 @@ install(DIRECTORY launch
 )
 
 # 安装运行配置
-install(DIRECTORY config
-  DESTINATION share/${PROJECT_NAME}/
+install(DIRECTORY config/
+  DESTINATION share/${PROJECT_NAME}/config
 )
 
 # 生成包元数据

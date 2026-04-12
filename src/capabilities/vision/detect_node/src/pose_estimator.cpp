@@ -334,7 +334,8 @@ bool DetectNode::estimatePoseAndPublish(
 
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigensolver(cov);
     if (eigensolver.info() != Eigen::Success) {
-        RCLCPP_WARN(get_logger(), "Class %d PCA eigen decomposition failed", class_id);
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+            "Class %d PCA eigen decomposition failed", class_id);
         return false;
     }
 
@@ -350,7 +351,7 @@ bool DetectNode::estimatePoseAndPublish(
     // 仅保留“帽端=+axis”规则，移除密度投票与翻转抑制
     axis_conf = 0.0;
 
-    RCLCPP_INFO(get_logger(),
+    RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
         "Class %d PCA: centroid=[%.3f,%.3f,%.3f] eigenvalues=[%.3f,%.3f,%.3f] v_max=[%.3f,%.3f,%.3f] v_min=[%.3f,%.3f,%.3f] conf=%.3f",
         class_id,
         centroid.x(), centroid.y(), centroid.z(),
@@ -413,8 +414,6 @@ bool DetectNode::estimatePoseAndPublish(
 
         const float r_mode = r_min + (max_bin_idx + 0.5f) * bin_size;
         const float delta_r = std::max(0.002f, 0.08f * r_mode);
-        const float r_lo = r_mode - delta_r;
-        const float r_hi = r_mode + delta_r;
 
         side_points = buildSidePoints(r_mode, delta_r);
 
@@ -447,7 +446,7 @@ bool DetectNode::estimatePoseAndPublish(
         const size_t min_side_n = std::min<size_t>(100, std::max<size_t>(50, depth_cloud->size() / 12));
         const bool use_refined = (side_ratio >= 0.12f && side_points->size() >= min_side_n);
 
-        RCLCPP_INFO(get_logger(),
+        RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
             "Class %d Step3B: r_mode=%.3f ±%.3f [%d in peak] side_n=%zu ratio=%.2f src=%s %s",
             class_id, r_mode, delta_r, max_count,
             side_points->size(), side_ratio,
@@ -461,7 +460,7 @@ bool DetectNode::estimatePoseAndPublish(
             if (fallback_count_ >= 5) {
                 has_valid_pose_ = false;
                 alt_axis_count_ = 0;
-                RCLCPP_WARN(get_logger(),
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
                     "Class %d fallback x%d, reset has_valid_pose_ to allow re-lock",
                     class_id, fallback_count_);
             }
@@ -493,10 +492,10 @@ bool DetectNode::estimatePoseAndPublish(
                     dot = -dot;
                 }
                 if (dot < 0.7f) {
-                    RCLCPP_WARN(get_logger(),
+                    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
                         "Class %d refined_axis deviates (dot=%.2f), reject refine", class_id, dot);
                 } else {
-                    RCLCPP_INFO(get_logger(),
+                    RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
                         "Class %d refined_axis: refined=[%.3f,%.3f,%.3f] centroid=[%.3f,%.3f,%.3f]",
                         class_id,
                         refined_axis.x(), refined_axis.y(), refined_axis.z(),
@@ -526,7 +525,8 @@ bool DetectNode::estimatePoseAndPublish(
     Eigen::Vector3f center = p0;
 
     if (t_values.size() < 50) {
-        RCLCPP_WARN(get_logger(), "Class %d too few points (%zu) for trimmed median, use centroid", class_id, t_values.size());
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+            "Class %d too few points (%zu) for trimmed median, use centroid", class_id, t_values.size());
     } else {
         std::sort(t_values.begin(), t_values.end());
 
@@ -541,7 +541,8 @@ bool DetectNode::estimatePoseAndPublish(
         const size_t hi = n - lo - 1;
 
         if (lo >= hi) {
-            RCLCPP_WARN(get_logger(), "Class %d trimmed range invalid, use median", class_id);
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                "Class %d trimmed range invalid, use median", class_id);
             const float t_center = t_values[n / 2];
             center = p0 + t_center * v_max;
         } else {
@@ -561,14 +562,14 @@ bool DetectNode::estimatePoseAndPublish(
             const float db = (center_b - ref).norm();
             center = (da <= db) ? center_a : center_b;
 
-            RCLCPP_INFO(get_logger(),
+            RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
                 "Class %d Step3D partial: obs_span=%.3f < %.3f*cad_len(%.3f), "
                 "center=[%.3f,%.3f,%.3f] choose=%s",
                 class_id, obs_span, partial_ratio, static_cast<float>(cad_axis_len_),
                 center.x(), center.y(), center.z(), (da <= db) ? "min-side" : "max-side");
         }
 
-        RCLCPP_INFO(get_logger(),
+        RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
             "Class %d Step3D: t_range=[%.3f,%.3f] t_center=%.3f center=[%.3f,%.3f,%.3f] use_side=%d",
             class_id, t_values[lo], t_values[hi], t_values[(lo + hi) / 2],
             center.x(), center.y(), center.z(), has_valid_side);
@@ -636,13 +637,13 @@ bool DetectNode::estimatePoseAndPublish(
                     center = axis_point;
                 }
 
-                RCLCPP_INFO(get_logger(),
+                RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
                     "Class %d Step3C circle-fit: r=%.3f axis_point=[%.3f,%.3f,%.3f] center=[%.3f,%.3f,%.3f]",
                     class_id, r_fit,
                     axis_point.x(), axis_point.y(), axis_point.z(),
                     center.x(), center.y(), center.z());
             } else {
-                RCLCPP_WARN(get_logger(),
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
                     "Class %d Step3C circle-fit rejected: r=%.3f cad=%.3f",
                     class_id, r_fit, static_cast<float>(cad_radius_mean_));
             }
@@ -654,13 +655,14 @@ bool DetectNode::estimatePoseAndPublish(
         cyl_axis.normalize();
         center = cyl_center;
         v_max = cyl_axis;
-        RCLCPP_INFO(get_logger(),
+        RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
             "Class %d Cylinder OK: r=%.3f inliers=%zu axis=[%.3f,%.3f,%.3f] center=[%.3f,%.3f,%.3f]",
             class_id, cyl_radius, cyl_inliers->size(),
             v_max.x(), v_max.y(), v_max.z(),
             center.x(), center.y(), center.z());
     } else {
-        RCLCPP_WARN(get_logger(), "Class %d Cylinder FAIL, fallback PCA axis/center", class_id);
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+            "Class %d Cylinder FAIL, fallback PCA axis/center", class_id);
     }
 
     // 帽端约束（最终轴向）：重新按最终 v_max 评估端点半径，确保大端指向 +axis
@@ -757,7 +759,7 @@ bool DetectNode::estimatePoseAndPublish(
     if (!projectedOnMask(center))
     {
         const Eigen::Vector3f fallback = centroid;
-        RCLCPP_WARN(get_logger(),
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
             "Class %d center projects outside mask, fallback to centroid [%.3f,%.3f,%.3f]",
             class_id, fallback.x(), fallback.y(), fallback.z());
         center = fallback;
@@ -765,7 +767,8 @@ bool DetectNode::estimatePoseAndPublish(
 
     if (v_max.norm() < 1e-6f)
     {
-        RCLCPP_WARN(get_logger(), "Class %d v_max is zero, skip Step4C/4D", class_id);
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+            "Class %d v_max is zero, skip Step4C/4D", class_id);
         return false;
     }
 
@@ -775,12 +778,7 @@ bool DetectNode::estimatePoseAndPublish(
     Eigen::Quaterniond q = Eigen::Quaterniond::FromTwoVectors(cad_axis, obj_axis);
     Eigen::Matrix3d R_init = q.toRotationMatrix();
 
-    Eigen::Vector3d test = R_init * cad_axis;
-    std::cout << "R_init * [0,0,1] = [" << test.transpose() << "]" << std::endl;
-    std::cout << "v_max (normalized) = [" << obj_axis.transpose() << "]" << std::endl;
-    std::cout << "Difference norm: " << (test - obj_axis).norm() << std::endl;
-
-    RCLCPP_INFO(get_logger(),
+    RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
         "Class %d Step4C: R_init constructed (yaw留给ICP)",
         class_id);
 
@@ -789,7 +787,7 @@ bool DetectNode::estimatePoseAndPublish(
     T_init.block<3, 3>(0, 0) = R_init;
     T_init.block<3, 1>(0, 3) = t_init;
 
-    RCLCPP_INFO(get_logger(),
+    RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
         "Class %d Step4D: T_init constructed, t=[%.3f,%.3f,%.3f]",
         class_id, t_init.x(), t_init.y(), t_init.z());
 
@@ -816,7 +814,8 @@ bool DetectNode::estimatePoseAndPublish(
 
             if (ok) { T_level1 = T_out; fit1 = fitness; }
             else {
-                RCLCPP_WARN(get_logger(), "Class %d Step6 L1 ICP FAIL, fallback init", class_id);
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                    "Class %d Step6 L1 ICP FAIL, fallback init", class_id);
                 T_level1 = T_init.cast<float>();
                 fit1 = 1e9f;
             }
@@ -837,7 +836,8 @@ bool DetectNode::estimatePoseAndPublish(
 
             if (ok) { T_level2 = T_out; fit2 = fitness; icp_ok = true; }
             else {
-                RCLCPP_WARN(get_logger(), "Class %d Step6 L2 ICP FAIL, use L1", class_id);
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                    "Class %d Step6 L2 ICP FAIL, use L1", class_id);
                 T_level2 = T_level1;
                 fit2 = 1e9f;
                 icp_ok = (fit1 < 1e8f);
@@ -846,7 +846,8 @@ bool DetectNode::estimatePoseAndPublish(
     }
     else
     {
-        RCLCPP_WARN(get_logger(), "Class %d CAD cloud not loaded, skip Step6 ICP", class_id);
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+            "Class %d CAD cloud not loaded, skip Step6 ICP", class_id);
     }
 
     if (icp_ok)
@@ -873,14 +874,14 @@ bool DetectNode::estimatePoseAndPublish(
             // R_init 保持不变（来自 PCA），yaw 由 pose_from_axis_node 计算
             pose_quality_ = PoseQuality::DEGRADED_5DOF;  // 始终使用 5DOF
 
-            RCLCPP_INFO(get_logger(),
+            RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
                 "Class %d Step6 ICP OK [5DOF]: fit1=%.4f fit2=%.4f dt=%.2fcm dt_axis=%.1f° t=[%.3f,%.3f,%.3f]",
                 class_id, fit1, fit2, dt * 100.0, dt_axis * 180.0 / M_PI,
                 center.x(), center.y(), center.z());
         }
         else
         {
-            RCLCPP_WARN(get_logger(),
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
                 "Class %d Step6 ICP REJECT: fit2=%.4f dt=%.2fcm dt_axis=%.1f° -> fallback T_init",
                 class_id, fit2, dt * 100.0, dt_axis * 180.0 / M_PI);
             icp_ok = false;
@@ -999,9 +1000,11 @@ bool DetectNode::estimatePoseAndPublish(
         }
 
         if (icp_ok) {
-            RCLCPP_INFO(get_logger(), "Class %d Published 5DOF pose (ICP refined position) to /detect/cad_initial_pose", class_id);
+            RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
+                "Class %d Published 5DOF pose (ICP refined position) to /detect/cad_initial_pose", class_id);
         } else {
-            RCLCPP_INFO(get_logger(), "Class %d Published 5DOF pose (PCA only) to /detect/cad_initial_pose", class_id);
+            RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
+                "Class %d Published 5DOF pose (PCA only) to /detect/cad_initial_pose", class_id);
         }
     }
 

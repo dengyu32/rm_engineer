@@ -18,7 +18,7 @@ TEST_LINE:
       timeout_ms: 8000
       max_retries: 1
       post_delay_ms: 200
-      params: 
+      params:
         target_pose:
           type: double_array
           preset: Z_AXIS_POSE
@@ -28,7 +28,7 @@ TEST_LINE:
       timeout_ms: 8000
       max_retries: 1
       post_delay_ms: 200
-      params: 
+      params:
         target_pose:
           type: double_array
           preset: Y_AXIS_POSE
@@ -38,7 +38,7 @@ TEST_LINE:
       timeout_ms: 8000
       max_retries: 1
       post_delay_ms: 200
-      params: 
+      params:
         target_pose:
           type: double_array
           preset: X_AXIS_POSE
@@ -51,4 +51,3 @@ TEST_LINE:
         target_joints:
           type: double_array
           preset: HOME
-

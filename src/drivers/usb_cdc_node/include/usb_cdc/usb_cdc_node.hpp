@@ -1,9 +1,17 @@
+// ============================================================================
+//  usb_cdc_node.hpp
+// ----------------------------------------------------------------------------
+//  - 定义 UsbCdcNode 类，封装 USB CDC 设备的 ROS2 节点功能
+//  - 组合 Device，完成数据收发、解析与状态发布
+//  - 订阅关节/夹爪指令，发布 HFSM 意图与 JointState/Joints
+//  - 独立读写线程与定时器，保障底层轮询不阻塞 ROS2
+// ============================================================================
 #pragma once
 
 // USB CDC
 #include "usb_cdc/packet.hpp"
-#include "usb_cdc/usb_cdc_driver.hpp"
-#include "robot_config/robot_config.hpp"
+#include "usb_cdc/usb_cdc_config.hpp"
+#include "usb_cdc/device.hpp"
 
 // ROS messages
 #include <engineer_interfaces/msg/gripper.hpp>
@@ -31,156 +39,41 @@
 #include <tf2_ros/transform_listener.h>
 
 // C++
+#include <array>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <mutex>
-#include <sstream>
-#include <stdexcept>
-#include <string>
 #include <thread>
 #include <vector>
 
 namespace usb_cdc {
 
 // ============================================================================
-//  UsbCdcConfig
-// ----------------------------------------------------------------------------
-//  - USB 设备 + 话题 + 关节布局
+//  EngineerRxState & EngineerTxState
 // ============================================================================
-
-struct UsbCdcConfig : public params_utils::JointResetConfig,
-                      public params_utils::IntentResetConfig,
-                      public params_utils::GripperResetConfig {
-  //  Device
-  int vendor_id{0x0483};
-  int product_id{0x5740};
-
-  //  Timing
-  int publish_period_ms{33};
-  int send_period_ms{20};
-
-  //  Mode
-  bool servo_teleop_mode{false};
-  bool debug_override_intent_enabled{false};
-  int debug_intent_id{0};
-  std::string slot_state_topic{"/slot_states"};
-  std::string slot_cmd_topic{"/slot_cmds"};
-  bool startup_joint_targets_enabled{false};
-  std::vector<double> startup_joint_targets{};
-
-  //  API
-  static UsbCdcConfig Load(rclcpp::Node &node) {
-    using params_utils::detail::declare_get;
-    using params_utils::detail::declare_get_checked;
-    using params_utils::detail::in_range;
-
-    UsbCdcConfig cfg;
-
-    //  Base layout + topics
-    params_utils::JointResetConfig::Load(node, cfg);
-    params_utils::IntentResetConfig::Load(node, cfg);
-    params_utils::GripperResetConfig::Load(node, cfg);
-
-    //  Device
-    declare_get_checked(
-        node, "vendor_id", cfg.vendor_id,
-        in_range(1, 0xFFFF),
-        "must be in [1, 65535]");
-    declare_get_checked(
-        node, "product_id", cfg.product_id,
-        in_range(1, 0xFFFF),
-        "must be in [1, 65535]");
-
-    //  Timing
-    declare_get_checked(
-        node, "publish_period_ms", cfg.publish_period_ms,
-        in_range(1, 1000),
-        "must be in [1, 1000]");
-    declare_get_checked(
-        node, "send_period_ms", cfg.send_period_ms,
-        in_range(1, 1000),
-        "must be in [1, 1000]");
-
-    //  Mode
-    declare_get(node, "servo_teleop_mode", cfg.servo_teleop_mode);
-    declare_get(node, "debug_override_intent_enabled", cfg.debug_override_intent_enabled);
-    declare_get_checked(
-        node, "debug_intent_id", cfg.debug_intent_id,
-        in_range(0, 255),
-        "must be in [0, 255]");
-    declare_get(node, "slot_state_topic", cfg.slot_state_topic);
-    declare_get(node, "slot_cmd_topic", cfg.slot_cmd_topic);
-    declare_get(node, "startup_joint_targets_enabled", cfg.startup_joint_targets_enabled);
-    declare_get(node, "startup_joint_targets", cfg.startup_joint_targets);
-
-    //  Finalize
-    if (cfg.joint_count < 1 || cfg.joint_count > 6) {
-      throw std::runtime_error("UsbCdcConfig: joint_count must be in [1, 6]");
-    }
-    cfg.validate();
-    return cfg;
-  }
-  void validate() const;
-  std::string summary() const;
+struct EngineerRxState {
+  std::array<float, 7> actual_joint_position{};
+  std::array<float, 6> actual_joint_velocity{};
+  std::array<float, 6> custom_joint_position{};
+  std::array<uint8_t, 2> real_slot_status{};
+  uint8_t intent_status{0};
 };
 
-inline void UsbCdcConfig::validate() const {
-  params_utils::JointResetConfig::validate();
-  params_utils::IntentResetConfig::validate();
-  params_utils::GripperResetConfig::validate();
-  if (startup_joint_targets_enabled &&
-      startup_joint_targets.size() != static_cast<std::size_t>(joint_count)) {
-    throw std::runtime_error(
-        "UsbCdcConfig: startup_joint_targets size must match joint_count when enabled");
-  }
-}
-
-inline std::string UsbCdcConfig::summary() const {
-  std::ostringstream oss;
-  oss << "=============================================================================\n";
-  oss << " USB CDC Configuration\n\n";
-
-  oss << " Device:\n";
-  oss << "   - vendor_id           : " << vendor_id << "\n";
-  oss << "   - product_id          : " << product_id << "\n";
-  oss << "\n";
-
-  oss << " Timing:\n";
-  oss << "   - publish_period_ms   : " << publish_period_ms << "\n";
-  oss << "   - send_period_ms      : " << send_period_ms << "\n\n";
-
-  oss << " Mode:\n";
-  oss << "   - servo_teleop_mode           : " << (servo_teleop_mode ? "true" : "false") << "\n";
-  oss << "   - debug_override_intent_enabled : "
-      << (debug_override_intent_enabled ? "true" : "false") << "\n";
-  oss << "   - debug_intent_id             : " << debug_intent_id << "\n\n";
-  oss << " Startup:\n";
-  oss << "   - startup_joint_targets_enabled : "
-      << (startup_joint_targets_enabled ? "true" : "false") << "\n";
-  oss << "   - startup_joint_targets         : [";
-  for (std::size_t i = 0; i < startup_joint_targets.size(); ++i) {
-    oss << startup_joint_targets[i];
-    if (i + 1 < startup_joint_targets.size()) {
-      oss << ", ";
-    }
-  }
-  oss << "]\n\n";
-  oss << " Slot:\n";
-  oss << "   - slot_state_topic    : " << slot_state_topic << "\n";
-  oss << "   - slot_cmd_topic      : " << slot_cmd_topic << "\n\n";
-
-  oss << params_utils::JointResetConfig::summary();
-  oss << params_utils::IntentResetConfig::summary();
-  oss << params_utils::GripperResetConfig::summary();
-  oss << "=============================================================================\n";
-  return oss.str();
-}
+struct EngineerTxState {
+  std::array<float, 6> target_joint_position{};
+  std::array<float, 6> target_joint_velocity{};
+  std::array<float, 6> target_joint_effort{};
+  uint8_t target_gripper_command{0};
+  std::array<uint8_t, 2> target_slot_status{};
+  uint8_t intent_finish{0};
+};
 
 // ============================================================================
 //  UsbCdcNode
 // ----------------------------------------------------------------------------
 //  - USB CDC 设备的 ROS2 节点封装，负责收发、解析与状态发布
-//  - 组合 Device / DeviceParser，绑定自定义包 ID → 回调处理
+//  - 组合 Device，完成流式拼帧并回调处理
 //  - 订阅关节/夹爪指令，发布 HFSM 意图与 JointState/Joints
 //  - 独立读写线程与定时器，保障底层轮询不阻塞 ROS2 executor
 // ============================================================================
@@ -205,12 +98,13 @@ public:
 
 private:
   // -----------------------------------------------------------------------
-  //  Parser setup
+  //  Device callback setup
   // -----------------------------------------------------------------------
-  void init_parser() {
-    parser_.register_parser(0x01, std::bind(&UsbCdcNode::engineer_handle_packet,
-                                            this, std::placeholders::_1,
-                                            std::placeholders::_2));
+  void init_device_callbacks() {
+    device_.set_packet_callback(0x01,
+                                std::bind(&UsbCdcNode::engineer_handle_packet,
+                                          this, std::placeholders::_1,
+                                          std::placeholders::_2));
   }
   void initRosInterfaces();
 
@@ -228,10 +122,8 @@ private:
   void jointCommandCallback(const engineer_interfaces::msg::Joints::SharedPtr msg);
   void GripperCommandCallback(const engineer_interfaces::msg::Gripper::SharedPtr msg);
   void SlotCommandCallback(const engineer_interfaces::msg::Slots::SharedPtr msg);
-  void publish_error(int code, const char *name, const std::string &message) const;
 
   // Protocol
-  DeviceParser parser_;
   Device device_;
   uint8_t buffer_[256]; // USB 读缓冲区（256 字节原始数据）
 
@@ -252,18 +144,16 @@ private:
 
   rclcpp::Logger logger_;
 
-  // Buffers
-  EngineerTransmitData tx_data_{};
-  EngineerReceiveData rx_data_{};
-  std::mutex tx_data_mutex_; // 保护发送缓冲
-  std::mutex rx_data_mutex_; // 保护接收缓冲
+  // Node state. Packet quantization is only applied at the USB protocol boundary.
+  EngineerTxState tx_state_{};
+  EngineerRxState rx_state_{};
+  std::mutex tx_state_mutex_; // 保护发送状态
+  std::mutex rx_state_mutex_; // 保护接收状态
 
   // Runtime state
   std::atomic_bool running_;
   std::atomic_bool last_device_open_{false};
-  std::atomic_bool joint_targets_seeded_for_session_{false};
-  std::atomic_bool tx_enabled_{false};
-  std::atomic_bool debug_override_intent_enabled_{false};
+  std::atomic_bool debug_override_enabled_{false};
   std::atomic<uint8_t> debug_intent_id_{0};
   std::thread thread_; // 底层读写循环线程
 

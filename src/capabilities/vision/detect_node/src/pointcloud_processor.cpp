@@ -210,7 +210,7 @@ void DetectNode::filterPointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
                             max_i = i;
                     }
 
-                    RCLCPP_WARN(get_logger(),
+                    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
                         "[detect_node][pc] Cluster PRIOR too far (%.1fmm > %.1fmm), fallback to MAX cluster (%zu pts)",
                         best_dist * 1000.f,
                         max_center_jump * 1000.f,
@@ -220,7 +220,7 @@ void DetectNode::filterPointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
                 }
                 else
                 {
-                    RCLCPP_INFO(get_logger(),
+                    RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
                         "[detect_node][pc] Cluster selection: PRIOR dist=%.1fmm pts=%zu",
                         best_dist * 1000.f,
                         clusters[best_i].indices.size());
@@ -234,7 +234,7 @@ void DetectNode::filterPointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
                         best_i = i;
                 }
 
-                RCLCPP_INFO(get_logger(),
+                RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
                     "[detect_node][pc] Cluster selection: MAX cluster pts=%zu",
                     clusters[best_i].indices.size());
             }

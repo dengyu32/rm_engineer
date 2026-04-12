@@ -37,6 +37,8 @@ arm_servo / controller
 **参数**
 参数由 `config/fake_system_node.yaml` 与 `JointResetConfig` / `IntentResetConfig` / `GripperResetConfig` 提供。
 
+其中 `fake_system_node.yaml` 需要按 ROS2 参数文件格式匹配节点名；当前已使用 `/**:`，因此无论节点是否被 launch 重命名，都能生效。
+
 常用参数：
 - `publish_period_ms`
 - `initial_joint_positions`

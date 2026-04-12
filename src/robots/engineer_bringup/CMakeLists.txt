@@ -27,8 +27,11 @@ find_package(rclcpp REQUIRED)
 # ----------------------------------------------------------------------------
 
 # 安装运行所需的配置与启动文件
-install(DIRECTORY config launch
-  DESTINATION share/${PROJECT_NAME}
+install(DIRECTORY config/
+  DESTINATION share/${PROJECT_NAME}/config
+)
+install(DIRECTORY launch/
+  DESTINATION share/${PROJECT_NAME}/launch
 )
 
 ament_export_include_directories(include)

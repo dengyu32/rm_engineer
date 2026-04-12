@@ -6,6 +6,13 @@ from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
 
+def package_yaml(package_name, yaml_name):
+    share = get_package_share_directory(package_name)
+    config_path = os.path.join(share, "config", yaml_name)
+    if os.path.exists(config_path):
+        return config_path
+    return os.path.join(share, yaml_name)
+
 # ----------------------------------------------------------------------------
 #  启动函数
 # ----------------------------------------------------------------------------
@@ -16,11 +23,7 @@ def generate_launch_description():
     intent_reset = os.path.join(robot_config_share, "config", "intent_reset.yaml")
     gripper_reset = os.path.join(robot_config_share, "config", "gripper_reset.yaml")
 
-    config_path = os.path.join(
-        get_package_share_directory("usb_cdc"),
-        "config",
-        "usb_cdc_node.yaml",
-    )
+    config_path = package_yaml("usb_cdc", "usb_cdc_node.yaml")
 
     # -------------------------------
     #  USB CDC 节点 : usb_cdc_node 负责串口通信，通常桥接 USB CDC 设备与 ROS 话题

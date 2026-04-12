@@ -30,6 +30,7 @@ def generate_launch_description():
                 plugin='arm_controller::PoseFromAxisNode',
                 name='pose_from_axis_node',
                 extra_arguments=[{'use_intra_process_comms': True}],
+                parameters=[params_file],
             ),
         ],
         output='screen',

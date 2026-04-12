@@ -2,7 +2,6 @@ version: 1
 
 TEST_CARTESIAN:
   steps:
-
     - id: move_home_joints
       kind: arm.move_joints
       timeout_ms: 8000
@@ -78,10 +77,14 @@ TEST_CARTESIAN:
       params:
         target_joints:
           type: double_array
+<<<<<<< HEAD
 =======
           type: double_array
 >>>>>>> c87041f (solve-1.10:加入五自由度限制直线规划,调整计算次数)
           preset: HOME  
+=======
+          preset: HOME
+>>>>>>> b7d87f2 (  refactor(config): 拆分节点配置并重构 USB CDC 通信链路)
 
     - id: move_x_axis
       kind: arm.move_vector

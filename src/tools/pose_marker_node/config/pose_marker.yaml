@@ -1,11 +1,10 @@
 pose_marker_node:
   ros__parameters:
-    frame_id: base_link
-    marker_topic: /pose_marker
-    pose_topic: /pose_marker_pose
+    frame_id: "base_link"
+    marker_topic: "/pose_marker"
+    pose_topic: "/pose_marker_pose"
+    source_pose_topic: "/detect/grasp_pose"
     publish_period_ms: 200
     marker_scale_m: 0.03
     marker_rgba: [1.0, 0.2, 0.2, 1.0]
-    # pose: [0.13672, 0.22047, -0.13182, -0.37912, -0.44233, -0.57368, 0.57577]
-    pose: [-0.03423, -0.13192, 0.04381, 0.56786, 0.51269, -0.48390, -0.42487]
-    
+    pose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]

@@ -451,6 +451,7 @@
       velocity="0" />
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     <mimic 
       joint="left_gripper_joint"
 =======
@@ -463,6 +464,10 @@
       joint="left_gripper_joint"
 >>>>>>> d5a8bde (  feat: 增加 usb_cdc intent 调试覆盖并更新机器人与任务配置)
 >>>>>>> 13c3104 (rebase finish)
+=======
+    <mimic 
+      joint="left_gripper_joint"
+>>>>>>> b7d87f2 (  refactor(config): 拆分节点配置并重构 USB CDC 通信链路)
       multiplier="-1"
       offset="0" />
   </joint>

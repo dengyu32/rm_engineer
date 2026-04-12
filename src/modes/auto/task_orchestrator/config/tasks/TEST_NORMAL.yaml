@@ -1,0 +1,29 @@
+version: 1
+
+TEST_NORMAL:
+  steps:
+
+    - id: approach_normal_1
+      kind: arm.move_pose
+      timeout_ms: 8000
+      max_retries: 1
+      params:
+        target_pose:
+          type: double_array
+          preset: POSE_1
+
+    - id: gripper_close
+      kind: gripper.close
+      post_delay_ms: 10000
+
+    - id: approach_normal_2
+      kind: arm.move_pose
+      timeout_ms: 8000
+      max_retries: 1
+      params:
+        target_pose:
+          type: double_array
+          preset: POSE_2
+
+    - id: gripper_open
+      kind: gripper.open

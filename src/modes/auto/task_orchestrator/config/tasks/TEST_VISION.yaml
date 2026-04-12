@@ -10,7 +10,7 @@ TEST_VISION:
 
     - id: vision_approach
       kind: arm.move_pose
-      timeout_ms: 8000
+      timeout_ms: 800000
       max_retries: 1
       inputs: [VisionPose]
       bindings:
@@ -20,7 +20,7 @@ TEST_VISION:
 
     - id: vision_cartesian
       kind: arm.move_vector
-      timeout_ms: 8000
+      timeout_ms: 800000
       max_retries: 1
       inputs: [VisionVector]
       params:

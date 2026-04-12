@@ -17,3 +17,6 @@
     cyl_radius_margin_std_mult: 3.0
     cyl_radius_margin_min: 0.005
     cyl_use_radius_limits: true
+
+    # PoseFromAxis service
+    service_timeout_sec: 1.0

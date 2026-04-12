@@ -59,9 +59,9 @@ def generate_launch_description():
     # 自定义包
     pkg_config      = get_package_share_directory("engineer_moveit_config")
     bringup_config  = get_package_share_directory("engineer_bringup")
-    robot_config_share = get_package_share_directory("robot_config")
     arm_servo_config = get_package_share_directory("arm_servo")
     top_hfsm_config = get_package_share_directory("top_hfsm")
+    arm_solve_config = get_package_share_directory("arm_solve_server")
     
     # 自定义路径
     urdf_path        = os.path.join(pkg_config, "config", "engineer_v5.urdf.xacro")
@@ -72,10 +72,6 @@ def generate_launch_description():
     rviz_config_path        = os.path.join(pkg_config, "config", "moveit.rviz")
     # initial_positions_path  = os.path.join(pkg_config, "config", "initial_positions.yaml")
     ompl_path               = os.path.join(bringup_config, "config", "ompl_planning.yaml")
-    bringup_config_path     = os.path.join(bringup_config, "config", "bringup.yaml")
-    joint_reset_path        = os.path.join(robot_config_share, "config", "joint_reset.yaml")
-    moveit_reset_path       = os.path.join(robot_config_share, "config", "moveit_reset.yaml")
-    solve_executor_path     = os.path.join(robot_config_share, "config", "solve_executor.yaml")
     
     # 一些配置参数
     # initial_positions = load_yaml(initial_positions_path)["initial_positions"]
@@ -112,14 +108,24 @@ def generate_launch_description():
         output="both",
         parameters=[robot_description], 
     )
+
+    optical_static_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='camera_optical_static_transform_publisher',
+        output='both',
+        arguments=[
+            '0', '0', '0',
+            '-1.5707963267949', '0', '-1.5707963267949',
+            'camera_link', 'camera_color_optical_frame'
+        ],
+    )
     
-    # arm_solve_server 节点 : 提供 IK/轨迹求解服务，读取 MoveIt 参数与 bringup.yaml 的业务配置
-    node_arm_solve = Node(
-        package="arm_solve",
-        executable="arm_solve_server",
-        name="arm_solve_server",
-        output="screen",
-        parameters=common_params + [joint_reset_path, moveit_reset_path, solve_executor_path, bringup_config_path],
+    # arm_solve_server launch : 提供 IK/轨迹求解服务，读取 MoveIt 参数与业务配置
+    launch_arm_solve_server = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(
+            arm_solve_config, "launch", "arm_solve_server.launch.py"
+        ))
     )
     
     # top_hfsm launch 文件（多线程组件容器）
@@ -134,7 +140,7 @@ def generate_launch_description():
         package="moveit_ros_move_group",
         executable="move_group",
         output="screen",
-        parameters=common_params + [bringup_config_path]
+        parameters=common_params
     )
     
     # rviz2 节点 : 可视化节点，读取 robot_description 系列参数与 RViz 配置展示模型与规划结果
@@ -153,9 +159,10 @@ def generate_launch_description():
     # ---------------------------------------------------------------------------------------------
     return LaunchDescription([
         node_robot_state_publisher,
+        optical_static_tf,
         node_move_group,
         node_rviz,
-        node_arm_solve,
+        launch_arm_solve_server,
         launch_top_hfsm,
     ])
     

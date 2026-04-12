@@ -1,22 +1,26 @@
-// USB CDC
+// ============================================================================
+//  usb_cdc_node.cpp
+// ----------------------------------------------------------------------------
+//  - USB CDC 设备的 ROS2 节点封装，负责收发、解析与状态发布
+//  - 组合 Device，完成流式拼帧并回调处理
+//  - 订阅关节/夹爪指令，发布 HFSM 意图与 JointState/Joints
+//  - 独立读写线程与定时器，保障底层轮询不阻塞 ROS2 
+// ============================================================================
+
+// Project
 #include "usb_cdc/usb_cdc_node.hpp"
 #include "usb_cdc/packet.hpp"
-
-// uitlsws:
-//localhost:8765
 #include "log_tools/log.hpp"
 
 // C++
 #include <cstddef>
-#include <exception>
+#include <cstring>
 #include <algorithm>
+#include <exception>
 #include <thread>
-#include <sys/types.h>
 #include <chrono>
 #include <string>
-
-// ROS messages
-#include <engineer_interfaces/msg/detail/intent__struct.hpp>
+#include <sys/types.h>
 
 // ROS2
 #include <rclcpp/logging.hpp>
@@ -25,33 +29,71 @@ namespace usb_cdc {
 
 using namespace std::chrono_literals;
 
+// ============================================================================
+//  匿名空间
+// ============================================================================
 namespace {
-enum class CommCode : int {
-  UsbOpenFailed = 100,
-  UsbOpenException = 101,
-  UsbSendFailed = 102,
-  UsbPacketTooSmall = 103,
-};
 
-const char *to_string(CommCode code) {
-  switch (code) {
-  case CommCode::UsbOpenFailed:
-    return "UsbOpenFailed";
-  case CommCode::UsbOpenException:
-    return "UsbOpenException";
-  case CommCode::UsbSendFailed:
-    return "UsbSendFailed";
-  case CommCode::UsbPacketTooSmall:
-    return "UsbPacketTooSmall";
-  default:
-    return "Unknown";
-  }
-}
-
-uint8_t toGripperProtocolCommand(double gripper_position) {
+// gripper command 映射：上游发送浮点开度，USB 协议层只给下位机发送 open=0 / close=1。
+uint8_t toGripperCommand(double gripper_position) {
   // 上游仍发送浮点开度，USB 协议层只给下位机发送 open=0 / close=1。
   return gripper_position > 0.0 ? 1U : 0U;
 }
+
+// 初始发送
+void initialize_startup_joint_targets(usb_cdc::EngineerTxState &tx_state,
+                                      const usb_cdc::UsbCdcConfig &config) {
+  tx_state = {};
+  const std::size_t count = std::min<std::size_t>(6, config.joint_count);
+  for (std::size_t i = 0; i < count; ++i) {
+    tx_state.target_joint_position[i] =
+        static_cast<float>(config.startup_joint_targets[i]);
+    tx_state.target_joint_velocity[i] = 0.0F;
+    tx_state.target_joint_effort[i] = 0.0F;
+  }
+}
+
+// 解码实现
+EngineerRxState decode_receive_packet(const EngineerRxPacket &packet) {
+  EngineerRxState state{};
+  for (std::size_t i = 0; i < 6; ++i) {
+    state.actual_joint_position[i] =
+        uint_to_float(packet.data.actualJointPosition[i]);
+    state.actual_joint_velocity[i] =
+        uint_to_float(packet.data.actualJointVelocity[i]);
+    state.custom_joint_position[i] =
+        uint_to_float(packet.data.customJointPosition[i]);
+  }
+  state.actual_joint_position[6] =
+      uint_to_float(packet.data.actualJointPosition[6], 0.0F, 0.03F);
+  state.real_slot_status[0] = packet.data.realSlotStatus[0];
+  state.real_slot_status[1] = packet.data.realSlotStatus[1];
+  state.intent_status = packet.data.IntentStatus;
+  return state;
+}
+
+// 编码实现
+EngineerTxPacket encode_transmit_packet(const EngineerTxState &state) {
+  EngineerTxPacket packet{};
+  packet.header.id = 0x02;
+  packet.header.len = sizeof(decltype(packet.data));
+  packet.header.sof = HeaderFrame::SoF();
+  packet.eof = HeaderFrame::EoF();
+
+  for (std::size_t i = 0; i < 6; ++i) {
+    packet.data.targetJointPosition[i] =
+        float_to_uint(state.target_joint_position[i]);
+    packet.data.targetJointVelocity[i] =
+        float_to_uint(state.target_joint_velocity[i]);
+    packet.data.targetJointEffort[i] = state.target_joint_effort[i];
+  }
+  packet.data.targetGripperCommand = state.target_gripper_command;
+  packet.data.targetSlotStatus[0] = state.target_slot_status[0];
+  packet.data.targetSlotStatus[1] = state.target_slot_status[1];
+  packet.data.IntentFinish = state.intent_finish;
+  return packet;
+}
+
 } // namespace
 
 // ============================================================================
@@ -59,33 +101,28 @@ uint8_t toGripperProtocolCommand(double gripper_position) {
 // ============================================================================
 UsbCdcNode::UsbCdcNode(const rclcpp::NodeOptions &options)
     : rclcpp::Node("usb_cdc", options), 
-      device_(parser_), 
       logger_(this->get_logger()),
       config_(UsbCdcConfig::Load(*this)) {
-  debug_override_intent_enabled_.store(
-      config_.debug_override_intent_enabled, std::memory_order_relaxed);
+
+  // 动态参数回调
+  debug_override_enabled_.store(
+      config_.debug_override_enabled, std::memory_order_relaxed);
   debug_intent_id_.store(
       static_cast<uint8_t>(config_.debug_intent_id), std::memory_order_relaxed);
+
+  initialize_startup_joint_targets(tx_state_, config_);
   param_callback_handle_ = this->add_on_set_parameters_callback(
       std::bind(&UsbCdcNode::on_set_parameters, this, std::placeholders::_1));
 
-  // 解析器注册 + 打开设备，失败时直接抛出阻止组件化加载
-  this->init_parser();
+  // 接收回调注册 + 打开设备，失败时进入等待重连
+  this->init_device_callbacks();
   if (!this->try_open_device()) {
-    RCLCPP_WARN(this->get_logger(),
-                " [FAILED] initial open FAILED, entering wait mode ");
+    RCLCPP_WARN(this->get_logger()," [FAILED] initial open FAILED, entering wait mode ");
     device_.request_reconnect();
   }
 
   // ros init 
   initRosInterfaces();
-
-  publish_timer_ = this->create_wall_timer(
-      std::chrono::milliseconds(config_.publish_period_ms),
-      std::bind(&UsbCdcNode::publish_timer_callback, this));
-  send_timer_ = this->create_wall_timer(
-      std::chrono::milliseconds(config_.send_period_ms),
-      std::bind(&UsbCdcNode::send_timer_callback, this));
 
   // 启动独立线程拉 libusb 事件，避免阻塞 rclcpp executor
   running_ = true;
@@ -102,6 +139,9 @@ UsbCdcNode::UsbCdcNode(const rclcpp::NodeOptions &options)
   RCLCPP_INFO(logger_, "USB_CDC_NODE START!!!");
 }
 
+// ============================================================================
+//  ROS interfaces initialization
+// ============================================================================
 void UsbCdcNode::initRosInterfaces() {
   // Publisher
   intent_pub_ = this->create_publisher<engineer_interfaces::msg::Intent>(
@@ -114,6 +154,7 @@ void UsbCdcNode::initRosInterfaces() {
       config_.joint_states_verbose_topic, rclcpp::QoS(10));
   slot_states_pub_ = this->create_publisher<engineer_interfaces::msg::Slots>(
       config_.slot_state_topic, rclcpp::QoS(10));
+
   // Subscriber
   intent_sub_ = this->create_subscription<engineer_interfaces::msg::Intent>(
       config_.intent_fb_topic,rclcpp::QoS(10),
@@ -127,45 +168,56 @@ void UsbCdcNode::initRosInterfaces() {
   slot_cmd_sub_ = this->create_subscription<engineer_interfaces::msg::Slots>(
       config_.slot_cmd_topic, rclcpp::QoS(10),
       std::bind(&UsbCdcNode::SlotCommandCallback, this, std::placeholders::_1));
+
+  // 定时器
+  publish_timer_ = this->create_wall_timer(
+      std::chrono::milliseconds(config_.publish_period_ms),
+      std::bind(&UsbCdcNode::publish_timer_callback, this));
+
+  send_timer_ = this->create_wall_timer(
+      std::chrono::milliseconds(config_.send_period_ms),
+      std::bind(&UsbCdcNode::send_timer_callback, this));
 }
 
-void UsbCdcNode::publish_error(int code, const char *name,
-                               const std::string &message) const {
-  RCLCPP_ERROR(logger_, "[usb_cdc][error][code=%d][name=%s] %s", code,
-               name ? name : "Unknown", message.c_str());
-}
-
+// ============================================================================
+//  动态参数回调
+// ============================================================================
 rcl_interfaces::msg::SetParametersResult UsbCdcNode::on_set_parameters(
     const std::vector<rclcpp::Parameter> &params) {
   rcl_interfaces::msg::SetParametersResult result;
   result.successful = true;
 
+  // 无锁读取当前值，准备对比是否有变化
   bool new_debug_override_enabled =
-      debug_override_intent_enabled_.load(std::memory_order_relaxed);
+      debug_override_enabled_.load(std::memory_order_relaxed);
   int new_debug_intent_id =
       static_cast<int>(debug_intent_id_.load(std::memory_order_relaxed));
   bool debug_override_changed = false;
   bool debug_intent_changed = false;
 
+  // 遍历参数列表，处理相关参数的变化
   for (const auto &param : params) {
-    if (param.get_name() == "debug_override_intent_enabled") {
+    if (param.get_name() == "debug_override_enabled") {
+      // 只允许 bool 类型
       if (param.get_type() != rclcpp::ParameterType::PARAMETER_BOOL) {
         result.successful = false;
-        result.reason = "debug_override_intent_enabled must be bool";
+        result.reason = "debug_override_enabled must be bool";
         return result;
       }
+      // 记录新值和改变
       new_debug_override_enabled = param.as_bool();
       debug_override_changed = true;
       continue;
     }
 
     if (param.get_name() == "debug_intent_id") {
+      // 只允许 int 类型
       if (param.get_type() != rclcpp::ParameterType::PARAMETER_INTEGER) {
         result.successful = false;
-        result.reason = "debug_intent_id must be integer";
+        result.reason = "debug_intent_id must be int";
         return result;
       }
-
+      // 意图 ID 只能是 0-255 的 uint8
       const int value = param.as_int();
       if (value < 0 || value > 255) {
         result.successful = false;
@@ -178,14 +230,14 @@ rcl_interfaces::msg::SetParametersResult UsbCdcNode::on_set_parameters(
     }
   }
 
+  // 更新值
   if (debug_override_changed) {
-    debug_override_intent_enabled_.store(
+    debug_override_enabled_.store(
         new_debug_override_enabled, std::memory_order_relaxed);
     RCLCPP_INFO(
-        logger_, "[usb_cdc] debug_override_intent_enabled set to %s",
+        logger_, "[usb_cdc] debug_override_enabled set to %s",
         new_debug_override_enabled ? "true" : "false");
   }
-
   if (debug_intent_changed) {
     debug_intent_id_.store(
         static_cast<uint8_t>(new_debug_intent_id), std::memory_order_relaxed);
@@ -211,79 +263,49 @@ bool UsbCdcNode::try_open_device() { // catch + retry 策略
     }
     RCLCPP_WARN(this->get_logger(),
                 " [FAILED] usb driver open returned false ");
-    publish_error(static_cast<int>(CommCode::UsbOpenFailed),
-                  to_string(CommCode::UsbOpenFailed),
-                  "usb driver open returned false");
   } catch (const std::exception &e) {
     RCLCPP_ERROR(this->get_logger(),
                  " [FAILED] usb driver open exception: %s ",
                  e.what());
-    publish_error(static_cast<int>(CommCode::UsbOpenException),
-                  to_string(CommCode::UsbOpenException), e.what());
   } catch (...) {
     RCLCPP_ERROR(this->get_logger(),
                  " [FAILED] usb driver open unknown exception ");
-    publish_error(static_cast<int>(CommCode::UsbOpenException),
-                  to_string(CommCode::UsbOpenException),
-                  "usb driver open unknown exception");
   }
 
   RCLCPP_ERROR(this->get_logger(),
                " [FAILED] usb driver open failed ");
-  publish_error(static_cast<int>(CommCode::UsbOpenFailed),
-                to_string(CommCode::UsbOpenFailed), "usb driver open FAILED");
   return false;
 }
 
 
 // ============================================================================
-//  Parser callbacks
+//  Device callbacks
 // ============================================================================
 void UsbCdcNode::engineer_handle_packet(const std::byte *data, size_t size) {
-  std::scoped_lock<std::mutex> lock(rx_data_mutex_);
-  if (size < sizeof(EngineerReceiveData)) {
+  if (size != sizeof(EngineerRxPacket)) {
     RCLCPP_ERROR(this->get_logger(),
-                 " [ERROR] Received packet too small, expected at least %zu, got %zu ",
-                 sizeof(EngineerReceiveData), size);
-    publish_error(
-        static_cast<int>(CommCode::UsbPacketTooSmall),
-        to_string(CommCode::UsbPacketTooSmall),
-        "Received packet too small expected_bytes=" +
-            std::to_string(sizeof(EngineerReceiveData)) +
-            " actual_bytes=" + std::to_string(size));
+                 " [ERROR] Received packet size mismatch, expected %zu, got %zu ",
+                 sizeof(EngineerRxPacket), size);
     return;
   }
-  std::memcpy(&rx_data_, data, sizeof(EngineerReceiveData));
 
-  bool seed_expected = false;
-  if (joint_targets_seeded_for_session_.compare_exchange_strong(seed_expected, true)) {
-    std::scoped_lock<std::mutex> tx_lock(tx_data_mutex_);
-    const std::size_t seed_count = std::min<std::size_t>(6, config_.joint_count);
-    for (std::size_t i = 0; i < seed_count; ++i) {
-      const float seeded_target = config_.startup_joint_targets_enabled
-                                      ? static_cast<float>(config_.startup_joint_targets[i])
-                                      : rx_data_.data.actualJointPosition[i];
-      tx_data_.data.targetJointPosition[i] = seeded_target;
-      tx_data_.data.targetJointVelocity[i] = 0.0F;
-    }
+  EngineerRxPacket packet{};
+  std::memcpy(&packet, data, sizeof(EngineerRxPacket));
+  EngineerRxState state = decode_receive_packet(packet);
+  static int rx_print_count = 0;
+  if (++rx_print_count >= 100) {
+    rx_print_count = 0;
+    print_rx_packet(packet);
   }
 
-  bool enable_expected = false;
-  if (tx_enabled_.compare_exchange_strong(enable_expected, true)) {
-    RCLCPP_WARN(this->get_logger(),
-                " [SAFE_GUARD] first valid feedback received, enable tx output ");
-  }
-  // 限频打印收到的数据，便于串口调试
-  static int i = 0;
-  i++;
-  if (i == 100) {
-    i = 0;
-    engineer_print_receive_data(rx_data_);
+  {
+    std::scoped_lock<std::mutex> lock(rx_state_mutex_);
+    rx_state_ = state;
   }
 }
 
 // ============================================================================
-//  Timers & callbacks
+//  Send Timer Callback
 // ============================================================================
 void UsbCdcNode::send_timer_callback() {
   const bool device_open = device_.is_open();
@@ -292,11 +314,9 @@ void UsbCdcNode::send_timer_callback() {
       RCLCPP_WARN(this->get_logger(),
                   " [DISCONNECT] USB device disconnected, waiting to reconnect ");
     }
-    tx_enabled_ = false;
-    joint_targets_seeded_for_session_ = false;
     {
-      std::scoped_lock<std::mutex> lock(tx_data_mutex_);
-      tx_data_.data = {};
+      std::scoped_lock<std::mutex> lock(tx_state_mutex_);
+      initialize_startup_joint_targets(tx_state_, config_);
     }
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
                          " [WAITING] waiting for USB reconnect ");
@@ -305,96 +325,38 @@ void UsbCdcNode::send_timer_callback() {
   }
   last_device_open_ = true;
 
-  if (!tx_enabled_) {
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                         " [SAFE_GUARD] feedback not ready, skip tx output ");
-    return;
-  }
-
-  // 按协议填充发送帧
-  EngineerTransmitData tx_data;
-  tx_data.header.id = 0x02;
-  tx_data.header.len = sizeof(decltype(tx_data.data));
-  tx_data.header.sof = HeaderFrame::SoF();
-  tx_data.eof = HeaderFrame::EoF();
+  EngineerTxState tx_snapshot{};
   {
-    std::scoped_lock<std::mutex> lock(tx_data_mutex_);
-    tx_data.data = tx_data_.data;
+    std::scoped_lock<std::mutex> lock(tx_state_mutex_);
+    tx_snapshot = tx_state_;
   }
 
-  // NO_CRC
-  // tx_data.header.crc = calc_crc_len_id_payload(
-  //     tx_data.header.len, tx_data.header.id, &tx_data.data);
-
-  // 周期性打印发送帧，观测编码是否正确
-  static int i = 0;
-  i++;
-  if (i == 100) {
-    i = 0;
-    engineer_print_transmit_data(tx_data);
+  // 按协议填充发送帧，量化只发生在发送边界。
+  EngineerTxPacket tx_data = encode_transmit_packet(tx_snapshot);
+  static int tx_print_count = 0;
+  if (++tx_print_count >= 100) {
+    tx_print_count = 0;
+    print_tx_packet(tx_data);
   }
 
-  std::memcpy(buffer_, &tx_data, sizeof(EngineerTransmitData));
-  const auto send_wall_start = std::chrono::system_clock::now();
-  const auto send_start = std::chrono::steady_clock::now();
-  const bool send_ok = device_.send_data(buffer_, sizeof(EngineerTransmitData));
-  const auto send_end = std::chrono::steady_clock::now();
-  const auto send_wall_end = std::chrono::system_clock::now();
-  const auto send_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-      send_end - send_start).count();
-  const auto wall_start_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-      send_wall_start.time_since_epoch()).count();
-  const auto wall_end_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-      send_wall_end.time_since_epoch()).count();
-  if (send_ms > 5 || !send_ok) {
-    RCLCPP_WARN(this->get_logger(),
-                "[send][ts] wall_start_ms=%ld, wall_end_ms=%ld, dur_ms=%ld, ok=%d",
-                wall_start_ms, wall_end_ms, send_ms, send_ok ? 1 : 0);
-  }
+  std::memcpy(buffer_, &tx_data, sizeof(EngineerTxPacket));
+  const bool send_ok = device_.send_data(buffer_, sizeof(EngineerTxPacket));
+
   if (!send_ok) {
-    RCLCPP_ERROR(this->get_logger(),
-                 " [FAILED] faild to send data ");
-    publish_error(static_cast<int>(CommCode::UsbSendFailed),
-                  to_string(CommCode::UsbSendFailed), "FAILED to send data");
-  }
-
-  // 发送定时器统计（1s 汇总一次）
-  static uint64_t send_count = 0;
-  static uint64_t send_count_last = 0;
-  static int64_t send_ms_sum = 0;
-  static int64_t send_ms_max = 0;
-  static uint64_t send_over_5ms = 0;
-  static auto send_last_report = std::chrono::steady_clock::now();
-  send_count++;
-  send_ms_sum += send_ms;
-  if (send_ms > send_ms_max) {
-    send_ms_max = send_ms;
-  }
-  if (send_ms > 5) {
-    send_over_5ms++;
-  }
-  const auto now = std::chrono::steady_clock::now();
-  const auto dt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-      now - send_last_report).count();
-  if (dt_ms >= 1000) {
-    const auto delta = send_count - send_count_last;
-    const double hz = dt_ms > 0 ? (1000.0 * delta / dt_ms) : 0.0;
-    const double avg_ms = delta > 0 ? (1.0 * send_ms_sum / delta) : 0.0;
-    RCLCPP_INFO(this->get_logger(),
-                "[timer][send] hz=%.1f, avg_send=%.2f ms, max_send=%ld ms, over5ms=%lu",
-                hz, avg_ms, send_ms_max, send_over_5ms);
-    send_count_last = send_count;
-    send_ms_sum = 0;
-    send_ms_max = 0;
-    send_over_5ms = 0;
-    send_last_report = now;
+    RCLCPP_ERROR(this->get_logger(), " [FAILED] faild to send data ");
   }
 }
 
+// ============================================================================
+//  Publish Timer Callback
+// ============================================================================
 void UsbCdcNode::publish_timer_callback() {
-  const auto cb_start = std::chrono::steady_clock::now();
-  std::scoped_lock<std::mutex> lock(rx_data_mutex_);
-  const auto &d = rx_data_.data;
+  EngineerRxState rx_snapshot{};
+  {
+    std::scoped_lock<std::mutex> lock(rx_state_mutex_);
+    rx_snapshot = rx_state_;
+  }
+  const auto &d = rx_snapshot;
   const rclcpp::Time stamp = this->now();
 
   // 发布 custom 关节消息,用于自定义控制
@@ -402,7 +364,8 @@ void UsbCdcNode::publish_timer_callback() {
   joint_states_custom.joints.resize(6);
   for (size_t i = 0; i < 6; ++i) {
     joint_states_custom.joints[i].name = config_.joint_names[i];
-    joint_states_custom.joints[i].position = d.customJointPosition[i];
+    joint_states_custom.joints[i].position =
+        d.custom_joint_position[i];
     joint_states_custom.joints[i].velocity = 0;
     joint_states_custom.joints[i].effort = 0;
     joint_states_custom.joints[i].mode = "custom";
@@ -421,15 +384,23 @@ void UsbCdcNode::publish_timer_callback() {
   joint_states.name = config_.joint_names;
   joint_states.name.push_back("left_gripper_joint");
   joint_states.position = {
-      d.actualJointPosition[0],
-      d.actualJointPosition[1],
-      d.actualJointPosition[2],
-      d.actualJointPosition[3],
-      d.actualJointPosition[4],
-      d.actualJointPosition[5],
-      d.actualJointPosition[6]
+      d.actual_joint_position[0],
+      d.actual_joint_position[1],
+      d.actual_joint_position[2],
+      d.actual_joint_position[3],
+      d.actual_joint_position[4],
+      d.actual_joint_position[5],
+      d.actual_joint_position[6]
   };
-  joint_states.velocity.resize(joint_states.name.size(), 0.0);
+  joint_states.velocity = {
+      d.actual_joint_velocity[0],
+      d.actual_joint_velocity[1],
+      d.actual_joint_velocity[2],
+      d.actual_joint_velocity[3],
+      d.actual_joint_velocity[4],
+      d.actual_joint_velocity[5],
+      0.0
+  };
   joint_states.effort.resize(joint_states.name.size(), 0.0);
   joint_states_pub_->publish(joint_states);
 
@@ -438,8 +409,10 @@ void UsbCdcNode::publish_timer_callback() {
   joint_states_verbose.joints.resize(6);
   for (size_t i = 0; i < 6; ++i) {
     joint_states_verbose.joints[i].name = config_.joint_names[i];
-    joint_states_verbose.joints[i].position = d.actualJointPosition[i];
-    joint_states_verbose.joints[i].velocity = 0;
+    joint_states_verbose.joints[i].position =
+        d.actual_joint_position[i];
+    joint_states_verbose.joints[i].velocity =
+        d.actual_joint_velocity[i];
     joint_states_verbose.joints[i].effort = 0;
     joint_states_verbose.joints[i].mode = "verbose";
   }
@@ -448,9 +421,9 @@ void UsbCdcNode::publish_timer_callback() {
   // 发布 HFSM 意图，驱动上层状态机
   engineer_interfaces::msg::Intent intent;
   intent.stamp = this->now();
-  intent.intent_id = debug_override_intent_enabled_.load(std::memory_order_relaxed)
+  intent.intent_id = debug_override_enabled_.load(std::memory_order_relaxed)
                          ? debug_intent_id_.load(std::memory_order_relaxed)
-                         : d.IntentStatus;
+                         : d.intent_status;
   intent_pub_->publish(intent);
 
   // 发布 slot 状态（两槽）
@@ -461,26 +434,19 @@ void UsbCdcNode::publish_timer_callback() {
   for (size_t i = 0; i < 2; ++i) {
     slot_states.slots[i].header.stamp = stamp;
     slot_states.slots[i].header.frame_id = "slot_" + std::to_string(i);
-    slot_states.slots[i].status = d.realSlotStatus[i] != 0U;
-    slot_states.slots[i].command = d.realSlotStatus[i] != 0U;
+    slot_states.slots[i].status = d.real_slot_status[i] != 0U;
+    slot_states.slots[i].command = d.real_slot_status[i] != 0U;
   }
   slot_states_pub_->publish(slot_states);
-
-  // 发布定时器统计（1s 汇总一次）
-  const auto cb_end = std::chrono::steady_clock::now();
-  const auto cb_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-      cb_end - cb_start).count();
-  static BasicTimerStats pub_stats;
-  pub_stats.tick_and_log(this->get_logger(), "publish", cb_ms);
 }
 
 // ============================================================================
-//  ROS subscriptions
+//  Intent Callback
 // ============================================================================
 void UsbCdcNode::IntentCallback(
     const engineer_interfaces::msg::Intent::SharedPtr msg) {
   const bool debug_override_enabled =
-      debug_override_intent_enabled_.load(std::memory_order_acquire);
+      debug_override_enabled_.load(std::memory_order_acquire);
   const uint8_t current_debug_intent_id =
       debug_intent_id_.load(std::memory_order_acquire);
   if (debug_override_enabled &&
@@ -500,68 +466,59 @@ void UsbCdcNode::IntentCallback(
     }
   }
 
-  if (!tx_enabled_) {
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                         " [SAFE_GUARD] drop intent command while tx is not ready ");
-    return;
-  }
-  std::scoped_lock<std::mutex> lock(tx_data_mutex_);
+  std::scoped_lock<std::mutex> lock(tx_state_mutex_);
   // 状态机任务完成 finish置1
-  tx_data_.data.IntentFinish = msg->intent_finish;
+  tx_state_.intent_finish = msg->intent_finish;
 }
 
+// ============================================================================
+//  Joint Command Callback
+// ============================================================================
 void UsbCdcNode::jointCommandCallback(
     const engineer_interfaces::msg::Joints::SharedPtr msg) {
-  if (!tx_enabled_) {
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                         " [SAFE_GUARD] drop joint command while tx is not ready ");
-    return;
-  }
-  std::scoped_lock<std::mutex> lock(tx_data_mutex_);
+  std::scoped_lock<std::mutex> lock(tx_state_mutex_);
 
-  // 将 JointCommand 映射到目标关节位置/速度，超出部分清零
+  // 将 JointCommand 映射到目标关节位置/速度，编码留到发送边界处理。
   for (const auto &joint : msg->joints) {
     auto it = config_.joint_index.find(joint.name);
     if (it != config_.joint_index.end()) {
       const size_t index = it->second;
-      tx_data_.data.targetJointPosition[index] = joint.position;
-      tx_data_.data.targetJointVelocity[index] = joint.velocity;
+      tx_state_.target_joint_position[index] =
+          static_cast<float>(joint.position);
+      tx_state_.target_joint_velocity[index] =
+          static_cast<float>(joint.velocity);
     }
   }
 }
 
+// ============================================================================
+//  Gripper Command Callback
+// ============================================================================
 void UsbCdcNode::GripperCommandCallback(
     const engineer_interfaces::msg::Gripper::SharedPtr msg) {
-  if (!tx_enabled_) {
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                         " [SAFE_GUARD] drop gripper command while tx is not ready ");
-    return;
-  }
-  std::scoped_lock<std::mutex> lock(tx_data_mutex_);
+  std::scoped_lock<std::mutex> lock(tx_state_mutex_);
   // 仅改下发协议编码，反馈浮点开度仍按原样发布给上层显示。
-  tx_data_.data.targetGripperCommand = toGripperProtocolCommand(msg->position);
+  tx_state_.target_gripper_command = toGripperCommand(msg->position);
 }
 
+// ============================================================================
+//  Slot Command Callback
+// ============================================================================
 void UsbCdcNode::SlotCommandCallback(
     const engineer_interfaces::msg::Slots::SharedPtr msg) {
-  if (!tx_enabled_) {
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                         " [SAFE_GUARD] drop slot command while tx is not ready ");
-    return;
-  }
-  std::scoped_lock<std::mutex> lock(tx_data_mutex_);
-  tx_data_.data.targetSlotStatus[0] = 0U;
-  tx_data_.data.targetSlotStatus[1] = 0U;
+  std::scoped_lock<std::mutex> lock(tx_state_mutex_);
+  tx_state_.target_slot_status[0] = 0U;
+  tx_state_.target_slot_status[1] = 0U;
   if (!msg) {
     return;
   }
 
   const size_t count = std::min<size_t>(2, msg->slots.size());
   for (size_t i = 0; i < count; ++i) {
-    tx_data_.data.targetSlotStatus[i] = msg->slots[i].command ? 1U : 0U;
+    tx_state_.target_slot_status[i] = msg->slots[i].command ? 1U : 0U;
   }
 }
-}; // namespace usb_cdc
+} // namespace usb_cdc
 
 #include <rclcpp_components/register_node_macro.hpp>
 

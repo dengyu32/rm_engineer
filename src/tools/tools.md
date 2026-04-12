@@ -13,7 +13,7 @@
 
 其中 ee_path_node 订阅机械臂末端的/tf,发布 path 消息，供 FoxGlove 3D 可视化末端轨迹
 log_tools 提供基于 spdlog 的轻量日志封装
-pose_marker_node 发布一个固定 PoseStamped 和球形 Marker，供 FoxGlove 可视化位姿点
+pose_marker_node 可订阅外部 PoseStamped 并转发为 PoseStamped + Marker，供 FoxGlove 可视化位姿点
 
 
 #### 使用方法
@@ -29,6 +29,12 @@ ros2 service call /clear_ee_path std_srvs/srv/Empty
 
 ros2 run pose_marker_node pose_marker_node --ros-args \
   -p frame_id:=base_link \
+  -p source_pose_topic:=/detect/grasp_pose
+
+或继续用固定 pose：
+
+ros2 run pose_marker_node pose_marker_node --ros-args \
+  -p source_pose_topic:="" \
   -p pose:="[0.2, 0.1, 0.3, 0.0, 0.0, 0.0, 1.0]"
 
 或使用参数文件：
@@ -40,6 +46,7 @@ ros2 run pose_marker_node pose_marker_node --ros-args --params-file \
 
 ros2 launch pose_marker_node pose_marker.launch.py
 
+默认会订阅 `/detect/grasp_pose`，并把最新视觉位姿持续发布到 `/pose_marker` 和 `/pose_marker_pose`。
 Foxglove 中查看 `/pose_marker` 话题即可看到点，`/pose_marker_pose` 可查看对应位姿数值。
 
 

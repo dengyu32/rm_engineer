@@ -5,7 +5,6 @@
 //< C++
 #include <atomic>
 #include <memory>
-#include <sstream>
 #include <string>
 
 //< ROS 2
@@ -16,59 +15,14 @@
 #include <engineer_interfaces/msg/intent.hpp>
 
 //< Other Modules
+#include "auto_node/auto_node_config.hpp"
 #include "auto_library/method.hpp"
 #include "step_executor/registry_bridge.hpp"
 #include "step_executor/step_executor.hpp"
 #include "task_orchestrator/task_orchestrator.hpp"
 #include "task_orchestrator/protocol.hpp"
-#include "robot_config/robot_config.hpp"
 
 namespace engineer_auto {
-
-// ============================================================================
-//  AutoNodeConfig
-// ----------------------------------------------------------------------------
-//  私有参数（动态参数）
-//  - update_period_ms: 定时器周期，用于定期检查和执行任务
-//  - status_period_ms: 用于广播 AUTO 状态 <TODO: 接入串口，传给图传>
-//  通用参数（静态参数）
-//  - IntentResetConfig: intent_cmd_topic、intent_fb_topic
-// ============================================================================
-
-struct AutoNodeConfig : public params_utils::IntentResetConfig {
-  int update_period_ms{20};
-  int status_period_ms{200};
-  std::string auto_status_topic{"auto_status"};
-
-  static AutoNodeConfig load(rclcpp::Node &node) {
-    AutoNodeConfig cfg;
-    params_utils::IntentResetConfig::Load(node, cfg);
-    params_utils::detail::declare_get_checked(
-        node, "update_period_ms", cfg.update_period_ms,
-        [](int v) { return v > 0; },
-        "must be > 0");
-    params_utils::detail::declare_get_checked(
-        node, "status_period_ms", cfg.status_period_ms,
-        [](int v) { return v > 0; },
-        "must be > 0");
-    cfg.validate();
-    return cfg;
-  }
-
-  void validate() const { params_utils::IntentResetConfig::validate(); }
-
-  std::string summary() const {
-    std::ostringstream oss;
-    oss << "=============================================================================\n";
-    oss << " AutoNode Configuration\n\n";
-    oss << " Timing:\n";
-    oss << "   - update_period_ms     : " << update_period_ms << "\n\n";
-    oss << "   - status_period_ms     : " << status_period_ms << "\n\n";
-    oss << params_utils::IntentResetConfig::summary();
-    oss << "=============================================================================\n";
-    return oss.str();
-  }
-};
 
 // ============================================================================
 //  AutoNode

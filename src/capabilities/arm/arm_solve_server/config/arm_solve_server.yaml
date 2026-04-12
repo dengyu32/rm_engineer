@@ -1,4 +1,3 @@
-arm_solve_action_server:
+arm_solve_server:
   ros__parameters:
-    arm_action_name: move_arm
-
+    arm_action_name: "move_arm"

@@ -415,10 +415,10 @@ bool SolveExecutor::plan_cartesian(
 
   calculator::CostOptions cost_opt;
   cost_opt.summary();
-  auto raw_traj =
-      planner.plan(start_state, target_vector, req.target_length, cost_opt);
-  // auto raw_traj = planner.plan_with_5dof_constrain(start_state, target_vector,
-  //                                                  req.target_length, cost_opt);
+  // auto raw_traj =
+      // planner.plan(start_state, target_vector, req.target_length, cost_opt);
+  auto raw_traj = planner.plan_with_5dof_constrain(start_state, target_vector,
+                                                   req.target_length, cost_opt);
   if (!raw_traj) {
     err = err.empty() ? "Straight planner failed" : err;
     LOGE("[solve_executor] {}", err);

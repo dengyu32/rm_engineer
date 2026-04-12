@@ -46,7 +46,7 @@ FIXED_GRAB:
         target_joints:
           type: double_array
           value: [-0.4440144, -0.284771919, -0.896683931, 0.372109234, -0.675784111, 0.562272608]
-   
+
     - id: move_home
       kind: arm.move_joints
       timeout_ms: 8000

@@ -1,4 +1,6 @@
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -20,14 +22,20 @@ def generate_launch_description():
         "fake_system_node.yaml",
     )
 
+    params_file = LaunchConfiguration("params_file")
+
     node_fake_system = Node(
         package="fake_system",
         executable="fake_system_node",
-        name="fake_system_node",
         output="screen",
-        parameters=[joint_reset, intent_reset, gripper_reset, config_path],
+        parameters=[joint_reset, intent_reset, gripper_reset, params_file],
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            "params_file",
+            default_value=config_path,
+            description="Path to the fake_system_node parameter file",
+        ),
         node_fake_system,
     ])

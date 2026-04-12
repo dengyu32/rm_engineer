@@ -25,4 +25,4 @@ command -v ros2 >/dev/null 2>&1 || {
 TARGET_VALUE="${1:-1}"
 
 echo "Starting node with parameter: $TARGET_VALUE"
-ros2 param set /fake_system_node fake_intent_id "$TARGET_VALUE"
+ros2 param set /fake_system fake_intent_id "$TARGET_VALUE"

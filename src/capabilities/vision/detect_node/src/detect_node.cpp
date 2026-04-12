@@ -240,7 +240,8 @@ void DetectNode::syncCallback(
     if (color_msg->width == 0 || color_msg->height == 0 ||
         depth_msg->width == 0 || depth_msg->height == 0)
     {
-        RCLCPP_ERROR(get_logger(), "Empty image meta (color %ux%u, depth %ux%u), skip",
+        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 2000,
+                     "Empty image meta (color %ux%u, depth %ux%u), skip",
                      color_msg->width, color_msg->height,
                      depth_msg->width, depth_msg->height);
         return;
@@ -248,7 +249,8 @@ void DetectNode::syncCallback(
     if (static_cast<int64_t>(color_msg->width) * static_cast<int64_t>(color_msg->height) > max_pixels ||
         static_cast<int64_t>(depth_msg->width) * static_cast<int64_t>(depth_msg->height) > max_pixels)
     {
-        RCLCPP_ERROR(get_logger(), "Abnormal image meta (color %ux%u, depth %ux%u), skip",
+        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 2000,
+                     "Abnormal image meta (color %ux%u, depth %ux%u), skip",
                      color_msg->width, color_msg->height,
                      depth_msg->width, depth_msg->height);
         return;
@@ -271,7 +273,8 @@ void DetectNode::syncCallback(
     }
     else
     {
-        RCLCPP_WARN(get_logger(), "Unsupported depth encoding: %s", depth_msg->encoding.c_str());
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+            "Unsupported depth encoding: %s", depth_msg->encoding.c_str());
         return;
     }
 
@@ -293,7 +296,7 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
     if (static_cast<int64_t>(color.total()) > max_pixels ||
         static_cast<int64_t>(depth.total()) > max_pixels)
     {
-        RCLCPP_ERROR(get_logger(),
+        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 2000,
             "[DetectNode] Abnormal image size color=%dx%d depth=%dx%d, skip frame",
             color.cols, color.rows, depth.cols, depth.rows);
         return;
@@ -384,7 +387,7 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
                     }
                     selected = &results[max_i];
                     bad_track_count_ = 0;
-                    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 500,
+                    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
                         "[detect_node] Track reset by low IoU (%.2f < %.2f)",
                         best_iou, static_cast<float>(iou_min_));
                 }
@@ -419,7 +422,8 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
             bool is_at_border = isBboxAtBorder(obj.bbox, img_w, img_h, border_margin);
 
             if (is_at_border) {
-                RCLCPP_WARN(get_logger(), "Class %d bbox at border, skip", obj.class_id);
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                    "Class %d bbox at border, skip", obj.class_id);
                 skip = true;
                 break;
             }
@@ -448,7 +452,8 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
 
             if (valid_ratio < min_valid_ratio_hold) {
                 // HOLD：不更新，但别让整帧直接无效（留给其他对象）
-                RCLCPP_WARN(get_logger(), "Class %d valid_ratio=%.2f < %.2f, HOLD (no update)",
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                            "Class %d valid_ratio=%.2f < %.2f, HOLD (no update)",
                             obj.class_id, valid_ratio, min_valid_ratio_hold);
                 skip = true;
                 break;
@@ -457,7 +462,8 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
             // DEGRADED 模式：继续处理，但只更新 center，不更新轴
             const bool is_degraded = (valid_ratio < min_valid_ratio_normal);
             if (is_degraded) {
-                RCLCPP_WARN(get_logger(), "Class %d valid_ratio=%.2f [DEGRADED], continue with lower confidence",
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                            "Class %d valid_ratio=%.2f [DEGRADED], continue with lower confidence",
                             obj.class_id, valid_ratio);
             }
 
@@ -476,7 +482,7 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
 
             const size_t n_final = depth_cloud->size();
 
-            RCLCPP_INFO(get_logger(),
+            RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
                 "Class %d conf=%.2f mask_nz=%zu raw=%zu depth=%zu final=%zu valid_ratio=%.2f z=[%.3f,%.3f] zero=%d oor=%d",
                 obj.class_id, obj.conf, mask_nz, n_raw, n_depth, n_final, valid_ratio, z_lo, z_hi, zero_depth, out_of_range);
 
@@ -484,7 +490,8 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
 
             // 改动3：降低点数门禁（200 → 100）
             if (n_final < 100) {
-                RCLCPP_WARN(get_logger(), "Class %d final points=%zu < 100, skip", obj.class_id, n_final);
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                    "Class %d final points=%zu < 100, skip", obj.class_id, n_final);
                 skip = true;
                 break;
             }
@@ -506,7 +513,8 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
                     center_ = center;
                 }
                 frame_valid = true;
-                RCLCPP_INFO(get_logger(), "Class %d DEGRADED: updated center only [%.3f,%.3f,%.3f]",
+                RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
+                            "Class %d DEGRADED: updated center only [%.3f,%.3f,%.3f]",
                             obj.class_id, center.x(), center.y(), center.z());
                 break;
             }
@@ -578,7 +586,7 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
             if (bad_track_count_ >= bad_track_max_) {
                 has_lock_ = false;
                 bad_track_count_ = 0;
-                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 500,
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
                     "[detect_node] Track lost: no candidates");
             }
         }
@@ -592,18 +600,21 @@ void DetectNode::process(const cv::Mat& color, const cv::Mat& depth, const rclcp
             const double elapsed = (now() - last_valid_time_).seconds();
             if (elapsed < HOLD_SEC)
             {
-                RCLCPP_WARN(get_logger(), "Frame invalid, hold last valid (%.2fs remaining)", HOLD_SEC - elapsed);
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                    "Frame invalid, hold last valid (%.2fs remaining)", HOLD_SEC - elapsed);
                 vis = last_valid_vis_;
             }
             else
             {
-                RCLCPP_ERROR(get_logger(), "Frame invalid and hold timeout, fallback to raw color");
+                RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 2000,
+                    "Frame invalid and hold timeout, fallback to raw color");
                 vis = color_local.clone();
             }
         }
         else
         {
-            RCLCPP_ERROR(get_logger(), "Frame invalid and no previous valid, fallback to raw color");
+            RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 2000,
+                "Frame invalid and no previous valid, fallback to raw color");
             vis = color_local.clone();
         }
     }

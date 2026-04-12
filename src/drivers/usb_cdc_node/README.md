@@ -8,10 +8,7 @@ USB CDC Device (MCU)
 ┌──────────────────────────────────────────┐
 │              UsbCdcNode                  │
 │  ┌────────────────────────────────────┐  │
-│  │     Device (libusb PIMPL)           │  │ ← 打开设备 / 发送 / 事件循环
-│  └────────────────────────────────────┘  │
-│  ┌────────────────────────────────────┐  │
-│  │     DeviceParser (frame sync)       │  │ ← 帧同步 + CRC 校验 + 分发
+│  │     Device (libusb + frame sync)    │  │ ← 打开设备 / 发送 / 事件循环 / 拼帧回调
 │  └────────────────────────────────────┘  │
 │  ┌────────────────────────────────────┐  │
 │  │     ROS Interfaces                  │  │ ← JointState / Joints / Intent
@@ -26,20 +23,18 @@ ROS2 Topics
 - 异步 bulk IN 接收，同步 bulk OUT 发送
 - 热插拔检测与重连
 - 独立事件循环线程
+- SoF / len / EoF 流式拼帧
+- 处理拆包与粘包
+- 完整帧到达后回调上层解析
 
-2. `DeviceParser`
-- SoF / EoF 帧同步
-- CRC16 校验
-- 通过帧 ID 分发解析回调
-
-3. `UsbCdcNode`
+2. `UsbCdcNode`
 - 订阅关节/夹爪/意图指令
 - 发布 JointState / Joints / Intent
 
 **通信协议**
-- 帧结构：`SoF | len | id | crc | payload | EoF`
-- CRC 覆盖范围：`len + id + payload`
-- CRC 算法：`CRC-16/MODBUS`
+- 帧结构：`SoF | len | id | payload | EoF`
+- 关节位置、速度字段使用 `uint16_t` 量化传输，力矩字段仍使用 `float`。
+- 速度量化范围：`[-pi, pi] rad/s`。
 
 `HeaderFrame`
 ```cpp
@@ -47,22 +42,23 @@ struct HeaderFrame {
   uint8_t sof;   // 0x5A
   uint8_t len;   // payload length
   uint8_t id;    // packet id
-  uint16_t crc;  // CRC16(MODBUS)
 };
 ```
 
-接收包：`EngineerReceiveData`
+接收包：`EngineerRxPacket`
 ```text
-actualJointPosition[7]
-customJointPosition[6]
+actualJointPosition[7]  uint16
+actualJointVelocity[6]  uint16
+customJointPosition[6]  uint16
 realSlotStatus[2]
 IntentStatus
 ```
 
-发送包：`EngineerTransmitData`
+发送包：`EngineerTxPacket`
 ```text
-targetJointPosition[6]
-targetJointVelocity[6]
+targetJointPosition[6]  uint16
+targetJointVelocity[6]  uint16
+targetJointEffort[6]    float
 targetGripperCommand
 targetSlotStatus[2]
 IntentFinish
@@ -117,9 +113,8 @@ ros2 launch usb_cdc usb_cdc_node.launch.py \
 **依赖**
 - ROS2 Humble+
 - libusb-1.0
-- CRCpp
 - `engineer_interfaces`
 
 **注意事项**
-- 帧同步依赖完整帧传输，若设备端可能粘包/拆包，需升级解析器为流式状态机。
-- CRC 未在实机上验证时，需与下位机参数对齐。
+- 当前解析器已支持 USB CDC 的拆包与粘包。
+- `len` 为 `uint8_t`，单帧 payload 最大为 255 字节。
