@@ -9,8 +9,8 @@
 
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.h>
 
-#include "calculator/hybrid_ik.hpp"
 #include "calculator/cost_func.hpp"
+#include "calculator/hybrid_ik.hpp"
 #include "collision/self_collision_detector.hpp"
 #include "executor/detail.hpp"
 #include "executor/executor.hpp"
@@ -59,6 +59,18 @@ void SolveExecutor::stop() {
   if (move_group_) {
     move_group_->stop();
   }
+}
+
+void SolveExecutor::updateJointsMaxStepRad(double value) {
+  std::scoped_lock<std::mutex> lock(exec_mutex_);
+  config_.joints_max_step_rad = value;
+  LOGI("[solve_executor] Updated joints_max_step_rad to {}", value);
+}
+
+void SolveExecutor::updateNominalJointSpeed(double value) {
+  std::scoped_lock<std::mutex> lock(exec_mutex_);
+  config_.nominal_joint_speed = value;
+  LOGI("[solve_executor] Updated nominal_joint_speed to {}", value);
 }
 
 bool SolveExecutor::ensureInitialized(std::string &err) {
@@ -127,22 +139,21 @@ bool SolveExecutor::execute(const SolveRequest &req,
 <<<<<<< HEAD
 <<<<<<< HEAD
   if (out_traj.points.empty()) {
-      LOGW("[solve_executor] Planning succeeded but trajectory is empty");
-    } else {
-      const auto &last_point = out_traj.points.back();
-      std::ostringstream oss;
-      oss << "[solve_executor] Last trajectory point joint positions:";
-      for (std::size_t i = 0; i < last_point.positions.size(); ++i) {
-        oss << ' ';
-        if (i < out_traj.joint_names.size()) {
-          oss << out_traj.joint_names[i] << '=';
-        } else {
-          oss << "joint_" << i << '=';
-        }
-        oss << last_point.positions[i];
+    LOGW("[solve_executor] Planning succeeded but trajectory is empty");
+  } else {
+    const auto &last_point = out_traj.points.back();
+    std::ostringstream oss;
+    oss << "[solve_executor] Last trajectory point joint positions:";
+    for (std::size_t i = 0; i < last_point.positions.size(); ++i) {
+      oss << ' ';
+      if (i < out_traj.joint_names.size()) {
+        oss << out_traj.joint_names[i] << '=';
+      } else {
+        oss << "joint_" << i << '=';
       }
-      LOGI("{}", oss.str());
+      oss << last_point.positions[i];
     }
+<<<<<<< HEAD
 =======
 
 =======
@@ -171,6 +182,10 @@ bool SolveExecutor::execute(const SolveRequest &req,
 >>>>>>> c87041f (solve-1.10:加入五自由度限制直线规划,调整计算次数)
 =======
 >>>>>>> 13c3104 (rebase finish)
+=======
+    LOGI("{}", oss.str());
+  }
+>>>>>>> 8a38c46 (进度同步)
   last_plan_time_ = now;
   return true;
 }
@@ -305,7 +320,8 @@ bool SolveExecutor::plan_joints(
   for (int k = 0; k <= N; ++k) {
     const double t_raw = static_cast<double>(k) / static_cast<double>(N);
     // 平滑插值（前缓中匀后缓），降低速度突变
-    const double t = t_raw * t_raw * (3.0 - 2.0 * t_raw);
+    // const double t = t_raw * t_raw * (3.0 - 2.0 * t_raw);
+
     std::vector<double> q(config_.joint_count);
     for (std::size_t i = 0; i < config_.joint_names.size(); ++i) {
       // const auto& jn = config_.joint_names[i];
@@ -317,8 +333,12 @@ bool SolveExecutor::plan_joints(
       // }
       // const double target_near = ikc::wrapToNearby(req.target_joints[i],
       // it->second);
+      // q[i] = req.current_joints.positions[i] +
+      //        (req.target_joints[i] - req.current_joints.positions[i]) * t;
       q[i] = req.current_joints.positions[i] +
-             (req.target_joints[i] - req.current_joints.positions[i]) * t;
+             (req.target_joints[i] - req.current_joints.positions[i]) *
+                 (10 * std::pow(t_raw, 3) - 15 * std::pow(t_raw, 4) +
+                  6 * std::pow(t_raw, 5));
     }
 
     insert_state.setJointGroupPositions(jmg, q);
@@ -337,6 +357,25 @@ bool SolveExecutor::plan_joints(
     traj.points.push_back(std::move(p));
   }
   parameterize_time_from_start(traj, config_.max_velocity_scaling);
+
+  const double total_duration =
+      traj.points.empty() ? 0.0 : traj.points.back().time_from_start;
+  for (int k = 0; k <= N; ++k) {
+    auto &point = traj.points[static_cast<std::size_t>(k)];
+    point.velocities.assign(point.positions.size(), 0.0);
+    if (total_duration <= 1e-9) {
+      continue;
+    }
+
+    const double u = static_cast<double>(k) / static_cast<double>(N);
+    const double blend_derivative =
+        30.0 * std::pow(u, 2) - 60.0 * std::pow(u, 3) + 30.0 * std::pow(u, 4);
+    for (std::size_t i = 0; i < config_.joint_names.size(); ++i) {
+      point.velocities[i] =
+          (req.target_joints[i] - req.current_joints.positions[i]) *
+          blend_derivative / total_duration;
+    }
+  }
 
   out_traj = std::move(traj);
   return true;
@@ -416,7 +455,7 @@ bool SolveExecutor::plan_cartesian(
   calculator::CostOptions cost_opt;
   cost_opt.summary();
   // auto raw_traj =
-      // planner.plan(start_state, target_vector, req.target_length, cost_opt);
+  //     planner.plan(start_state, target_vector, req.target_length, cost_opt);
   auto raw_traj = planner.plan_with_5dof_constrain(start_state, target_vector,
                                                    req.target_length, cost_opt);
   if (!raw_traj) {

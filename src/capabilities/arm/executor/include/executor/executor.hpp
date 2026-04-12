@@ -81,6 +81,10 @@ public:
   // 终止move_group_interface的规划请求
   void stop();
 
+  // 运行时更新关节插值步长
+  void updateJointsMaxStepRad(double value);
+  void updateNominalJointSpeed(double value);
+
   // 节点程序运行
   bool execute(const SolveRequest& req, solve_executor::Trajectory& out_traj, std::string& err);
 

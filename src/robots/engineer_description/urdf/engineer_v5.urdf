@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by
+Stephen Brawner (brawner@gmail.com) 
      Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
      For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
 <robot
@@ -452,6 +453,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     <mimic 
       joint="left_gripper_joint"
 =======
@@ -469,6 +471,11 @@
       joint="left_gripper_joint"
 >>>>>>> b7d87f2 (  refactor(config): 拆分节点配置并重构 USB CDC 通信链路)
       multiplier="-1"
+=======
+    <mimic
+      joint="left_gripper_joint"
+      multiplier="1"
+>>>>>>> 8a38c46 (进度同步)
       offset="0" />
   </joint>
   <link

@@ -10,41 +10,51 @@ default_acceleration_scaling_factor: 0.1
 joint_limits:
   joint1:
     has_velocity_limits: false
-    max_velocity: 0
+    max_velocity: 0.0
     has_acceleration_limits: false
-    max_acceleration: 0
+    max_acceleration: 0.0
   joint2:
     has_velocity_limits: false
-    max_velocity: 0
+    max_velocity: 0.0
     has_acceleration_limits: false
-    max_acceleration: 0
+    max_acceleration: 0.0
   joint3:
     has_velocity_limits: false
-    max_velocity: 0
+    max_velocity: 0.0
     has_acceleration_limits: false
-    max_acceleration: 0
+    max_acceleration: 0.0
   joint4:
     has_velocity_limits: false
-    max_velocity: 0
+    max_velocity: 0.0
     has_acceleration_limits: false
-    max_acceleration: 0
+    max_acceleration: 0.0
   joint5:
     has_velocity_limits: false
-    max_velocity: 0
+    max_velocity: 0.0
     has_acceleration_limits: false
-    max_acceleration: 0
+    max_acceleration: 0.0
   joint6:
     has_velocity_limits: false
-    max_velocity: 0
+    max_velocity: 0.0
     has_acceleration_limits: false
+<<<<<<< HEAD
     max_acceleration: 0
   left_finger_joint:
+=======
+    max_acceleration: 0.0
+  left_gripper_joint:
+>>>>>>> 8a38c46 (进度同步)
     has_velocity_limits: false
-    max_velocity: 0
+    max_velocity: 0.0
     has_acceleration_limits: false
+<<<<<<< HEAD
     max_acceleration: 0
   right_finger_joint:
+=======
+    max_acceleration: 0.0
+  right_gripper_joint:
+>>>>>>> 8a38c46 (进度同步)
     has_velocity_limits: false
-    max_velocity: 0
+    max_velocity: 0.0
     has_acceleration_limits: false
-    max_acceleration: 0
+    max_acceleration: 0.0

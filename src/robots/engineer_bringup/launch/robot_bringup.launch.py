@@ -60,6 +60,7 @@ def generate_launch_description():
     pkg_config      = get_package_share_directory("engineer_moveit_config")
     bringup_config  = get_package_share_directory("engineer_bringup")
     arm_servo_config = get_package_share_directory("arm_servo")
+    solve_executor_config = get_package_share_directory("arm_solve")
     top_hfsm_config = get_package_share_directory("top_hfsm")
     arm_solve_config = get_package_share_directory("arm_solve_server")
     

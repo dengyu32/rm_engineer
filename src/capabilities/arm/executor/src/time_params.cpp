@@ -180,8 +180,6 @@ void SolveExecutor::parameterize_time_from_start(Trajectory &traj, double veloci
     return;
   }
 
-  constexpr double kNominalJointSpeedRadPerSec = 1.0;
-  constexpr double kMinDtSec = 0.01;
   const double scale = std::clamp(velocity_scaling, 0.05, 1.0);
 
   traj.points[0].time_from_start = 0.0;
@@ -197,7 +195,9 @@ void SolveExecutor::parameterize_time_from_start(Trajectory &traj, double veloci
       max_delta = std::max(max_delta, std::fabs(curr.positions[j] - prev.positions[j]));
     }
 
-    const double dt = std::max(kMinDtSec, max_delta / (kNominalJointSpeedRadPerSec * scale));
+    const double dt =
+        std::max(config_.min_dt,
+                 max_delta / (config_.nominal_joint_speed * scale));
     curr.time_from_start = prev.time_from_start + dt;
 
     curr.velocities.assign(curr.positions.size(), 0.0);

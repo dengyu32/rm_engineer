@@ -24,6 +24,7 @@ find_package(tf2 REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(types REQUIRED)
+find_package(rcl_interfaces REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
   src/arm_solve_server.cpp
@@ -50,6 +51,7 @@ ament_target_dependencies(${PROJECT_NAME}
   tf2_eigen
   tf2_geometry_msgs
   types
+  rcl_interfaces
 )
 
 rclcpp_components_register_node(${PROJECT_NAME}
@@ -94,6 +96,7 @@ ament_export_dependencies(
   tf2_eigen
   tf2_geometry_msgs
   types
+  rcl_interfaces
 )
 
 ament_package()

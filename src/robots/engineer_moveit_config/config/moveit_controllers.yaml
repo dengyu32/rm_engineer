@@ -9,6 +9,7 @@ moveit_simple_controller_manager:
 
   arm_controller:
     type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
     joints:
       - joint1
       - joint2
@@ -16,10 +17,16 @@ moveit_simple_controller_manager:
       - joint4
       - joint5
       - joint6
+<<<<<<< HEAD
     action_ns: follow_joint_trajectory
     default: true
   hand_controller:
     type: GripperCommand
+=======
+  engineer_hand_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+>>>>>>> 8a38c46 (进度同步)
     joints:
       - left_finger_joint
     action_ns: gripper_cmd

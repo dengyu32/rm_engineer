@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <mutex>
 
@@ -8,6 +9,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
+#include "rcl_interfaces/msg/set_parameters_result.hpp"
 
 #include "engineer_interfaces/action/arm_move.hpp"
 #include "engineer_interfaces/msg/joint.hpp"
@@ -24,8 +26,7 @@
   - 发布规划后得到的关节指令
 */
 
-namespace arm_solve
-{
+namespace arm_solve {
 
 using namespace types;
 
@@ -37,10 +38,9 @@ using namespace types;
 // - 具有校验逻辑，检查添加的值是否有效
 // ============================================================================
 
-struct GoalContext
-{
+struct GoalContext {
   solve_executor::SolveRequest req;
-  std::atomic<bool> cancel_requested{ false };
+  std::atomic<bool> cancel_requested{false};
   Trajectory traj;
 };
 
@@ -53,23 +53,29 @@ struct GoalContext
 using ArmMove = engineer_interfaces::action::ArmMove;
 using GoalHandleArmMove = rclcpp_action::ServerGoalHandle<ArmMove>;
 
-class ArmSolveServer : public rclcpp::Node
-{
+class ArmSolveServer : public rclcpp::Node {
 public:
   // 构造函数，可选配置
-  explicit ArmSolveServer(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+  explicit ArmSolveServer(
+      const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
 private:
   rclcpp::Logger logger_;
 
   // 参数
   ArmSolveConfig config_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr
+      callback_handle_;
+  rcl_interfaces::msg::SetParametersResult
+  parameter_callback(const std::vector<rclcpp::Parameter> &parameters);
 
   // 通信指针
-  rclcpp::Subscription<engineer_interfaces::msg::Joints>::SharedPtr joint_states_verbose_sub_;
+  rclcpp::Subscription<engineer_interfaces::msg::Joints>::SharedPtr
+      joint_states_verbose_sub_;
   rclcpp::Publisher<engineer_interfaces::msg::Joints>::SharedPtr joint_cmd_pub_;
 
   rclcpp_action::Server<ArmMove>::SharedPtr action_server_;
+  rclcpp::TimerBase::SharedPtr init_timer_;
 
   // 共享变量
   engineer_interfaces::msg::Joints current_joints_;
@@ -81,27 +87,35 @@ private:
   std::shared_ptr<GoalContext> active_ctx_;
 
   // 执行器对象
+  mutable std::mutex solve_executor_mutex_;
   std::unique_ptr<solve_executor::SolveExecutor> solve_executor_;
+  void initializeSolveExecutor();
+  bool isSolveExecutorReady() const;
 
   // 回调获取当前关节角
   void jointCallBack(const engineer_interfaces::msg::Joints::SharedPtr msg);
 
   // 请求处理
-  rclcpp_action::GoalResponse handle_goal(const rclcpp_action::GoalUUID& uuid, std::shared_ptr<const ArmMove::Goal> goal);
-  rclcpp_action::CancelResponse handle_cancel(const std::shared_ptr<GoalHandleArmMove> gh);
+  rclcpp_action::GoalResponse
+  handle_goal(const rclcpp_action::GoalUUID &uuid,
+              std::shared_ptr<const ArmMove::Goal> goal);
+  rclcpp_action::CancelResponse
+  handle_cancel(const std::shared_ptr<GoalHandleArmMove> gh);
   void handle_accepted(const std::shared_ptr<GoalHandleArmMove> gh);
 
   // 运行服务端程序
-  void execute(const std::shared_ptr<GoalHandleArmMove> gh, const std::shared_ptr<GoalContext>& ctx);
+  void execute(const std::shared_ptr<GoalHandleArmMove> gh,
+               const std::shared_ptr<GoalContext> &ctx);
 
   // 发布结果
-  bool publishTrajectoryPoints(const std::shared_ptr<GoalHandleArmMove> gh, const std::shared_ptr<GoalContext>& ctx);
+  bool publishTrajectoryPoints(const std::shared_ptr<GoalHandleArmMove> gh,
+                               const std::shared_ptr<GoalContext> &ctx);
 
   // 客户端请求状态判断
-  inline bool isCanceled(const std::shared_ptr<GoalHandleArmMove>& gh, const std::shared_ptr<GoalContext>& ctx) const
-  {
+  inline bool isCanceled(const std::shared_ptr<GoalHandleArmMove> &gh,
+                         const std::shared_ptr<GoalContext> &ctx) const {
     return (gh && gh->is_canceling()) || (ctx && ctx->cancel_requested.load());
   }
 };
 
-}  // namespace arm_solve
+} // namespace arm_solve

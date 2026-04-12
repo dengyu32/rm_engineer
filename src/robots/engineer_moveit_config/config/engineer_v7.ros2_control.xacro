@@ -1,7 +1,12 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+<<<<<<< HEAD:src/robots/engineer_moveit_config/config/engineer_v7.ros2_control.xacro
     <xacro:macro name="engineer_v7_ros2_control" params="name initial_positions_file">
         <xacro:property name="initial_positions" value="${load_yaml(initial_positions_file)['initial_positions']}"/>
+=======
+    <xacro:macro name="engineer_v5_ros2_control" params="name initial_positions_file">
+        <xacro:property name="initial_positions" value="${xacro.load_yaml(initial_positions_file)['initial_positions']}"/>
+>>>>>>> 8a38c46 (进度同步):src/robots/engineer_moveit_config/config/engineer_v5.ros2_control.xacro
 
         <ros2_control name="${name}" type="system">
             <hardware>
