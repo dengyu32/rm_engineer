@@ -1,4 +1,4 @@
-# Default initial positions for engineer_v5's ros2_control fake system
+# Default initial positions for engineer_v7's ros2_control fake system
 
 initial_positions:
   joint1: 0
@@ -7,4 +7,4 @@ initial_positions:
   joint4: 0
   joint5: 0
   joint6: 0
-  left_gripper_joint: 0
+  left_finger_joint: 0

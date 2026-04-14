@@ -3,18 +3,18 @@ controller_manager:
   ros__parameters:
     update_rate: 100  # Hz
 
-    engineer_arm_controller:
+    arm_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
 
-    engineer_hand_controller:
-      type: joint_trajectory_controller/JointTrajectoryController
+    hand_controller:
+      type: position_controllers/GripperActionController
 
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
-engineer_arm_controller:
+arm_controller:
   ros__parameters:
     joints:
       - joint1
@@ -28,12 +28,6 @@ engineer_arm_controller:
     state_interfaces:
       - position
       - velocity
-engineer_hand_controller:
+hand_controller:
   ros__parameters:
-    joints:
-      - left_gripper_joint
-    command_interfaces:
-      - position
-    state_interfaces:
-      - position
-      - velocity
+    joint: left_finger_joint

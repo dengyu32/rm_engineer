@@ -17,20 +17,30 @@
 
 ### 收发协议
 
-接收包 `EngineerReceiveData`：
+接收包 `H7RxPacket`，`id = 0x01`：
 
 - `actualJointPosition[7]`
-- `customJointPosition[6]`
+- `actualJointVelocity[6]`
 - `realSlotStatus[2]`
 - `IntentStatus`
 
-发送包 `EngineerTransmitData`：
+接收包 `CCRxPacket`，`id = 0x02`：
+
+- `customJointPosition[6]`
+
+发送包 `MotionTxPacket`，`id = 0x01`：
 
 - `targetJointPosition[6]`
 - `targetJointVelocity[6]`
+
+发送包 `AuxTxPacket`，`id = 0x02`：
+
+- `targetJointEffort[6]`
 - `targetGripperCommand`
 - `targetSlotStatus[2]`
 - `IntentFinish`
+
+`HeaderFrame` 的 reserved 对齐字节暂不启用，关节位置、速度、力矩字段均为 `float`。各完整帧长度分别为 59、28、52、32 字节。
 
 当前代码里 CRC 字段未启用，实际发送结构为：
 

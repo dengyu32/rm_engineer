@@ -440,9 +440,11 @@ void Device::set_packet_callback(uint8_t id, PacketCallback callback) {
 // ============================================================================
 
 void Device::Impl::set_packet_callback(uint8_t id, PacketCallback callback) {
-  expected_id_ = id;
-  packet_callback_ = std::move(callback);
-  packet_callback_registered_ = static_cast<bool>(packet_callback_);
+  if (callback) {
+    packet_callbacks_[id] = std::move(callback);
+  } else {
+    packet_callbacks_.erase(id);
+  }
   stream_buffer_.clear();
 }
 
@@ -452,7 +454,7 @@ void Device::Impl::parse(const std::byte *data, size_t size) {
     return;
   }
 
-  if (!packet_callback_registered_) {
+  if (packet_callbacks_.empty()) {
     RCLCPP_WARN_THROTTLE(rclcpp::get_logger("usb_cdc"),
                          *clock, 2000,
                          " [WARN] Packet callback not registered ");
@@ -498,7 +500,8 @@ void Device::Impl::parse(const std::byte *data, size_t size) {
       continue;
     }
 
-    if (header_frame.id != expected_id_) {
+    const auto callback_it = packet_callbacks_.find(header_frame.id);
+    if (callback_it == packet_callbacks_.end()) {
       RCLCPP_WARN_THROTTLE(rclcpp::get_logger("usb_cdc"),
                            *clock, 2000,
                            " [WARN] Unknown header 0x%X ",
@@ -508,7 +511,7 @@ void Device::Impl::parse(const std::byte *data, size_t size) {
       continue;
     }
 
-    packet_callback_(stream_buffer_.data(), expected_size);
+    callback_it->second(stream_buffer_.data(), expected_size);
     stream_buffer_.erase(stream_buffer_.begin(),
                          stream_buffer_.begin() + expected_size);
   }

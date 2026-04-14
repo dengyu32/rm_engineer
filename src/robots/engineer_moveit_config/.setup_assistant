@@ -1,13 +1,13 @@
 moveit_setup_assistant_config:
   urdf:
     package: engineer_description
-    relative_path: urdf/engineer_v5.urdf
+    relative_path: urdf/engineer_v7.urdf
   srdf:
-    relative_path: config/engineer_v5.srdf
+    relative_path: config/engineer_v7.srdf
   package_settings:
-    author_name: wrj
-    author_email: rainwaiting32@gmail.com
-    generated_timestamp: 1775742297
+    author_name: xwt
+    author_email: 1258654033@qq.com
+    generated_timestamp: 1776097337
   control_xacro:
     command:
       - position

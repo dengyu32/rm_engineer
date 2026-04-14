@@ -1,0 +1,7 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Eigen3 REQUIRED)
+find_dependency(Boost REQUIRED)
+
+include("${CMAKE_CURRENT_LIST_DIR}/coalTargets.cmake")

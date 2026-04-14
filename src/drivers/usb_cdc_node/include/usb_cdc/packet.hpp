@@ -9,46 +9,12 @@
 #pragma once
 
 // C++
-#include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
 
 namespace usb_cdc {
-
-// ============================================================================
-//  Quantization
-// ----------------------------------------------------------------------------
-//  USB 协议层用 uint16_t 压缩关节浮点量，ROS 节点边界再恢复为 float。
-// ============================================================================
-inline uint16_t float_to_uint(float x_float, float x_min = -3.1415926F,
-                              float x_max = 3.1415926F, int bits = 16) {
-  if (bits <= 0 || bits > 16 || !(x_max > x_min)) {
-    return 0U;
-  }
-
-  const float value = std::clamp(x_float, x_min, x_max);
-  const float span = x_max - x_min;
-  const uint16_t max_int = static_cast<uint16_t>((1U << bits) - 1U);
-  const auto quantized =
-      std::lround((value - x_min) * static_cast<float>(max_int) / span);
-  return static_cast<uint16_t>(
-      std::clamp<long>(quantized, 0L, static_cast<long>(max_int)));
-}
-
-inline float uint_to_float(uint16_t x_int, float x_min = -3.1415926F,
-                           float x_max = 3.1415926F, int bits = 16) {
-  if (bits <= 0 || bits > 16 || !(x_max > x_min)) {
-    return x_min;
-  }
-
-  const float span = x_max - x_min;
-  const uint16_t max_int = static_cast<uint16_t>((1U << bits) - 1U);
-  const uint16_t value = std::min(x_int, max_int);
-  return (static_cast<float>(value) * span / static_cast<float>(max_int)) + x_min;
-}
 
 #pragma pack(1) // 数据包按字节对齐
 
@@ -66,163 +32,179 @@ struct HeaderFrame {
   uint8_t sof; // 0x5A
   uint8_t len; // 数据区长度（不含 header & eof）
   uint8_t id;  // 数据包 ID（区分不同功能包）
+  // uint8_t reserved; // 保留对齐字节：暂不启用；启用后发送端填 0，接收端忽略
 };
 
-// ============================================================================
-//  EngineerRxPacket
-// ============================================================================
-struct EngineerRxPacket {
+// STM32H7 (下位机) Rx Packet
+struct H7RxPacket { // id = 1
   HeaderFrame header;
   struct {
-    uint16_t actualJointPosition[7]; // 当前关节位置
-    uint16_t actualJointVelocity[6]; // 当前关节速度
-    uint16_t customJointPosition[6]; // 自定义关节角度
+    float actualJointPosition[7]; // 当前关节位置
+    float actualJointVelocity[6]; // 当前关节速度
     uint8_t realSlotStatus[2];
     uint8_t IntentStatus; ///< 当前意图
   } data;
   uint8_t eof; ///< 0xA5
 };
 
-// ============================================================================
-//  EngineerTxPacket
-// ============================================================================
-struct EngineerTxPacket {
+// Custom Controller Rx Packet
+struct CCRxPacket { // id = 2
   HeaderFrame header;
   struct {
-    uint16_t targetJointPosition[6];  ///< 目标关节位置
-    uint16_t targetJointVelocity[6];  ///< ,目标关节速度
-    float targetJointEffort[6];
-    uint8_t targetGripperCommand;  ///< 夹爪开合命令: open=0, close=1
+    float customJointPosition[6]; // 自定义关节角度
+  } data;
+  uint8_t eof; ///< 0xA5
+};
+
+// 控制 arm 速度环位置环 tx packet
+struct MotionTxPacket { // id = 1
+  HeaderFrame header;
+  struct {
+    float targetJointPosition[6]; ///< 目标关节位置
+    float targetJointVelocity[6]; ///< 目标关节速度
+  } data;
+  uint8_t eof; ///< 0xA5
+};
+
+// 辅助功能 tx packet
+struct AuxTxPacket { // id = 2
+  HeaderFrame header;
+  struct {
+    float targetJointEffort[6];   ///< 目标关节力矩
+    uint8_t targetGripperCommand; ///< 夹爪开合命令: open=0, close=1
     uint8_t targetSlotStatus[2];
-    uint8_t IntentFinish;          ///< 完成请求并返回Finish
+    uint8_t IntentFinish; ///< 完成请求并返回Finish
   } data;
   uint8_t eof; ///< 0xA5
 };
 
 #pragma pack() // 取消字节对齐
 
-// ============================================================================
-//  Print Receive Data
-// ---------------------------------------------------------------------------
-//  打印解码后的数据包内容，便于调试和验证协议正确性
-// ============================================================================
-inline void print_rx_packet(const EngineerRxPacket &rx_packet) {
-  std::cout << "\n=================== RECEIVE PACKET ===================\n";
-  // Header
+static_assert(sizeof(HeaderFrame) == 3, "HeaderFrame must be 3 bytes");
+static_assert(sizeof(H7RxPacket) == 59, "H7RxPacket must be 59 bytes");
+static_assert(sizeof(CCRxPacket) == 28, "CCRxPacket must be 28 bytes");
+static_assert(sizeof(MotionTxPacket) == 52, "MotionTxPacket must be 52 bytes");
+static_assert(sizeof(AuxTxPacket) == 32, "AuxTxPacket must be 32 bytes");
+
+inline void print_header(const HeaderFrame& header)
+{
   std::cout << "Header:\n";
   std::cout << "  SoF    : 0x" << std::hex << std::setw(2) << std::setfill('0')
-            << static_cast<int>(rx_packet.header.sof) << std::dec << '\n';
-  std::cout << "  Length : " << static_cast<int>(rx_packet.header.len) << '\n';
+            << static_cast<int>(header.sof) << std::dec << '\n';
+  std::cout << "  Length : " << static_cast<int>(header.len) << '\n';
   std::cout << "  ID     : 0x" << std::hex << std::setw(2) << std::setfill('0')
-            << static_cast<int>(rx_packet.header.id) << std::dec << '\n';
+            << static_cast<int>(header.id) << std::dec << '\n';
+}
 
-  // Data
+inline void print_eof(uint8_t eof)
+{
+  std::cout << "EoF    : 0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(eof)
+            << std::dec << '\n';
+}
+
+// ============================================================================
+//  Print Receive Data
+// ============================================================================
+inline void print_h7_rx_packet(const H7RxPacket& rx_packet)
+{
+  std::cout << "\n=================== H7 RX PACKET ===================\n";
+  print_header(rx_packet.header);
   std::cout << "Data:\n";
 
   std::cout << "  Actual Joint Position:\n";
   for (size_t i = 0; i < 7; ++i) {
-    const float position = i == 6
-                               ? uint_to_float(rx_packet.data.actualJointPosition[i],
-                                               0.0F, 0.03F)
-                               : uint_to_float(rx_packet.data.actualJointPosition[i]);
-    std::cout << "    Joint[" << i << "] : " << std::fixed
-              << std::setprecision(6) << position << '\n';
+    std::cout << "    Joint[" << i << "] : " << std::fixed << std::setprecision(6)
+              << rx_packet.data.actualJointPosition[i] << '\n';
   }
 
   std::cout << "  Actual Joint Velocity:\n";
   for (size_t i = 0; i < 6; ++i) {
-    std::cout << "    Joint[" << i << "] : " << std::fixed
-              << std::setprecision(6)
-              << uint_to_float(rx_packet.data.actualJointVelocity[i]) << '\n';
-  }
-
-  std::cout << "  Custom Joint Position:\n";
-  for (size_t i = 0; i < 6; ++i) {
-    std::cout << "    Joint[" << i << "] : " << std::fixed
-              << std::setprecision(6)
-              << uint_to_float(rx_packet.data.customJointPosition[i]) << '\n';
+    std::cout << "    Joint[" << i << "] : " << std::fixed << std::setprecision(6)
+              << rx_packet.data.actualJointVelocity[i] << '\n';
   }
 
   std::cout << "  Slot Status:\n";
   for (size_t i = 0; i < 2; ++i) {
-    std::cout << "    Slot[" << i << "] : "
-              << static_cast<unsigned>(rx_packet.data.realSlotStatus[i]) << '\n';
+    std::cout << "    Slot[" << i << "] : " << static_cast<unsigned>(rx_packet.data.realSlotStatus[i]) << '\n';
   }
 
-  // IntentStatus (enum)
   std::cout << "  Current Intent (Status):\n";
-  uint8_t intent = rx_packet.data.IntentStatus;
-  std::cout << "    ID      : " << static_cast<unsigned>(intent) << " (0x"
-            << std::hex << std::setw(2) << std::setfill('0')
-            << static_cast<unsigned>(intent) << std::dec << ")\n";
+  const uint8_t intent = rx_packet.data.IntentStatus;
+  std::cout << "    ID      : " << static_cast<unsigned>(intent) << " (0x" << std::hex << std::setw(2)
+            << std::setfill('0') << static_cast<unsigned>(intent) << std::dec << ")\n";
   std::cout << "    Meaning : " << intent << '\n';
+  print_eof(rx_packet.eof);
+  std::cout << "=====================================================\n";
+}
 
-  // End
-  std::cout << "EoF    : 0x" << std::hex << std::setw(2) << std::setfill('0')
-            << static_cast<int>(rx_packet.eof) << std::dec << '\n';
+inline void print_cc_rx_packet(const CCRxPacket& rx_packet)
+{
+  std::cout << "\n=================== CC RX PACKET ===================\n";
+  print_header(rx_packet.header);
+  std::cout << "Data:\n";
+
+  std::cout << "  Custom Joint Position:\n";
+  for (size_t i = 0; i < 6; ++i) {
+    std::cout << "    Joint[" << i << "] : " << std::fixed << std::setprecision(6)
+              << rx_packet.data.customJointPosition[i] << '\n';
+  }
+
+  print_eof(rx_packet.eof);
   std::cout << "=====================================================\n";
 }
 
 // ============================================================================
 //  Print Transmit Data
-// ---------------------------------------------------------------------------
-//  打印加密前的发送数据包内容，便于调试和验证协议正确性
 // ============================================================================
-inline void print_tx_packet(const EngineerTxPacket &tx_packet) {
-  std::cout << "\n=================== TRANSMIT PACKET ===================\n";
-  // Header
-  std::cout << "Header:\n";
-  std::cout << "  SoF    : 0x" << std::hex << std::setw(2) << std::setfill('0')
-            << static_cast<int>(tx_packet.header.sof) << std::dec << '\n';
-  std::cout << "  Length : " << static_cast<int>(tx_packet.header.len) << '\n';
-  std::cout << "  ID     : 0x" << std::hex << std::setw(2) << std::setfill('0')
-            << static_cast<int>(tx_packet.header.id) << std::dec << '\n';
-
-  // Data
+inline void print_motion_tx_packet(const MotionTxPacket& tx_packet)
+{
+  std::cout << "\n=================== MOTION TX PACKET ===================\n";
+  print_header(tx_packet.header);
   std::cout << "Data:\n";
 
   std::cout << "  Target Joint Position:\n";
   for (size_t i = 0; i < 6; ++i) {
-    std::cout << "    Joint[" << i << "] : " << std::fixed
-              << std::setprecision(6)
-              << uint_to_float(tx_packet.data.targetJointPosition[i]) << '\n';
+    std::cout << "    Joint[" << i << "] : " << std::fixed << std::setprecision(6)
+              << tx_packet.data.targetJointPosition[i] << '\n';
   }
 
   std::cout << "  Target Joint Velocity:\n";
   for (size_t i = 0; i < 6; ++i) {
-    std::cout << "    Joint[" << i << "] : " << std::fixed
-              << std::setprecision(6)
-              << uint_to_float(tx_packet.data.targetJointVelocity[i]) << '\n';
+    std::cout << "    Joint[" << i << "] : " << std::fixed << std::setprecision(6)
+              << tx_packet.data.targetJointVelocity[i] << '\n';
   }
+
+  print_eof(tx_packet.eof);
+  std::cout << "=====================================================\n";
+}
+
+inline void print_aux_tx_packet(const AuxTxPacket& tx_packet)
+{
+  std::cout << "\n=================== AUX TX PACKET ===================\n";
+  print_header(tx_packet.header);
+  std::cout << "Data:\n";
 
   std::cout << "  Target Joint Effort:\n";
   for (size_t i = 0; i < 6; ++i) {
-    std::cout << "    Joint[" << i << "] : " << std::fixed
-              << std::setprecision(6)
+    std::cout << "    Joint[" << i << "] : " << std::fixed << std::setprecision(6)
               << tx_packet.data.targetJointEffort[i] << '\n';
   }
 
   std::cout << "  Target Gripper Command:\n";
-  std::cout << "    Value   : "
-            << static_cast<unsigned>(tx_packet.data.targetGripperCommand) << '\n';
+  std::cout << "    Value   : " << static_cast<unsigned>(tx_packet.data.targetGripperCommand) << '\n';
 
   std::cout << "  Target Slot Status:\n";
   for (size_t i = 0; i < 2; ++i) {
-    std::cout << "    Slot[" << i << "] : "
-              << static_cast<unsigned>(tx_packet.data.targetSlotStatus[i]) << '\n';
+    std::cout << "    Slot[" << i << "] : " << static_cast<unsigned>(tx_packet.data.targetSlotStatus[i]) << '\n';
   }
 
-  // IntentFinish (bool flag: 0/1)
   std::cout << "  Intent Finish (0=running, 1=fin):\n";
-  uint8_t fin = tx_packet.data.IntentFinish;
-  std::cout << "    Value   : " << static_cast<unsigned>(fin) << " (0x"
-            << std::hex << std::setw(2) << std::setfill('0')
-            << static_cast<unsigned>(fin) << std::dec << ")\n";
+  const uint8_t fin = tx_packet.data.IntentFinish;
+  std::cout << "    Value   : " << static_cast<unsigned>(fin) << " (0x" << std::hex << std::setw(2)
+            << std::setfill('0') << static_cast<unsigned>(fin) << std::dec << ")\n";
   std::cout << "    State   : " << (fin ? "FIN" : "RUNNING") << '\n';
 
-  // End
-  std::cout << "EoF    : 0x" << std::hex << std::setw(2) << std::setfill('0')
-            << static_cast<int>(tx_packet.eof) << std::dec << '\n';
+  print_eof(tx_packet.eof);
   std::cout << "=====================================================\n";
 }
 

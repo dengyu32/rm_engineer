@@ -33,8 +33,8 @@ ROS2 Topics
 
 **通信协议**
 - 帧结构：`SoF | len | id | payload | EoF`
-- 关节位置、速度字段使用 `uint16_t` 量化传输，力矩字段仍使用 `float`。
-- 速度量化范围：`[-pi, pi] rad/s`。
+- 关节位置、速度、力矩字段使用 `float` 传输。
+- 反馈与控制命令拆成多个小包，每个完整帧小于 64 字节。
 
 `HeaderFrame`
 ```cpp
@@ -42,27 +42,40 @@ struct HeaderFrame {
   uint8_t sof;   // 0x5A
   uint8_t len;   // payload length
   uint8_t id;    // packet id
+  // uint8_t reserved; // not enabled yet
 };
 ```
 
-接收包：`EngineerRxPacket`
+接收包：`H7RxPacket`，`id = 0x01`
 ```text
-actualJointPosition[7]  uint16
-actualJointVelocity[6]  uint16
-customJointPosition[6]  uint16
+actualJointPosition[7]  float
+actualJointVelocity[6]  float
 realSlotStatus[2]
 IntentStatus
 ```
+完整帧长度为 59 字节。
 
-发送包：`EngineerTxPacket`
+接收包：`CCRxPacket`，`id = 0x02`
 ```text
-targetJointPosition[6]  uint16
-targetJointVelocity[6]  uint16
+customJointPosition[6]  float
+```
+完整帧长度为 28 字节。
+
+发送包：`MotionTxPacket`，`id = 0x01`
+```text
+targetJointPosition[6]  float
+targetJointVelocity[6]  float
+```
+完整帧长度为 52 字节。
+
+发送包：`AuxTxPacket`，`id = 0x02`
+```text
 targetJointEffort[6]    float
 targetGripperCommand
 targetSlotStatus[2]
 IntentFinish
 ```
+完整帧长度为 32 字节。
 
 **Intent 信号语义**
 - `IntentStatus`: 下位机当前意图状态
@@ -117,4 +130,5 @@ ros2 launch usb_cdc usb_cdc_node.launch.py \
 
 **注意事项**
 - 当前解析器已支持 USB CDC 的拆包与粘包。
+- 发送侧使用 latest-only 待发送槽和独立 TX 线程，USB 写阻塞不会卡住 200Hz timer，旧控制包会被最新包覆盖。
 - `len` 为 `uint8_t`，单帧 payload 最大为 255 字节。

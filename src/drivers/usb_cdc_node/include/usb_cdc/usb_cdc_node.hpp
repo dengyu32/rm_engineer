@@ -42,8 +42,10 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -85,9 +87,13 @@ public:
   UsbCdcNode(const rclcpp::NodeOptions &options);
 
   ~UsbCdcNode() {
+    running_ = false;
+    tx_mailbox_cv_.notify_all();
     if (thread_.joinable()) {
-      running_ = false;
       thread_.join();
+    }
+    if (tx_thread_.joinable()) {
+      tx_thread_.join();
     }
   }
 
@@ -102,19 +108,25 @@ private:
   // -----------------------------------------------------------------------
   void init_device_callbacks() {
     device_.set_packet_callback(0x01,
-                                std::bind(&UsbCdcNode::engineer_handle_packet,
+                                std::bind(&UsbCdcNode::h7RxPacketCallback,
+                                          this, std::placeholders::_1,
+                                          std::placeholders::_2));
+    device_.set_packet_callback(0x02,
+                                std::bind(&UsbCdcNode::ccRxPacketCallback,
                                           this, std::placeholders::_1,
                                           std::placeholders::_2));
   }
   void initRosInterfaces();
 
-  void engineer_handle_packet(const std::byte *data, size_t size);
+  void h7RxPacketCallback(const std::byte *data, size_t size);
+  void ccRxPacketCallback(const std::byte *data, size_t size);
 
   // -----------------------------------------------------------------------
   //  Timers & callbacks
   // -----------------------------------------------------------------------
   void publish_timer_callback();
   void send_timer_callback();
+  void tx_worker_loop();
   rcl_interfaces::msg::SetParametersResult on_set_parameters(
       const std::vector<rclcpp::Parameter> &params);
 
@@ -123,9 +135,13 @@ private:
   void GripperCommandCallback(const engineer_interfaces::msg::Gripper::SharedPtr msg);
   void SlotCommandCallback(const engineer_interfaces::msg::Slots::SharedPtr msg);
 
+  struct TxPacketPair {
+    MotionTxPacket motion;
+    AuxTxPacket aux;
+  };
+
   // Protocol
   Device device_;
-  uint8_t buffer_[256]; // USB 读缓冲区（256 字节原始数据）
 
   // ROS interfaces
   rclcpp::Publisher<engineer_interfaces::msg::Intent>::SharedPtr intent_pub_;
@@ -144,18 +160,22 @@ private:
 
   rclcpp::Logger logger_;
 
-  // Node state. Packet quantization is only applied at the USB protocol boundary.
+  // Node state.
   EngineerTxState tx_state_{};
   EngineerRxState rx_state_{};
+  std::optional<TxPacketPair> pending_tx_pair_;
   std::mutex tx_state_mutex_; // 保护发送状态
   std::mutex rx_state_mutex_; // 保护接收状态
+  std::mutex tx_mailbox_mutex_; // 保护待发送包槽
+  std::condition_variable tx_mailbox_cv_;
 
   // Runtime state
-  std::atomic_bool running_;
+  std::atomic_bool running_{false};
   std::atomic_bool last_device_open_{false};
   std::atomic_bool debug_override_enabled_{false};
   std::atomic<uint8_t> debug_intent_id_{0};
   std::thread thread_; // 底层读写循环线程
+  std::thread tx_thread_; // 发送线程，避免 ROS timer 被 USB 写阻塞
 
   // Config
   UsbCdcConfig config_;

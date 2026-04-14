@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
 
 // Libusb
@@ -153,9 +154,7 @@ public:
   // -----------------------------------------------------------------------
   //  State
   // -----------------------------------------------------------------------
-  PacketCallback packet_callback_;
-  uint8_t expected_id_{0};
-  bool packet_callback_registered_{false};
+  std::unordered_map<uint8_t, PacketCallback> packet_callbacks_;
   std::vector<std::byte> stream_buffer_;
 
   libusb_context *ctx_ = nullptr;          // libusb 上下文

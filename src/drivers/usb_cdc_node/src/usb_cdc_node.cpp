@@ -54,37 +54,47 @@ void initialize_startup_joint_targets(usb_cdc::EngineerTxState &tx_state,
 }
 
 // 解码实现
-EngineerRxState decode_receive_packet(const EngineerRxPacket &packet) {
-  EngineerRxState state{};
-  for (std::size_t i = 0; i < 6; ++i) {
-    state.actual_joint_position[i] =
-        uint_to_float(packet.data.actualJointPosition[i]);
-    state.actual_joint_velocity[i] =
-        uint_to_float(packet.data.actualJointVelocity[i]);
-    state.custom_joint_position[i] =
-        uint_to_float(packet.data.customJointPosition[i]);
+void apply_h7_rx_packet(const H7RxPacket &packet, EngineerRxState &state) {
+  for (std::size_t i = 0; i < 7; ++i) {
+    state.actual_joint_position[i] = packet.data.actualJointPosition[i];
   }
-  state.actual_joint_position[6] =
-      uint_to_float(packet.data.actualJointPosition[6], 0.0F, 0.03F);
+  for (std::size_t i = 0; i < 6; ++i) {
+    state.actual_joint_velocity[i] = packet.data.actualJointVelocity[i];
+  }
   state.real_slot_status[0] = packet.data.realSlotStatus[0];
   state.real_slot_status[1] = packet.data.realSlotStatus[1];
   state.intent_status = packet.data.IntentStatus;
-  return state;
 }
 
-// 编码实现
-EngineerTxPacket encode_transmit_packet(const EngineerTxState &state) {
-  EngineerTxPacket packet{};
+void apply_cc_rx_packet(const CCRxPacket &packet, EngineerRxState &state) {
+  for (std::size_t i = 0; i < 6; ++i) {
+    state.custom_joint_position[i] = packet.data.customJointPosition[i];
+  }
+}
+
+// 转换实现
+MotionTxPacket to_motion_tx_packet(const EngineerTxState &state) {
+  MotionTxPacket packet{};
+  packet.header.id = 0x01;
+  packet.header.len = sizeof(decltype(packet.data));
+  packet.header.sof = HeaderFrame::SoF();
+  packet.eof = HeaderFrame::EoF();
+
+  for (std::size_t i = 0; i < 6; ++i) {
+    packet.data.targetJointPosition[i] = state.target_joint_position[i];
+    packet.data.targetJointVelocity[i] = state.target_joint_velocity[i];
+  }
+  return packet;
+}
+
+AuxTxPacket to_aux_tx_packet(const EngineerTxState &state) {
+  AuxTxPacket packet{};
   packet.header.id = 0x02;
   packet.header.len = sizeof(decltype(packet.data));
   packet.header.sof = HeaderFrame::SoF();
   packet.eof = HeaderFrame::EoF();
 
   for (std::size_t i = 0; i < 6; ++i) {
-    packet.data.targetJointPosition[i] =
-        float_to_uint(state.target_joint_position[i]);
-    packet.data.targetJointVelocity[i] =
-        float_to_uint(state.target_joint_velocity[i]);
     packet.data.targetJointEffort[i] = state.target_joint_effort[i];
   }
   packet.data.targetGripperCommand = state.target_gripper_command;
@@ -131,6 +141,7 @@ UsbCdcNode::UsbCdcNode(const rclcpp::NodeOptions &options)
       device_.handle_events();
     }
   });
+  tx_thread_ = std::thread(&UsbCdcNode::tx_worker_loop, this);
 
   // log 
   log_tools::init_console_logger("core");
@@ -281,26 +292,90 @@ bool UsbCdcNode::try_open_device() { // catch + retry 策略
 // ============================================================================
 //  Device callbacks
 // ============================================================================
-void UsbCdcNode::engineer_handle_packet(const std::byte *data, size_t size) {
-  if (size != sizeof(EngineerRxPacket)) {
+void UsbCdcNode::h7RxPacketCallback(const std::byte *data, size_t size) {
+  if (size != sizeof(H7RxPacket)) {
     RCLCPP_ERROR(this->get_logger(),
                  " [ERROR] Received packet size mismatch, expected %zu, got %zu ",
-                 sizeof(EngineerRxPacket), size);
+                 sizeof(H7RxPacket), size);
     return;
   }
 
-  EngineerRxPacket packet{};
-  std::memcpy(&packet, data, sizeof(EngineerRxPacket));
-  EngineerRxState state = decode_receive_packet(packet);
+  H7RxPacket packet{};
+  std::memcpy(&packet, data, sizeof(H7RxPacket));
   static int rx_print_count = 0;
   if (++rx_print_count >= 100) {
     rx_print_count = 0;
-    print_rx_packet(packet);
+    print_h7_rx_packet(packet);
   }
 
   {
     std::scoped_lock<std::mutex> lock(rx_state_mutex_);
-    rx_state_ = state;
+    apply_h7_rx_packet(packet, rx_state_);
+  }
+}
+
+void UsbCdcNode::ccRxPacketCallback(const std::byte *data, size_t size) {
+  if (size != sizeof(CCRxPacket)) {
+    RCLCPP_ERROR(this->get_logger(),
+                 " [ERROR] Received packet size mismatch, expected %zu, got %zu ",
+                 sizeof(CCRxPacket), size);
+    return;
+  }
+
+  CCRxPacket packet{};
+  std::memcpy(&packet, data, sizeof(CCRxPacket));
+  static int rx_print_count = 0;
+  if (++rx_print_count >= 100) {
+    rx_print_count = 0;
+    print_cc_rx_packet(packet);
+  }
+
+  {
+    std::scoped_lock<std::mutex> lock(rx_state_mutex_);
+    apply_cc_rx_packet(packet, rx_state_);
+  }
+}
+
+// ============================================================================
+//  TX Worker
+// ============================================================================
+void UsbCdcNode::tx_worker_loop() {
+  while (running_) {
+    TxPacketPair tx_pair{};
+    {
+      std::unique_lock<std::mutex> lock(tx_mailbox_mutex_);
+      tx_mailbox_cv_.wait(lock, [this] {
+        return !running_ || pending_tx_pair_.has_value();
+      });
+
+      if (!running_) {
+        return;
+      }
+
+      tx_pair = *pending_tx_pair_;
+      pending_tx_pair_.reset();
+    }
+
+    if (!device_.is_open()) {
+      continue;
+    }
+
+    static int tx_print_count = 0;
+    if (++tx_print_count >= 100) {
+      tx_print_count = 0;
+      print_motion_tx_packet(tx_pair.motion);
+      print_aux_tx_packet(tx_pair.aux);
+    }
+
+    const bool motion_send_ok = device_.send_data(
+        reinterpret_cast<uint8_t *>(&tx_pair.motion), sizeof(tx_pair.motion));
+    const bool aux_send_ok = device_.send_data(
+        reinterpret_cast<uint8_t *>(&tx_pair.aux), sizeof(tx_pair.aux));
+
+    if (!motion_send_ok || !aux_send_ok) {
+      RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                            " [FAILED] failed to send tx packet pair ");
+    }
   }
 }
 
@@ -318,6 +393,10 @@ void UsbCdcNode::send_timer_callback() {
       std::scoped_lock<std::mutex> lock(tx_state_mutex_);
       initialize_startup_joint_targets(tx_state_, config_);
     }
+    {
+      std::scoped_lock<std::mutex> lock(tx_mailbox_mutex_);
+      pending_tx_pair_.reset();
+    }
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
                          " [WAITING] waiting for USB reconnect ");
     last_device_open_ = false;
@@ -331,20 +410,16 @@ void UsbCdcNode::send_timer_callback() {
     tx_snapshot = tx_state_;
   }
 
-  // 按协议填充发送帧，量化只发生在发送边界。
-  EngineerTxPacket tx_data = encode_transmit_packet(tx_snapshot);
-  static int tx_print_count = 0;
-  if (++tx_print_count >= 100) {
-    tx_print_count = 0;
-    print_tx_packet(tx_data);
+  // 按协议拆成运动命令包和辅助功能包，保持单包小于 64 字节。
+  TxPacketPair tx_pair{
+      to_motion_tx_packet(tx_snapshot),
+      to_aux_tx_packet(tx_snapshot),
+  };
+  {
+    std::scoped_lock<std::mutex> lock(tx_mailbox_mutex_);
+    pending_tx_pair_ = tx_pair;
   }
-
-  std::memcpy(buffer_, &tx_data, sizeof(EngineerTxPacket));
-  const bool send_ok = device_.send_data(buffer_, sizeof(EngineerTxPacket));
-
-  if (!send_ok) {
-    RCLCPP_ERROR(this->get_logger(), " [FAILED] faild to send data ");
-  }
+  tx_mailbox_cv_.notify_one();
 }
 
 // ============================================================================

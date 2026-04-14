@@ -3,16 +3,18 @@
 <package format="3">
   <name>collision</name>
   <version>0.0.0</version>
-  <description>MoveIt2-based collision detection utilities.</description>
+  <description>Collision detection utilities with MoveIt self-collision and a Coal scene wrapper.</description>
   <maintainer email="2188755469@qq.com">zc</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <depend>coal</depend>
   <depend>log_tools</depend>
   <depend>moveit_core</depend>
   <depend>moveit_ros_planning</depend>
   <depend>rclcpp</depend>
+  <depend>visualization_msgs</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
